@@ -2480,11 +2480,15 @@ function render() {
   if (page !== "home") app.innerHTML = (views[page] || about)();
   document
     .querySelectorAll(".nav a[data-page]")
-    .forEach((link) =>
-      link.classList.toggle("active", link.dataset.page === page),
-    );
+    .forEach((link) => {
+      link.classList.toggle("active", link.dataset.page === page);
+      // Show My Bookings only after the user has logged in.
+      if (link.dataset.page === "mybookings")
+        link.style.display = loggedIn ? "inline-block" : "none";
+    });
   if (page === "login") {
-    document.getElementById("loginForm").onsubmit = (e) => {
+    const loginForm = document.getElementById("loginForm");
+    if (loginForm) loginForm.onsubmit = (e) => {
       e.preventDefault();
       loggedIn = true;
       userName = userName || "Customer Account";
@@ -2492,7 +2496,8 @@ function render() {
     };
   }
   if (page === "register") {
-    document.getElementById("registerForm").onsubmit = (e) => {
+    const registerForm = document.getElementById("registerForm");
+    if (registerForm) registerForm.onsubmit = (e) => {
       e.preventDefault();
       userName = document.getElementById("regName").value.trim();
       upsertCustomer({ name: userName });
