@@ -693,12 +693,12 @@ function money(n) {
 }
 const pageFiles = {
   home: "index.html",
-  about: "about.html",
-  packages: "packages.html",
-  booking: "booking.html",
-  mybookings: "mybookings.html",
-  login: "login.html",
-  admin: "admin.html",
+  about: "pages/about.html",
+  packages: "pages/packages.html",
+  booking: "pages/booking.html",
+  mybookings: "pages/mybookings.html",
+  login: "pages/login.html",
+  admin: "pages/admin.html",
 };
 const pageTitles = {
   home: "Home",
@@ -722,9 +722,10 @@ function ensureNavigationShell() {
   shell.hidden = page === "home";
 }
 function setPage(p) {
-  const file = pageFiles[p];
-  if (file && location.pathname.split("/").pop() !== file)
-    history.pushState({ page: p }, "", file);
+  const file = pageFiles[p],
+    path = location.pathname.includes("/pages/") ? `../${file}` : file;
+  if (file && !location.pathname.replace(/\\/g, "/").endsWith(`/${file}`))
+    history.pushState({ page: p }, "", path);
   page = p;
   syncPageChrome(p);
   document
@@ -2567,13 +2568,20 @@ document.addEventListener("click", (e) => {
   if (action === "show-visit") chooseBookingType("visit");
 });
 window.addEventListener("popstate", () => {
-  const currentFile = location.pathname.split("/").pop() || "index.html",
+  const currentFile = location.pathname.replace(/\\/g, "/"),
     route = Object.keys(pageFiles).find(
-      (key) => pageFiles[key] === currentFile,
-    );
+    (key) =>
+      currentFile.endsWith(`/${pageFiles[key]}`) ||
+      (pageFiles[key] === "index.html" && currentFile.endsWith("/index.html")),
+  );
   if (route) {
     page = route;
     syncPageChrome(route);
+    document
+      .querySelectorAll(".nav a[data-page]")
+      .forEach((link) =>
+        link.classList.toggle("active", link.dataset.page === route),
+      );
     render();
   }
 });
