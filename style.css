@@ -3683,3 +3683,42 @@ tbody tr:hover {
     font-size: 0.875rem;
   }
 }
+
+.field-error,
+.form-feedback {
+  display: none;
+}
+
+.field-error.show,
+.form-feedback.show {
+  display: block;
+}
+
+.field-error {
+  color: var(--red);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.field input.input-error,
+.field input.input-error:focus {
+  border-color: var(--red);
+  outline-color: #e7bcbc;
+}
+
+.form-feedback {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  color: var(--red);
+  background: #fff0f0;
+  border: 1px solid #f1d1d1;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.form-feedback.success {
+  color: var(--green);
+  background: var(--sage);
+  border-color: var(--line);
+}

@@ -9,6 +9,7 @@
     />
     <title>BOSSGUDO A.R.C. AQUA FARM — Create an Account</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="register.js" defer></script>
   </head>
   <body data-page="register">
     <header class="topbar">
@@ -58,6 +59,7 @@
                 autocomplete="given-name"
                 required
               />
+              <span class="field-error" id="firstNameError"></span>
             </div>
             <div class="field">
               <label for="lastName">Last Name</label>
@@ -68,6 +70,7 @@
                 autocomplete="family-name"
                 required
               />
+              <span class="field-error" id="lastNameError"></span>
             </div>
           </div>
 
@@ -80,6 +83,7 @@
               autocomplete="email"
               required
             />
+            <span class="field-error" id="emailError"></span>
           </div>
 
           <div class="field">
@@ -91,6 +95,7 @@
               autocomplete="tel"
               required
             />
+            <span class="field-error" id="phoneError"></span>
           </div>
 
           <div class="field-grid">
@@ -103,6 +108,7 @@
                 autocomplete="new-password"
                 required
               />
+              <span class="field-error" id="passwordError"></span>
             </div>
             <div class="field">
               <label for="confirmPassword">Confirm Password</label>
@@ -113,12 +119,14 @@
                 autocomplete="new-password"
                 required
               />
+              <span class="field-error" id="confirmPasswordError"></span>
             </div>
           </div>
 
           <button class="primary" type="submit" style="width: 100%; margin-top: 8px">
             Create Account
           </button>
+          <div class="form-feedback" id="formFeedback" role="status" aria-live="polite"></div>
         </form>
 
         <p style="margin: 20px 0 0; text-align: center">
