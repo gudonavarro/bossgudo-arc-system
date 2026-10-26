@@ -3726,3 +3726,75 @@ tbody tr:hover {
   background: var(--sage);
   border-color: var(--line);
 }
+
+.auth-card {
+  width: min(100%, 500px);
+  margin: 15px auto;
+  padding: 32px;
+  border-radius: 17px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 16px #173f2e08;
+}
+
+.auth-card-header {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.auth-card-header .logo {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 15px;
+}
+
+.auth-card-header .page-title {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.auth-card-header .muted {
+  margin: 0;
+}
+
+.auth-card .field {
+  margin: 15px 0;
+}
+
+.auth-card .field label {
+  letter-spacing: 0.08em;
+}
+
+.auth-card .field input {
+  min-height: 46px;
+}
+
+.auth-card .primary {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.auth-card-footer {
+  margin: 20px 0 0;
+  text-align: center;
+}
+
+.auth-card-footer a {
+  color: var(--green);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.auth-card-footer a:hover,
+.auth-card-footer a:focus-visible {
+  color: var(--green2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 540px) {
+  .auth-card {
+    padding: 22px 18px;
+  }
+}
