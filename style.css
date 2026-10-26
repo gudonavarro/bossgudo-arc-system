@@ -3679,6 +3679,10 @@ tbody tr:hover {
     font-size: 1rem;
   }
 
+  .auth-card .field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .chat-launch {
     font-size: 0.875rem;
   }
