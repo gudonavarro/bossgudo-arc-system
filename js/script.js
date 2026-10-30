@@ -52,13 +52,21 @@ function ts() {
   });
 }
 function addUpdate(b, text, seen = false) {
-  (b.timeline = b.timeline || []).push({ at: ts(), text, seen });
+  if (!b.timeline) b.timeline = [];
+  b.timeline.push({ at: ts(), text, seen });
 }
 function nextRef(prefix, list) {
   let max = 0;
   list.forEach((x) => {
-    const m = String(x.ref).match(/(\d+)$/);
-    if (m) max = Math.max(max, Number(m[1]));
+    const ref = String(x.ref);
+    let suffixStart = ref.length;
+    while (suffixStart > 0) {
+      const code = ref.codePointAt(suffixStart - 1);
+      if (code < 48 || code > 57) break;
+      suffixStart--;
+    }
+    if (suffixStart < ref.length)
+      max = Math.max(max, Number(ref.slice(suffixStart)));
   });
   return prefix + String(max + 1).padStart(3, "0");
 }
@@ -82,8 +90,13 @@ function toast(msg) {
   window._tt = setTimeout(() => t.classList.remove("show"), 3400);
 }
 function openModal(title, sub, body, foot, wide) {
+  const subtitle = sub
+    ? `<div class="muted" style="font-size:12px;margin-bottom:3px">${sub}</div>`
+    : "";
+  const footer = foot ? `<div class="modal-foot">${foot}</div>` : "";
+  const modalClass = wide ? "modal wide" : "modal";
   document.getElementById("modalHost").innerHTML =
-    `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal ${wide ? "wide" : ""}" role="dialog" aria-modal="true"><div class="modal-head"><div>${sub ? `<div class="muted" style="font-size:12px;margin-bottom:3px">${sub}</div>` : ""}<h3>${title}</h3></div><button class="secondary small" onclick="closeModal()" aria-label="Close">✕</button></div><div class="modal-body">${body}</div>${foot ? `<div class="modal-foot">${foot}</div>` : ""}</div></div>`;
+    `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="${modalClass}" role="dialog" aria-modal="true"><div class="modal-head"><div>${subtitle}<h3>${title}</h3></div><button class="secondary small" onclick="closeModal()" aria-label="Close">✕</button></div><div class="modal-body">${body}</div>${footer}</div></div>`;
   document.body.style.overflow = "hidden";
 }
 function closeModal() {
@@ -521,27 +534,22 @@ function stageOf(b) {
   return 0;
 }
 function bookingClass(s) {
-  return ["Confirmed", "Completed"].includes(s)
-    ? "green"
-    : ["Rejected", "Cancelled"].includes(s)
-      ? "red"
-      : "";
+  if (["Confirmed", "Completed"].includes(s)) return "green";
+  if (["Rejected", "Cancelled"].includes(s)) return "red";
+  return "";
 }
 function payClass(p) {
-  return p === "Paid"
-    ? "green"
-    : p === "Rejected"
-      ? "red"
-      : p === "Awaiting Deposit"
-        ? "gray"
-        : "";
+  if (p === "Paid") return "green";
+  if (p === "Rejected") return "red";
+  if (p === "Awaiting Deposit") return "gray";
+  return "";
 }
 function canPay(b) {
   if (b.payment === "Pending Verification") return null;
   if (["Rejected", "Cancelled"].includes(b.booking)) return null;
   if (
     b.booking === "Pending" &&
-    !(b.paidAmount > 0) &&
+    Number(b.paidAmount || 0) <= 0 &&
     ["Awaiting Deposit", "Rejected"].includes(b.payment)
   )
     return "deposit";
@@ -561,7 +569,7 @@ function customerMsg(b) {
   if (b.booking === "Cancelled")
     return "This booking was cancelled. The 50% down payment is non-refundable under the booking policy.";
   if (b.payment === "Pending Verification")
-    return b.proof && b.proof.target === "balance"
+    return b.proof?.target === "balance"
       ? "Your balance receipt is being checked against the GCash transaction. You will get an update here once it is verified."
       : "Your 50% down payment receipt is being checked against the GCash transaction. Your booking is confirmed automatically once the owner verifies it.";
   if (b.payment === "Rejected")
@@ -584,7 +592,7 @@ function nextAction(b) {
   if (b.payment === "Pending Verification")
     return {
       label:
-        b.proof && b.proof.target === "balance"
+        b.proof?.target === "balance"
           ? "Verify balance payment"
           : "Verify down payment",
       fn: `reviewPayment('${b.ref}')`,
@@ -635,15 +643,21 @@ function tracker(b) {
   ]
     .map((l, i) => {
       const done = i < s || s === 4;
-      return `<div class="t-step ${done ? "done" : i === s ? "current" : ""}"><div class="t-dot">${done ? "✓" : i + 1}</div>${l}</div>`;
+      let stepClass = "";
+      if (done) stepClass = "done";
+      else if (i === s) stepClass = "current";
+      const stepMarker = done ? "✓" : i + 1;
+      return `<div class="t-step ${stepClass}"><div class="t-dot">${stepMarker}</div>${l}</div>`;
     })
     .join("")}</div>`;
 }
 function timelineHtml(b, showNew) {
   const t = (b.timeline || []).slice().reverse();
-  return t.length
-    ? `<ul class="timeline">${t.map((e) => `<li>${safe(e.text)}${showNew && !e.seen ? '<span class="tag-new">NEW</span>' : ""}<span class="when">${safe(e.at)}</span></li>`).join("")}</ul>`
-    : '<p class="muted">No updates yet.</p>';
+  const items = t.map((e) => {
+    const newTag = showNew && !e.seen ? '<span class="tag-new">NEW</span>' : "";
+    return `<li>${safe(e.text)}${newTag}<span class="when">${safe(e.at)}</span></li>`;
+  }).join("");
+  return items ? `<ul class="timeline">${items}</ul>` : '<p class="muted">No updates yet.</p>';
 }
 function myBookingList() {
   return bookings.filter(
@@ -726,7 +740,7 @@ function ensureNavigationShell() {
 function setPage(p) {
   const file = pageFiles[p],
     path = location.pathname.includes("/pages/") ? `../${file}` : file;
-  if (file && !location.pathname.replace(/\\/g, "/").endsWith(`/${file}`))
+  if (file && !location.pathname.replaceAll("\\", "/").endsWith(`/${file}`))
     history.pushState({ page: p }, "", path);
   page = p;
   syncPageChrome(p);
@@ -739,45 +753,54 @@ function setPage(p) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function wizardHeader(steps, cur) {
-  return `<div class="wizard-steps" style="--n:${steps.length}">${steps.map((s, i) => `<div class="wizard-step ${cur === i + 1 ? "active" : cur > i + 1 ? "done" : ""}">${i + 1}. ${s}</div>`).join("")}</div>`;
+  const stepMarkup = steps.map((step, index) => {
+    let stepClass = "";
+    if (cur === index + 1) stepClass = "active";
+    else if (cur > index + 1) stepClass = "done";
+    return `<div class="wizard-step ${stepClass}">${index + 1}. ${step}</div>`;
+  }).join("");
+  return `<div class="wizard-steps" style="--n:${steps.length}">${stepMarkup}</div>`;
 }
 function startBooking() {
   bookingType = null;
   setPage("booking");
 }
 function calendarHtml(kind = "service", mode = "select") {
-  let first = new Date(calYear, calMonth, 1).getDay(),
-    days = new Date(calYear, calMonth + 1, 0).getDate(),
-    sel = kind === "visit" ? visitDate : selectedDate,
-    blocked = blockedDates[kind],
-    html = "";
-  for (let i = 0; i < first; i++) html += '<div class="day"></div>';
-  for (let d = 1; d <= days; d++) {
-    let dt = new Date(calYear, calMonth, d),
-      weekend = dt.getDay() === 0 || dt.getDay() === 6,
-      past = dt < TODAY,
-      val = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-      open = weekend && !past,
-      isBlocked = blocked.has(val),
-      cls = "day",
-      click = "",
-      title = "Not selectable";
-    if (open) cls += isBlocked ? " unavailable" : " available";
-    if (mode === "admin") {
-      if (open) {
-        click = `onclick="toggleBlock('${kind}','${val}')"`;
-        title = isBlocked ? "Closed. Click to reopen" : "Open. Click to close";
-      }
-    } else {
-      if (open && !isBlocked) {
-        click = `onclick="pickDate('${kind}','${val}')"`;
-        title = "Available";
-      } else if (open) title = "Unavailable";
-      if (sel === val) cls += " selected";
-    }
-    html += `<div class="${cls}" ${click ? `${click} role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}"` : ""} title="${title}">${d}</div>`;
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const dayCount = new Date(calYear, calMonth + 1, 0).getDate();
+  const selectedDateForKind = kind === "visit" ? visitDate : selectedDate;
+  const blankDays = new Array(firstDay).fill('<div class="day"></div>').join("");
+  const dayMarkup = Array.from({ length: dayCount }, (_, index) =>
+    calendarDayHtml(index + 1, kind, mode, selectedDateForKind),
+  ).join("");
+  return blankDays + dayMarkup;
+}
+function calendarDayHtml(day, kind, mode, selectedDateForKind) {
+  const date = new Date(calYear, calMonth, day);
+  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+  const value = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const isOpen = isWeekend && date >= TODAY;
+  const isBlocked = blockedDates[kind].has(value);
+  let className = "day";
+  let attributes = "";
+  let title = "Not selectable";
+
+  if (isOpen) className += isBlocked ? " unavailable" : " available";
+  if (mode === "admin" && isOpen) {
+    title = isBlocked ? "Closed. Click to reopen" : "Open. Click to close";
+    attributes = `onclick="toggleBlock('${kind}','${value}')"`;
+  } else if (mode !== "admin" && isOpen && !isBlocked) {
+    title = "Available";
+    attributes = `onclick="pickDate('${kind}','${value}')"`;
+  } else if (mode !== "admin" && isOpen) {
+    title = "Unavailable";
   }
-  return html;
+  if (mode !== "admin" && selectedDateForKind === value)
+    className += " selected";
+  if (attributes)
+    attributes +=
+      ' role="button" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}"';
+  return `<div class="${className}" ${attributes} title="${title}">${day}</div>`;
 }
 function changeMonth(n) {
   readDetails();
@@ -811,7 +834,18 @@ function setCalKind(k) {
   render();
 }
 function calendarBlock(kind, mode = "select") {
-  return `<div class="calendar"><div class="cal-head"><button onclick="changeMonth(-1)" aria-label="Previous month">←</button><strong>${new Date(calYear, calMonth, 1).toLocaleString("en-US", { month: "long", year: "numeric" })}</strong><button onclick="changeMonth(1)" aria-label="Next month">→</button></div><div class="cal-grid">${DAYNAMES.map((x) => `<div class="cal-dayname">${x}</div>`).join("")}${calendarHtml(kind, mode)}</div><div class="legend">${mode === "admin" ? '<span><i class="dot" style="background:#8cc596"></i>Open</span><span><i class="dot" style="background:#df9696"></i>Closed</span><span><i class="dot" style="background:#d8ddd5"></i>Not adjustable</span>' : '<span><i class="dot" style="background:#8cc596"></i>Available</span><span><i class="dot" style="background:#df9696"></i>Unavailable</span><span><i class="dot" style="background:#d8ddd5"></i>Not selectable</span>'}</div></div>`;
+  const monthLabel = new Date(calYear, calMonth, 1).toLocaleString(
+    "en-US",
+    { month: "long", year: "numeric" },
+  );
+  const legend = mode === "admin"
+    ? '<span><i class="dot" style="background:#8cc596"></i>Open</span><span><i class="dot" style="background:#df9696"></i>Closed</span><span><i class="dot" style="background:#d8ddd5"></i>Not adjustable</span>'
+    : '<span><i class="dot" style="background:#8cc596"></i>Available</span><span><i class="dot" style="background:#df9696"></i>Unavailable</span><span><i class="dot" style="background:#d8ddd5"></i>Not selectable</span>';
+  const dayNames = DAYNAMES.map((name) =>
+    `<div class="cal-dayname">${name}</div>`,
+  ).join("");
+  const calendarDays = calendarHtml(kind, mode);
+  return `<div class="calendar"><div class="cal-head"><button onclick="changeMonth(-1)" aria-label="Previous month">←</button><strong>${monthLabel}</strong><button onclick="changeMonth(1)" aria-label="Next month">→</button></div><div class="cal-grid">${dayNames}${calendarDays}</div><div class="legend">${legend}</div></div>`;
 }
 function login() {
   return `<div class="panel auth-card"><div class="auth-card-header login-header"><img class="login-logo" src="../pictures/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo"><h1 class="page-title">Welcome back</h1><p class="muted">Sign in to track your booking requests.</p></div><form id="loginForm"><div class="field"><label for="loginEmail">EMAIL ADDRESS</label><input type="email" id="loginEmail" required placeholder="you@example.com" value="customer@example.com"></div><div class="field"><label for="loginPassword">PASSWORD</label><input type="password" id="loginPassword" required placeholder="Enter password"></div><button class="primary" type="submit">Log In</button></form><p class="auth-card-footer"><a href="register.html">Don't have an account? Create Account</a></p></div>`;
@@ -832,7 +866,7 @@ function readReceiptAsDataURL(file) {
 }
 function viewPaymentProof(ref) {
   let b = bookings.find((x) => x.ref === ref);
-  if (!b || !b.proof || !b.proof.dataUrl) {
+  if (!b?.proof?.dataUrl) {
     alert(
       "No receipt file is available for this booking. Ask the customer to resubmit the proof.",
     );
@@ -845,10 +879,39 @@ function viewPaymentProof(ref) {
     );
     return;
   }
-  w.document.write(
-    `<title>Payment receipt — ${safe(b.ref)}</title><body style="font-family:Arial,sans-serif;padding:20px;color:#243129"><h2>Payment receipt — ${safe(b.ref)}</h2><p>Customer: ${safe(b.name)}</p><p>GCash reference: ${safe(b.proof.reference)}</p><p>Submitted amount: ${money(b.proof.amount)}</p><p>File: ${safe(b.proof.fileName)}</p><hr>${b.proof.dataUrl.startsWith("data:application/pdf") ? `<iframe src="${b.proof.dataUrl}" style="width:100%;height:80vh;border:0"></iframe>` : `<img src="${b.proof.dataUrl}" alt="Uploaded payment receipt" style="max-width:100%;height:auto">`}</body>`,
+  const receiptDocument = w.document;
+  receiptDocument.title = `Payment receipt — ${b.ref}`;
+  const receiptBody = receiptDocument.body;
+  receiptBody.style.cssText = "font-family:Arial,sans-serif;padding:20px;color:#243129";
+  const heading = receiptDocument.createElement("h2");
+  heading.textContent = `Payment receipt — ${b.ref}`;
+  receiptBody.replaceChildren(
+    heading,
+    ...[
+      `Customer: ${b.name}`,
+      `GCash reference: ${b.proof.reference}`,
+      `Submitted amount: ${money(b.proof.amount)}`,
+      `File: ${b.proof.fileName}`,
+    ].map((text) => {
+      const paragraph = receiptDocument.createElement("p");
+      paragraph.textContent = text;
+      return paragraph;
+    }),
+    receiptDocument.createElement("hr"),
   );
-  w.document.close();
+  if (b.proof.dataUrl.startsWith("data:application/pdf")) {
+    const preview = receiptDocument.createElement("iframe");
+    preview.src = b.proof.dataUrl;
+    preview.title = `Payment receipt PDF for ${b.ref}`;
+    preview.style.cssText = "width:100%;height:80vh;border:0";
+    receiptBody.append(preview);
+  } else {
+    const preview = receiptDocument.createElement("img");
+    preview.src = b.proof.dataUrl;
+    preview.alt = "Uploaded payment receipt";
+    preview.style.cssText = "max-width:100%;height:auto";
+    receiptBody.append(preview);
+  }
 }
 function bookingChooser() {
   return `<div class="breadcrumbs">Home / Bookings</div><h1 class="page-title">Booking</h1><h2 style="margin:6px 0 0;font-size:20px">What would you like to book today?</h2><div class="choice-grid"><div class="card choice"><div class="service-icon">🌊</div><h3>Book a Service</h3><p>Pond packages, manufacturing, installation, and custom pond design.</p><button class="primary" onclick="chooseBookingType('service')">Select Service</button></div><div class="card choice"><div class="service-icon">🏡</div><h3>Book a Visitation</h3><p>Schedule a farm visit for 1–5 visitors on available weekends.</p><button class="primary" onclick="chooseBookingType('visit')">Select Visitation</button></div></div>`;
@@ -883,7 +946,7 @@ function readDetails() {
   const g = (id) => (document.getElementById(id)?.value || "").trim();
   if (!document.getElementById("customerName")) return;
   window.bookingDraft = {
-    ...(window.bookingDraft || {}),
+    ...window.bookingDraft,
     name: g("customerName"),
     phone: g("phone"),
     email: g("email"),
@@ -901,18 +964,28 @@ function reviewStep() {
   let d = window.bookingDraft || {},
     p = currentPricing(),
     preset = selectedPondPackage();
-  return `<h2>Review your booking</h2><p class="muted">Check the package, booking information, and price. Then continue to payment.</p><div class="review-grid"><div>${servicePhoto()}</div><div><h3 style="margin-top:0">${safe(selectedPackage)}</h3>${preset ? `<p class="muted" style="margin-top:0">${safe(preset.description)}</p><div class="summary-line"><span>Pond configuration</span><strong>${safe(preset.layers)} · ${safe(preset.dimensions)}</strong></div><div class="summary-line"><span>Included freebie</span><strong>${safe(preset.freebie)}</strong></div>` : `<div class="summary-line"><span>Pond size</span><strong>${Number(pondWidth).toFixed(1)} m × ${Number(pondHeight).toFixed(1)} m (${(pondWidth * pondHeight).toFixed(2)} m²)</strong></div><div class="summary-line"><span>Layers</span><strong>${safe(selectedLayers)}</strong></div><div class="summary-line"><span>Filtration</span><strong>${safe(filtration)}</strong></div>`}${d.notes ? `<div class="summary-line"><span>Notes for the owner</span><strong>${safe(d.notes)}</strong></div>` : ""}</div></div><div class="panel"><h3>Booking information</h3><div class="summary-line"><span>Preferred date</span><strong>${selectedDate ? fmtDate(selectedDate, true) : "Not selected"}</strong></div><div class="summary-line"><span>Name</span><strong>${safe(d.name || "")}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone || "")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email || "Not provided")}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(d.location || "")}</strong></div></div><div class="panel"><h3>Price</h3>${preset ? `<div class="summary-line"><span>Package price</span><strong>${money(p.base)}</strong></div>` : `<div class="summary-line"><span>Custom pond price (based on size, layers, filtration)</span><strong>${money(p.cust)}</strong></div>`}<div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment due now</span><strong style="color:var(--green)">${money(p.deposit)}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(p.balance)}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings.</p></div><div class="callout" style="margin-top:18px"><strong>No-refund policy.</strong> ${NO_REFUND_POLICY}<label class="check-row"><input type="checkbox" id="policyBox" ${policyAccepted ? "checked" : ""} onchange="policyAccepted=this.checked"><span>I understand and accept the no-refund policy.</span></label></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=3;render()">← Back</button><button class="primary" onclick="goPayment()">Continue to Payment →</button></div>`;
+  const packageDetails = preset
+    ? `<p class="muted" style="margin-top:0">${safe(preset.description)}</p><div class="summary-line"><span>Pond configuration</span><strong>${safe(preset.layers)} · ${safe(preset.dimensions)}</strong></div><div class="summary-line"><span>Included freebie</span><strong>${safe(preset.freebie)}</strong></div>`
+    : `<div class="summary-line"><span>Pond size</span><strong>${Number(pondWidth).toFixed(1)} m × ${Number(pondHeight).toFixed(1)} m (${(pondWidth * pondHeight).toFixed(2)} m²)</strong></div><div class="summary-line"><span>Layers</span><strong>${safe(selectedLayers)}</strong></div><div class="summary-line"><span>Filtration</span><strong>${safe(filtration)}</strong></div>`;
+  const notes = d.notes
+    ? `<div class="summary-line"><span>Notes for the owner</span><strong>${safe(d.notes)}</strong></div>`
+    : "";
+  const priceDetails = preset
+    ? `<div class="summary-line"><span>Package price</span><strong>${money(p.base)}</strong></div>`
+    : `<div class="summary-line"><span>Custom pond price (based on size, layers, filtration)</span><strong>${money(p.cust)}</strong></div>`;
+  const preferredDate = selectedDate
+    ? fmtDate(selectedDate, true)
+    : "Not selected";
+  return `<h2>Review your booking</h2><p class="muted">Check the package, booking information, and price. Then continue to payment.</p><div class="review-grid"><div>${servicePhoto()}</div><div><h3 style="margin-top:0">${safe(selectedPackage)}</h3>${packageDetails}${notes}</div></div><div class="panel"><h3>Booking information</h3><div class="summary-line"><span>Preferred date</span><strong>${preferredDate}</strong></div><div class="summary-line"><span>Name</span><strong>${safe(d.name || "")}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone || "")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email || "Not provided")}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(d.location || "")}</strong></div></div><div class="panel"><h3>Price</h3>${priceDetails}<div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment due now</span><strong style="color:var(--green)">${money(p.deposit)}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(p.balance)}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings.</p></div><div class="callout" style="margin-top:18px"><strong>No-refund policy.</strong> ${NO_REFUND_POLICY}<label class="check-row"><input type="checkbox" id="policyBox" ${policyAccepted ? "checked" : ""} onchange="policyAccepted=this.checked"><span>I understand and accept the no-refund policy.</span></label></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=3;render()">← Back</button><button class="primary" onclick="goPayment()">Continue to Payment →</button></div>`;
 }
 function paymentStep() {
   let p = currentPricing();
   return `<h2>Payment</h2><p class="muted">Pay the 50% down payment in GCash, then upload your receipt. Your booking and receipt are submitted together, and your booking is confirmed once the owner verifies your payment.</p><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner's GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner's GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner's GCash number]</strong></div><div class="summary-line"><span>Package</span><strong>${safe(selectedPackage)}</strong></div><div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment to pay now</span><strong style="font-size:23px;color:var(--green)">${money(p.deposit)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the account details above, and pay the exact amount. After the transfer succeeds, upload your receipt below and submit.</div></div></div><div class="panel" style="margin-top:20px"><h3>Upload payment receipt</h3><p class="muted">Your booking is submitted together with this receipt. The owner checks the receipt against the actual GCash transaction.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/*,.pdf" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: image or PDF, up to 8 MB.</p></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=4;render()">← Back</button><button class="primary" onclick="submitBooking()">Submit Booking and Receipt</button></div></div>`;
 }
 function booking() {
-  return bookingType === "service"
-    ? serviceBooking()
-    : bookingType === "visit"
-      ? visitBooking()
-      : bookingChooser();
+  if (bookingType === "service") return serviceBooking();
+  if (bookingType === "visit") return visitBooking();
+  return bookingChooser();
 }
 function visitSuccess() {
   let v = visits.find((x) => x.ref === currentVisitRef);
@@ -920,14 +993,15 @@ function visitSuccess() {
   return `<div class="panel success"><div class="bigcheck">✓</div><h1>${sp ? "Special date request submitted" : "Visitation booked"}</h1><p class="muted">${sp ? "The admin will review your request. The visit is not confirmed until the request is approved." : "Your farm visit is booked. You can track it in My Bookings."}</p><div class="card" style="max-width:480px;margin:22px auto;text-align:left"><div class="summary-line"><span>Reference number</span><strong>${v.ref}</strong></div><div class="summary-line"><span>Status</span><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div></div><button class="primary" onclick="setPage('mybookings')">Track My Booking</button> <button class="secondary" onclick="setPage('home')">Back to Home</button></div>`;
 }
 function visitStatusClass(s) {
-  return ["Booked", "Approved", "Completed"].includes(s)
-    ? "green"
-    : ["Declined", "Cancelled"].includes(s)
-      ? "red"
-      : "";
+  if (["Booked", "Approved", "Completed"].includes(s)) return "green";
+  if (["Declined", "Cancelled"].includes(s)) return "red";
+  return "";
 }
 function visitBooking() {
-  return `<div class="breadcrumbs">Home / Bookings / Book a Visitation</div><div class="admin-header"><div><h1 class="page-title">Book a Visitation</h1><p class="muted">Visit the farm with 1–5 visitors on an available Saturday or Sunday.</p></div><button class="secondary small" onclick="changeBookingType()">Change booking type</button></div>${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel">${visitStep === 1 ? visitDateStep() : visitStep === 2 ? visitDetailsStep() : visitReviewStep()}</div>`;
+  let stepContent = visitReviewStep();
+  if (visitStep === 1) stepContent = visitDateStep();
+  else if (visitStep === 2) stepContent = visitDetailsStep();
+  return `<div class="breadcrumbs">Home / Bookings / Book a Visitation</div><div class="admin-header"><div><h1 class="page-title">Book a Visitation</h1><p class="muted">Visit the farm with 1–5 visitors on an available Saturday or Sunday.</p></div><button class="secondary small" onclick="changeBookingType()">Change booking type</button></div>${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel">${stepContent}</div>`;
 }
 function visitDateStep() {
   if (visitMode === "special")
@@ -970,20 +1044,23 @@ function visitToDetails() {
     }
     visitDate = v;
     visitReason = r;
-  } else {
-    if (!visitDate || blockedDates.visit.has(visitDate)) {
-      visitDate = "";
-      alert("Please choose an available Saturday or Sunday.");
-      render();
-      return;
-    }
+  } else if (!visitDate || blockedDates.visit.has(visitDate)) {
+    visitDate = "";
+    alert("Please choose an available Saturday or Sunday.");
+    render();
+    return;
   }
   visitStep = 2;
   render();
 }
 function visitDetailsStep() {
   let d = visitDraft;
-  return `<h2>Visitor details</h2><p class="muted">Visit date: <strong>${fmtDate(visitDate, true)}</strong>${visitMode === "special" ? " (special date request)" : ""}</p><div class="field-grid"><div class="field"><label for="vName">Full name</label><input id="vName" value="${safe(d.name || userName)}" placeholder="Full name"></div><div class="field"><label for="vEmail">Email</label><input id="vEmail" type="email" value="${safe(d.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="vPhone">Contact number</label><input id="vPhone" value="${safe(d.phone || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="vFarm">Farm name (optional)</label><input id="vFarm" value="${safe(d.farm || "")}" placeholder="Your farm, if you have one"></div><div class="field"><label for="vVisitors">Number of visitors (maximum 5)</label><select id="vVisitors">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${Number(d.visitors || 1) === n ? "selected" : ""}>${n}</option>`).join("")}</select></div></div><div class="wizard-actions"><button class="secondary" onclick="readVisit();visitStep=1;render()">← Back</button><button class="primary" onclick="visitToReview()">Continue to Review →</button></div>`;
+  const specialRequest = visitMode === "special" ? " (special date request)" : "";
+  const visitorOptions = [1, 2, 3, 4, 5].map((count) => {
+    const selected = Number(d.visitors || 1) === count ? "selected" : "";
+    return `<option value="${count}" ${selected}>${count}</option>`;
+  }).join("");
+  return `<h2>Visitor details</h2><p class="muted">Visit date: <strong>${fmtDate(visitDate, true)}</strong>${specialRequest}</p><div class="field-grid"><div class="field"><label for="vName">Full name</label><input id="vName" value="${safe(d.name || userName)}" placeholder="Full name"></div><div class="field"><label for="vEmail">Email</label><input id="vEmail" type="email" value="${safe(d.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="vPhone">Contact number</label><input id="vPhone" value="${safe(d.phone || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="vFarm">Farm name (optional)</label><input id="vFarm" value="${safe(d.farm || "")}" placeholder="Your farm, if you have one"></div><div class="field"><label for="vVisitors">Number of visitors (maximum 5)</label><select id="vVisitors">${visitorOptions}</select></div></div><div class="wizard-actions"><button class="secondary" onclick="readVisit();visitStep=1;render()">← Back</button><button class="primary" onclick="visitToReview()">Continue to Review →</button></div>`;
 }
 function readVisit() {
   const g = (id) => (document.getElementById(id)?.value || "").trim();
@@ -1003,7 +1080,8 @@ function visitToReview() {
     alert("Please enter your name and contact number.");
     return;
   }
-  if (!/^\S+@\S+\.\S+$/.test(d.email)) {
+  const emailField = document.getElementById("vEmail");
+  if (!emailField?.validity.valid) {
     alert("Please enter a valid email address.");
     return;
   }
@@ -1013,7 +1091,17 @@ function visitToReview() {
 function visitReviewStep() {
   let d = visitDraft,
     sp = visitMode === "special";
-  return `<h2>Review your ${sp ? "special date request" : "visitation"}</h2><p class="muted">Check the date and your information before submitting.</p><div class="panel"><div class="summary-line"><span>Visit date</span><strong>${fmtDate(visitDate, true)}</strong></div>${sp ? `<div class="summary-line"><span>Request type</span><strong>Special date (admin review)</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visitReason)}</strong></div>` : ""}<div class="summary-line"><span>Name</span><strong>${safe(d.name)}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email)}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(d.farm || "Not provided")}</strong></div><div class="summary-line"><span>Number of visitors</span><strong>${d.visitors}</strong></div><div class="notice" style="margin-top:15px">${sp ? "This date is outside the regular schedule. The admin will review your request before the visit is confirmed." : "Your visit will be booked for this date when you submit."}</div></div><div class="wizard-actions"><button class="secondary" onclick="visitStep=2;render()">← Back</button><button class="primary" onclick="submitVisit()">${sp ? "Submit Special Date Request" : "Submit Visitation Booking"}</button></div>`;
+  const heading = sp ? "special date request" : "visitation";
+  const requestDetails = sp
+    ? `<div class="summary-line"><span>Request type</span><strong>Special date (admin review)</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visitReason)}</strong></div>`
+    : "";
+  const notice = sp
+    ? "This date is outside the regular schedule. The admin will review your request before the visit is confirmed."
+    : "Your visit will be booked for this date when you submit.";
+  const submitLabel = sp
+    ? "Submit Special Date Request"
+    : "Submit Visitation Booking";
+  return `<h2>Review your ${heading}</h2><p class="muted">Check the date and your information before submitting.</p><div class="panel"><div class="summary-line"><span>Visit date</span><strong>${fmtDate(visitDate, true)}</strong></div>${requestDetails}<div class="summary-line"><span>Name</span><strong>${safe(d.name)}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email)}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(d.farm || "Not provided")}</strong></div><div class="summary-line"><span>Number of visitors</span><strong>${d.visitors}</strong></div><div class="notice" style="margin-top:15px">${notice}</div></div><div class="wizard-actions"><button class="secondary" onclick="visitStep=2;render()">← Back</button><button class="primary" onclick="submitVisit()">${submitLabel}</button></div>`;
 }
 function submitVisit() {
   let d = visitDraft,
@@ -1052,30 +1140,43 @@ function submitVisit() {
   setPage("success");
 }
 function updateVisit(ref, status) {
-  let v = visits.find((x) => x.ref === ref);
+  const v = visits.find((x) => x.ref === ref);
   if (!v) return;
-  if (status === "Approved") {
-    if (v.status !== "Pending Review") return;
-    v.status = "Approved";
-    alert("Special date approved. The customer can see it in My Bookings.");
-  } else if (status === "Declined") {
-    if (v.status !== "Pending Review") return;
-    if (!confirm("Decline this special date request?")) return;
-    v.status = "Declined";
-  } else if (status === "Completed") {
-    if (!["Booked", "Approved"].includes(v.status)) return;
-    v.status = "Completed";
-  } else if (status === "Cancelled") {
-    if (!["Booked", "Approved"].includes(v.status)) return;
-    if (!confirm("Cancel this visitation?")) return;
-    v.status = "Cancelled";
-  }
+  const transitions = {
+    Approved: {
+      from: ["Pending Review"],
+      message: "Special date approved. The customer can see it in My Bookings.",
+    },
+    Declined: {
+      from: ["Pending Review"],
+      confirmation: "Decline this special date request?",
+    },
+    Completed: { from: ["Booked", "Approved"] },
+    Cancelled: {
+      from: ["Booked", "Approved"],
+      confirmation: "Cancel this visitation?",
+    },
+  };
+  const transition = transitions[status];
+  if (!transition?.from.includes(v.status)) return;
+  if (transition.confirmation && !confirm(transition.confirmation)) return;
+  v.status = status;
+  if (transition.message) alert(transition.message);
   render();
 }
 function adminCalendar() {
-  let k = calKind,
-    closed = [...blockedDates[k]].sort();
-  return `<div class="panel"><div class="admin-header"><div><h3>Calendar Controls</h3><p class="muted">Open or close weekend dates. Customers can select only open dates.</p></div><div class="pill-row"><button class="${k === "service" ? "primary" : "secondary"} small" onclick="setCalKind('service')">Package service calendar</button><button class="${k === "visit" ? "primary" : "secondary"} small" onclick="setCalKind('visit')">Visitation calendar</button></div></div><div class="calendar-wrap" style="margin-top:18px">${calendarBlock(k, "admin")}<div><div class="card"><h3>Closed dates</h3>${closed.length ? closed.map((d) => `<div class="summary-line"><span>${fmtDate(d)}</span><button class="secondary small" onclick="toggleBlock('${k}','${d}')">Reopen</button></div>`).join("") : '<p class="muted">No closed dates.</p>'}</div></div></div><div class="notice" style="margin-top:16px">Click a weekend date to close or reopen it. Past dates cannot be changed. Closing a date does not cancel existing bookings.</div></div>`;
+  const kind = calKind;
+  const closedDates = [...blockedDates[kind]].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const serviceClass = kind === "service" ? "primary" : "secondary";
+  const visitClass = kind === "visit" ? "primary" : "secondary";
+  const closedMarkup = closedDates.length
+    ? closedDates.map((date) =>
+      `<div class="summary-line"><span>${fmtDate(date)}</span><button class="secondary small" onclick="toggleBlock('${kind}','${date}')">Reopen</button></div>`,
+    ).join("")
+    : '<p class="muted">No closed dates.</p>';
+  return `<div class="panel"><div class="admin-header"><div><h3>Calendar Controls</h3><p class="muted">Open or close weekend dates. Customers can select only open dates.</p></div><div class="pill-row"><button class="${serviceClass} small" onclick="setCalKind('service')">Package service calendar</button><button class="${visitClass} small" onclick="setCalKind('visit')">Visitation calendar</button></div></div><div class="calendar-wrap" style="margin-top:18px">${calendarBlock(kind, "admin")}<div><div class="card"><h3>Closed dates</h3>${closedMarkup}</div></div></div><div class="notice" style="margin-top:16px">Click a weekend date to close or reopen it. Past dates cannot be changed. Closing a date does not cancel existing bookings.</div></div>`;
 }
 function pkgCardPublic(x) {
   return `<article class="pkg-card"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ MOST POPULAR</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span><strong>Free with this package</strong><br>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><button class="primary" onclick="choosePkgById('${x.id}')">Choose</button></div></div></article>`;
@@ -1089,18 +1190,65 @@ function shop() {
 }
 
 function pkgCardSelect(x, custom) {
-  const sel = custom ? isCustomPond() : selectedPackage === x.name,
-    id = custom ? "custom" : x.id,
-    name = custom ? "Custom Pond Design" : x.name;
-  return `<div class="pkg-card ${custom ? "custom" : ""} ${sel ? "selected" : ""}" role="button" tabindex="0" aria-pressed="${sel}" onclick="pickPkg('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pickPkg('${id}')}"><div class="pkg-media">${custom ? "<span>📐</span>" : pkgImg(x)}${!custom && x.featured ? '<span class="pkg-badge">★ MOST POPULAR</span>' : ""}${sel ? '<span class="pkg-tick">✓</span>' : ""}</div><div class="pkg-body"><h3>${safe(name)}</h3><p>${custom ? "Build your own pond: layers, size and filtration." : safe(x.description)}</p>${custom ? '<div class="chips"><span class="chip">Up to 3 layers</span><span class="chip">Your own size</span></div>' : `<div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span><strong>Free:</strong> ${safe(x.freebie)}</span></div>`}<div class="pkg-foot"><div class="price-big"><small>${custom ? "Price from your size" : "Package price"}</small>${custom ? "Computed" : money(x.price)}</div>${sel ? '<span class="status green">Selected</span>' : '<span class="status gray">Tap to select</span>'}</div></div></div>`;
+  const selected = custom ? isCustomPond() : selectedPackage === x.name;
+  const id = custom ? "custom" : x.id;
+  const name = custom ? "Custom Pond Design" : x.name;
+  const cardClass = custom ? "pkg-card custom" : "pkg-card";
+  const selectedClass = selected ? " selected" : "";
+  const media = custom ? "<span>📐</span>" : pkgImg(x);
+  const featuredBadge =
+    !custom && x.featured
+      ? '<span class="pkg-badge">★ MOST POPULAR</span>'
+      : "";
+  const selectedBadge = selected ? '<span class="pkg-tick">✓</span>' : "";
+  const description = custom
+    ? "Build your own pond: layers, size and filtration."
+    : safe(x.description);
+  let packageDetails =
+    '<div class="chips"><span class="chip">Up to 3 layers</span><span class="chip">Your own size</span></div>';
+  if (!custom) {
+    packageDetails = `<div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span><strong>Free:</strong> ${safe(x.freebie)}</span></div>`;
+  }
+  const priceLabel = custom ? "Price from your size" : "Package price";
+  const price = custom ? "Computed" : money(x.price);
+  const selectionLabel = selected
+    ? '<span class="status green">Selected</span>'
+    : '<span class="status gray">Tap to select</span>';
+  return `<div class="${cardClass}${selectedClass}" role="button" tabindex="0" aria-pressed="${selected}" onclick="pickPkg('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pickPkg('${id}')}"><div class="pkg-media">${media}${featuredBadge}${selectedBadge}</div><div class="pkg-body"><h3>${safe(name)}</h3><p>${description}</p>${packageDetails}<div class="pkg-foot"><div class="price-big"><small>${priceLabel}</small>${price}</div>${selectionLabel}</div></div></div>`;
 }
 function packageStep() {
   const predefined = selectedPondPackage();
-  return `<h2>Choose one service option</h2><p class="muted">Select one predefined package (each includes a freebie), or choose Custom Pond Design to set your own layers and dimensions.</p><div class="pkg-grid" style="margin-top:18px">${activePackages()
-    .map((x) => pkgCardSelect(x, false))
-    .join(
-      "",
-    )}${pkgCardSelect(null, true)}</div>${isCustomPond() ? `<div class="panel" style="margin-top:18px"><h3 style="margin-top:0">Customize your pond</h3><p class="muted">Choose 1 to 3 layers and enter your pond’s width and length in metres. The price updates automatically.</p><div class="field-grid"><div class="field"><label for="layers">Number of pond layers (maximum 3)</label><select id="layers" onchange="selectedLayers=this.value;render()"><option value="1 layer" ${selectedLayers === "1 layer" ? "selected" : ""}>1 layer</option><option value="2 layers" ${selectedLayers === "2 layers" ? "selected" : ""}>2 layers</option><option value="3 layers" ${selectedLayers === "3 layers" ? "selected" : ""}>3 layers</option></select></div><div class="field"><label for="filtration">Filtration system</label><select id="filtration" onchange="filtration=this.value;render()"><option value="Yes" ${filtration === "Yes" ? "selected" : ""}>Yes (+ ${money(filtrationEstimate)})</option><option value="No" ${filtration === "No" ? "selected" : ""}>No</option></select></div><div class="field"><label for="pondWidth">Width (metres)</label><input id="pondWidth" type="number" min="1" max="10" step="0.5" value="${pondWidth}" oninput="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondWidth;updatePondEstimate()"></div><div class="field"><label for="pondHeight">Length (metres)</label><input id="pondHeight" type="number" min="1" max="10" step="0.5" value="${pondHeight}" oninput="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondHeight;updatePondEstimate()"></div></div><div class="summary-line"><span>Pond area</span><strong id="pondArea">${(pondWidth * pondHeight).toFixed(2)} m²</strong></div><div class="summary-line"><span>Custom pond price</span><strong id="pondEstimate">${money(pondCustomizationEstimate())}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">Formula: width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected.</p></div>` : predefined ? `<div class="panel" style="margin-top:18px"><h3 style="margin-top:0">${safe(predefined.name)} details</h3><div class="summary-line"><span>Included pond configuration</span><strong>${safe(predefined.layers)} · ${safe(predefined.dimensions)}</strong></div><div class="summary-line"><span>Predefined freebie</span><strong>${safe(predefined.freebie)}</strong></div><p class="muted" style="margin-bottom:0">The package uses the owner’s predefined setup. For different dimensions or layers, select Custom Pond Design instead.</p></div>` : ""}<div class="panel"><h3 style="margin-top:0">Additional request (optional)</h3><div class="field"><label for="notes">Notes for the owner</label><textarea id="notes" placeholder="Share any other requirements..." oninput="extraNotes=this.value">${safe(extraNotes || window.bookingDraft?.notes || "")}</textarea></div></div><div class="wizard-actions"><button class="secondary" onclick="changeBookingType()">← Back</button><button class="primary" onclick="continueToSchedule()">Continue to Date →</button></div>`;
+  const packageCards = activePackages()
+    .map((item) => pkgCardSelect(item, false))
+    .join("") + pkgCardSelect(null, true);
+  let pondOptions = "";
+  if (isCustomPond()) pondOptions = customPondPanel();
+  else if (predefined) pondOptions = predefinedPondPanel(predefined);
+  const notes = safe(extraNotes || window.bookingDraft?.notes || "");
+  return `<h2>Choose one service option</h2><p class="muted">Select one predefined package (each includes a freebie), or choose Custom Pond Design to set your own layers and dimensions.</p><div class="pkg-grid" style="margin-top:18px">${packageCards}</div>${pondOptions}<div class="panel"><h3 style="margin-top:0">Additional request (optional)</h3><div class="field"><label for="notes">Notes for the owner</label><textarea id="notes" placeholder="Share any other requirements..." oninput="extraNotes=this.value">${notes}</textarea></div></div><div class="wizard-actions"><button class="secondary" onclick="changeBookingType()">← Back</button><button class="primary" onclick="continueToSchedule()">Continue to Date →</button></div>`;
+}
+function customPondPanel() {
+  const layerOptions = ["1 layer", "2 layers", "3 layers"].map((layer) => {
+    const selected = selectedLayers === layer ? "selected" : "";
+    return `<option value="${layer}" ${selected}>${layer}</option>`;
+  }).join("");
+  const filtrationOptions = ["Yes", "No"].map((value) => {
+    const selected = filtration === value ? "selected" : "";
+    const price = value === "Yes" ? ` (+ ${money(filtrationEstimate)})` : "";
+    return `<option value="${value}" ${selected}>${value}${price}</option>`;
+  }).join("");
+  const area = (pondWidth * pondHeight).toFixed(2);
+  const estimate = money(pondCustomizationEstimate());
+  const rate = money(pondRatePerSqmPerLayer);
+  const filtrationFee = money(filtrationEstimate);
+  return `<div class="panel" style="margin-top:18px"><h3 style="margin-top:0">Customize your pond</h3><p class="muted">Choose 1 to 3 layers and enter your pond’s width and length in metres. The price updates automatically.</p><div class="field-grid"><div class="field"><label for="layers">Number of pond layers (maximum 3)</label><select id="layers" onchange="selectedLayers=this.value;render()">${layerOptions}</select></div><div class="field"><label for="filtration">Filtration system</label><select id="filtration" onchange="filtration=this.value;render()">${filtrationOptions}</select></div><div class="field"><label for="pondWidth">Width (metres)</label><input id="pondWidth" type="number" min="1" max="10" step="0.5" value="${pondWidth}" oninput="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondWidth;updatePondEstimate()"></div><div class="field"><label for="pondHeight">Length (metres)</label><input id="pondHeight" type="number" min="1" max="10" step="0.5" value="${pondHeight}" oninput="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondHeight;updatePondEstimate()"></div></div><div class="summary-line"><span>Pond area</span><strong id="pondArea">${area} m²</strong></div><div class="summary-line"><span>Custom pond price</span><strong id="pondEstimate">${estimate}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">Formula: width × length × ${rate} per m² per layer, plus ${filtrationFee} if filtration is selected.</p></div>`;
+}
+function predefinedPondPanel(predefined) {
+  const name = safe(predefined.name);
+  const layers = safe(predefined.layers);
+  const dimensions = safe(predefined.dimensions);
+  const freebie = safe(predefined.freebie);
+  return `<div class="panel" style="margin-top:18px"><h3 style="margin-top:0">${name} details</h3><div class="summary-line"><span>Included pond configuration</span><strong>${layers} · ${dimensions}</strong></div><div class="summary-line"><span>Predefined freebie</span><strong>${freebie}</strong></div><p class="muted" style="margin-bottom:0">The package uses the owner’s predefined setup. For different dimensions or layers, select Custom Pond Design instead.</p></div>`;
 }
 
 function continueToSchedule() {
@@ -1155,38 +1303,47 @@ function goPayment() {
   wizardStep = 5;
   render();
 }
-async function submitBooking() {
-  if (submitting) return;
-  const d = window.bookingDraft || {};
-  if (!selectedDate || !d.name || !d.phone || !d.location) {
-    alert(
-      "Some booking details are missing. Go back and complete the Date and Details steps.",
-    );
-    return;
-  }
-  if (!policyAccepted) {
-    alert("Please accept the no-refund policy first.");
-    return;
-  }
-  const reference = document.getElementById("gcashReference")?.value.trim(),
-    file = document.getElementById("gcashProof")?.files?.[0];
+function readBookingPayment() {
+  const reference = document.getElementById("gcashReference")?.value.trim();
+  const file = document.getElementById("gcashProof")?.files?.[0];
   if (!reference) {
     alert("Enter the GCash transaction reference number.");
-    return;
+    return null;
   }
   if (!file) {
     alert("Please upload your GCash receipt or payment screenshot.");
-    return;
+    return null;
   }
   if (file.size > 8 * 1024 * 1024) {
     alert("Please upload a receipt smaller than 8 MB.");
-    return;
+    return null;
   }
+  return { reference, file };
+}
+function bookingDetailsAreComplete(details) {
+  if (!selectedDate || !details.name || !details.phone || !details.location) {
+    alert(
+      "Some booking details are missing. Go back and complete the Date and Details steps.",
+    );
+    return false;
+  }
+  if (!policyAccepted) {
+    alert("Please accept the no-refund policy first.");
+    return false;
+  }
+  return true;
+}
+async function submitBooking() {
+  if (submitting) return;
+  const details = window.bookingDraft || {};
+  if (!bookingDetailsAreComplete(details)) return;
+  const payment = readBookingPayment();
+  if (!payment) return;
   submitting = true;
   let dataUrl;
   try {
-    dataUrl = await readReceiptAsDataURL(file);
-  } catch (e) {
+    dataUrl = await readReceiptAsDataURL(payment.file);
+  } catch {
     submitting = false;
     alert("The receipt file could not be read. Please try again.");
     return;
@@ -1194,9 +1351,10 @@ async function submitBooking() {
   const p = currentPricing(),
     preset = selectedPondPackage(),
     ref = nextRef("BG-2026-", bookings);
+  const pondConfiguration = pondConfigurationForBooking(preset);
   const b = {
     ref,
-    name: d.name,
+    name: details.name,
     pkg: selectedPackage,
     freebie: preset ? preset.freebie : "",
     packageLayers: preset ? preset.layers : "",
@@ -1211,24 +1369,18 @@ async function submitBooking() {
     total: p.total,
     deposit: p.deposit,
     balance: p.balance,
-    location: d.location,
-    phone: d.phone,
-    email: d.email || "",
-    notes: d.notes || "",
-    layers: isCustomPond()
-      ? selectedLayers
-      : preset
-        ? preset.layers
-        : "Not applicable",
-    pondWidth: isCustomPond() ? Number(pondWidth) : null,
-    pondHeight: isCustomPond() ? Number(pondHeight) : null,
-    pondArea: isCustomPond() ? Number(pondWidth) * Number(pondHeight) : null,
-    filtration: isCustomPond()
-      ? filtration
-      : "Included in package / not applicable",
+    location: details.location,
+    phone: details.phone,
+    email: details.email || "",
+    notes: details.notes || "",
+    layers: pondConfiguration.layers,
+    pondWidth: pondConfiguration.width,
+    pondHeight: pondConfiguration.height,
+    pondArea: pondConfiguration.area,
+    filtration: pondConfiguration.filtration,
     proof: {
-      reference,
-      fileName: file.name,
+      reference: payment.reference,
+      fileName: payment.file.name,
       target: "deposit",
       amount: p.deposit,
       dataUrl,
@@ -1252,10 +1404,10 @@ async function submitBooking() {
     true,
   );
   bookings.unshift(b);
-  upsertCustomer(d);
+  upsertCustomer(details);
   currentRef = ref;
   successKind = "service";
-  userName = d.name;
+  userName = details.name;
   bookingType = null;
   wizardStep = 1;
   selectedDate = "";
@@ -1265,10 +1417,33 @@ async function submitBooking() {
   submitting = false;
   setPage("success");
 }
+function pondConfigurationForBooking(predefined) {
+  if (!isCustomPond()) {
+    return {
+      layers: predefined?.layers || "Not applicable",
+      width: null,
+      height: null,
+      area: null,
+      filtration: "Included in package / not applicable",
+    };
+  }
+  return {
+    layers: selectedLayers,
+    width: Number(pondWidth),
+    height: Number(pondHeight),
+    area: Number(pondWidth) * Number(pondHeight),
+    filtration,
+  };
+}
 function serviceBooking() {
   if (!isCustomPond() && !selectedPondPackage())
     selectedPackage = activePackages()[0]?.name || "Custom Pond Design";
-  return `<div class="breadcrumbs">Home / Bookings / Book a Service</div><div class="admin-header"><div><h1 class="page-title">Book a Service</h1><p class="muted">Choose a package, pick your date, enter your details, review, then pay the 50% down payment.</p></div><button class="secondary small" onclick="changeBookingType()">Change booking type</button></div>${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel">${wizardStep === 1 ? packageStep() : wizardStep === 2 ? dateStep() : wizardStep === 3 ? detailsStep() : wizardStep === 4 ? reviewStep() : paymentStep()}</div>`;
+  let stepContent = paymentStep();
+  if (wizardStep === 1) stepContent = packageStep();
+  else if (wizardStep === 2) stepContent = dateStep();
+  else if (wizardStep === 3) stepContent = detailsStep();
+  else if (wizardStep === 4) stepContent = reviewStep();
+  return `<div class="breadcrumbs">Home / Bookings / Book a Service</div><div class="admin-header"><div><h1 class="page-title">Book a Service</h1><p class="muted">Choose a package, pick your date, enter your details, review, then pay the 50% down payment.</p></div><button class="secondary small" onclick="changeBookingType()">Change booking type</button></div>${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel">${stepContent}</div>`;
 }
 
 function success() {
@@ -1281,7 +1456,53 @@ function customerBookingCard(b) {
   const t = canPay(b),
     paidLbl =
       b.paidAmount > 0 ? "Outstanding balance" : "Balance after down payment";
-  return `<div class="card" style="margin:14px 0"><div class="admin-header"><div><div class="muted" style="font-size:12px">${b.ref} · Service date ${safe(b.date)}</div><h3 style="margin:7px 0">${safe(b.pkg)}</h3></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div></div>${tracker(b)}<div class="notice" style="margin:8px 0 12px">${safe(customerMsg(b))}</div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not specified")}</strong></div><div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${b.deliveryFee != null ? money(b.deliveryFee) : "Added by owner after the service"}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}${b.deliveryFee == null ? ' <span class="muted" style="font-weight:500">+ delivery</span>' : ""}</strong></div><div class="summary-line"><span>Verified amount paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>${paidLbl}</span><strong>${money(b.balance)}</strong></div>${b.proof ? `<div class="summary-line"><span>Submitted reference · file</span><strong>${safe(b.proof.reference)} · ${safe(b.proof.fileName)}</strong></div>` : ""}<div style="margin-top:15px;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary small" onclick="viewBooking('${b.ref}')">View details & updates</button>${t === "deposit" ? `<button class="primary small" onclick="openCustomerPayment('${b.ref}','deposit')">${b.payment === "Rejected" ? "Resubmit down payment receipt" : "Pay 50% down payment"}</button>` : ""}${t === "balance" ? `<button class="primary small" onclick="openCustomerPayment('${b.ref}','balance')">${b.payment === "Rejected" ? "Resubmit balance receipt" : "Pay outstanding balance · " + money(b.balance)}</button>` : ""}</div></div>`;
+  const deliveryFee =
+    b.deliveryFee != null
+      ? money(b.deliveryFee)
+      : "Added by owner after the service";
+  const deliveryNote =
+    b.deliveryFee == null
+      ? ' <span class="muted" style="font-weight:500">+ delivery</span>'
+      : "";
+  const proofMarkup = b.proof
+    ? `<div class="summary-line"><span>Submitted reference · file</span><strong>${safe(b.proof.reference)} · ${safe(b.proof.fileName)}</strong></div>`
+    : "";
+  let depositLabel = "Pay 50% down payment";
+  if (b.payment === "Rejected") {
+    depositLabel = "Resubmit down payment receipt";
+  }
+  let balanceLabel = "Pay outstanding balance · " + money(b.balance);
+  if (b.payment === "Rejected") {
+    balanceLabel = "Resubmit balance receipt";
+  }
+  const depositButton =
+    t === "deposit"
+      ? `<button class="primary small" onclick="openCustomerPayment('${b.ref}','deposit')">${depositLabel}</button>`
+      : "";
+  const balanceButton =
+    t === "balance"
+      ? `<button class="primary small" onclick="openCustomerPayment('${b.ref}','balance')">${balanceLabel}</button>`
+      : "";
+  return `<div class="card" style="margin:14px 0"><div class="admin-header"><div><div class="muted" style="font-size:12px">${b.ref} · Service date ${safe(b.date)}</div><h3 style="margin:7px 0">${safe(b.pkg)}</h3></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div></div>${tracker(b)}<div class="notice" style="margin:8px 0 12px">${safe(customerMsg(b))}</div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not specified")}</strong></div><div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}${deliveryNote}</strong></div><div class="summary-line"><span>Verified amount paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>${paidLbl}</span><strong>${money(b.balance)}</strong></div>${proofMarkup}<div style="margin-top:15px;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary small" onclick="viewBooking('${b.ref}')">View details & updates</button>${depositButton}${balanceButton}</div></div>`;
+}
+function freshUpdatesMarkup(fresh) {
+  if (!fresh.length) return "";
+  const items = fresh
+    .map(
+      (update) =>
+        `<li><strong>${safe(update.b.pkg)} (${update.b.ref}):</strong> ${safe(update.e.text)}<span class="when">${safe(update.e.at)}</span></li>`,
+    )
+    .join("");
+  const updateLabel = fresh.length === 1 ? "update" : "updates";
+  return `<div class="callout" style="margin-top:16px"><strong>🔔 ${fresh.length} new ${updateLabel}</strong><ul class="timeline" style="margin-top:12px">${items}</ul></div>`;
+}
+function visitCard(v) {
+  const typeLabel =
+    v.type === "Special" ? "Special date request" : "Regular schedule";
+  const reasonMarkup = v.reason
+    ? `<div class="summary-line"><span>Reason for special date</span><strong>${safe(v.reason)}</strong></div>`
+    : "";
+  return `<div class="card" style="margin:12px 0"><div class="admin-header"><div><div class="muted" style="font-size:12px">${v.ref} · ${typeLabel}</div><h3 style="margin:7px 0">${fmtDate(v.date, true)}</h3></div><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div>${reasonMarkup}</div>`;
 }
 function mybookings() {
   const mine = myBookingList(),
@@ -1294,25 +1515,58 @@ function mybookings() {
       .filter((e) => !e.seen)
       .forEach((e) => fresh.push({ b, e })),
   );
-  return `<div class="breadcrumbs">Customer Portal / My Bookings</div><div class="admin-header"><div><h1 class="page-title">My Bookings</h1><p class="muted">Follow each booking from submission to final payment. Booking status and payment status are tracked separately.</p></div><button class="primary" onclick="startBooking()">+ New Booking</button></div><div class="panel"><div class="pill-row"><span class="pill">Signed in as ${safe(userName)}</span></div></div>${fresh.length ? `<div class="callout" style="margin-top:16px"><strong>🔔 ${fresh.length} new update${fresh.length > 1 ? "s" : ""}</strong><ul class="timeline" style="margin-top:12px">${fresh.map((x) => `<li><strong>${safe(x.b.pkg)} (${x.b.ref}):</strong> ${safe(x.e.text)}<span class="when">${safe(x.e.at)}</span></li>`).join("")}</ul></div>` : ""}<h2 style="margin-top:28px">Service bookings</h2>${mine.map(customerBookingCard).join("") || '<div class="empty">No service bookings yet.</div>'}<h2 style="margin-top:28px">Farm visitations</h2>${myVisits.map((v) => `<div class="card" style="margin:12px 0"><div class="admin-header"><div><div class="muted" style="font-size:12px">${v.ref} · ${v.type === "Special" ? "Special date request" : "Regular schedule"}</div><h3 style="margin:7px 0">${fmtDate(v.date, true)}</h3></div><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div>${v.reason ? `<div class="summary-line"><span>Reason for special date</span><strong>${safe(v.reason)}</strong></div>` : ""}</div>`).join("") || '<div class="empty">No visitations yet.</div>'}<div class="notice" style="margin-top:16px">GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</div>`;
+  const bookingMarkup =
+    mine.map(customerBookingCard).join("") ||
+    '<div class="empty">No service bookings yet.</div>';
+  const visitMarkup =
+    myVisits.map(visitCard).join("") ||
+    '<div class="empty">No visitations yet.</div>';
+  return `<div class="breadcrumbs">Customer Portal / My Bookings</div><div class="admin-header"><div><h1 class="page-title">My Bookings</h1><p class="muted">Follow each booking from submission to final payment. Booking status and payment status are tracked separately.</p></div><button class="primary" onclick="startBooking()">+ New Booking</button></div><div class="panel"><div class="pill-row"><span class="pill">Signed in as ${safe(userName)}</span></div></div>${freshUpdatesMarkup(fresh)}<h2 style="margin-top:28px">Service bookings</h2>${bookingMarkup}<h2 style="margin-top:28px">Farm visitations</h2>${visitMarkup}<div class="notice" style="margin-top:16px">GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</div>`;
 }
 
 function viewBooking(ref, admin) {
   const b = bookings.find((x) => x.ref === ref);
   if (!b) return;
-  const pre = b.packageLayers
-    ? `${safe(b.packageLayers)} · ${safe(b.packageDimensions)}`
-    : b.pondWidth
-      ? `${b.pondWidth} m × ${b.pondHeight} m · ${safe(b.layers)}`
-      : safe(b.layers || "—");
-  const body = `${tracker(b)}${admin ? "" : `<div class="notice" style="margin:8px 0 12px">${safe(customerMsg(b))}</div>`}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div><h4 style="margin:16px 0 4px">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${b.email ? " · " + safe(b.email) : ""}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pre}${b.pondWidth ? " · Filtration: " + safe(b.filtration) : ""}</strong></div>${b.freebie ? `<div class="summary-line"><span>Freebie</span><strong>${safe(b.freebie)}</strong></div>` : ""}${b.notes ? `<div class="summary-line"><span>Notes</span><strong>${safe(b.notes)}</strong></div>` : ""}<h4 style="margin:18px 0 4px">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${b.deliveryFee != null ? money(b.deliveryFee) : "Not set yet"}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${(b.paymentHistory || []).length ? `<h4 style="margin:18px 0 4px">Verified payments</h4>${b.paymentHistory.map((p) => `<div class="summary-line"><span>${p.target === "deposit" ? "50% down payment" : "Remaining balance"} · ${safe(p.verifiedAt)}</span><strong>${money(p.amount)} · ${safe(p.reference)}</strong></div>`).join("")}` : ""}<h4 style="margin:18px 0 0">Status updates</h4>${timelineHtml(b, !admin)}`;
+  let pondDetails = safe(b.layers || "—");
+  if (b.packageLayers) {
+    pondDetails = `${safe(b.packageLayers)} · ${safe(b.packageDimensions)}`;
+  } else if (b.pondWidth) {
+    pondDetails = `${b.pondWidth} m × ${b.pondHeight} m · ${safe(b.layers)}`;
+  }
+  const noticeMarkup = admin
+    ? ""
+    : `<div class="notice" style="margin:8px 0 12px">${safe(customerMsg(b))}</div>`;
+  const contactEmail = b.email ? " · " + safe(b.email) : "";
+  const filtrationMarkup = b.pondWidth
+    ? " · Filtration: " + safe(b.filtration)
+    : "";
+  const freebieMarkup = b.freebie
+    ? `<div class="summary-line"><span>Freebie</span><strong>${safe(b.freebie)}</strong></div>`
+    : "";
+  const notesMarkup = b.notes
+    ? `<div class="summary-line"><span>Notes</span><strong>${safe(b.notes)}</strong></div>`
+    : "";
+  const deliveryFee =
+    b.deliveryFee != null ? money(b.deliveryFee) : "Not set yet";
+  const payments = (b.paymentHistory || [])
+    .map((payment) => {
+      const targetLabel =
+        payment.target === "deposit" ? "50% down payment" : "Remaining balance";
+      return `<div class="summary-line"><span>${targetLabel} · ${safe(payment.verifiedAt)}</span><strong>${money(payment.amount)} · ${safe(payment.reference)}</strong></div>`;
+    })
+    .join("");
+  const paymentHistoryMarkup = payments
+    ? `<h4 style="margin:18px 0 4px">Verified payments</h4>${payments}`
+    : "";
+  const body = `${tracker(b)}${noticeMarkup}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div><h4 style="margin:16px 0 4px">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${contactEmail}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pondDetails}${filtrationMarkup}</strong></div>${freebieMarkup}${notesMarkup}<h4 style="margin:18px 0 4px">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${paymentHistoryMarkup}<h4 style="margin:18px 0 0">Status updates</h4>${timelineHtml(b, !admin)}`;
+  const actions = admin
+    ? `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openBookingForm('${b.ref}')">Edit booking</button>`
+    : `<button class="secondary" onclick="closeModal()">Close</button>`;
   openModal(
     safe(b.pkg),
     `${b.ref}`,
     body,
-    admin
-      ? `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openBookingForm('${b.ref}')">Edit booking</button>`
-      : `<button class="secondary" onclick="closeModal()">Close</button>`,
+    actions,
     true,
   );
   if (!admin) {
@@ -1341,7 +1595,15 @@ function customerPaymentPage() {
   if (!b)
     return `<div class="panel"><h2>Payment details unavailable</h2><button class="primary" onclick="setPage('mybookings')">Return to My Bookings</button></div>`;
   const amount = target === "balance" ? b.balance : b.deposit;
-  return `<div class="breadcrumbs">Customer Portal / My Bookings / GCash Payment</div><div class="panel" style="max-width:900px;margin:0 auto"><div class="admin-header"><div><h1 class="page-title">${target === "balance" ? "Pay Outstanding Balance" : "Pay 50% Down Payment"}</h1><p class="muted">Booking ${safe(b.ref)} · ${safe(b.pkg)}</p></div><span class="status green">${target === "balance" ? "Balance payment" : "Down payment"}</span></div><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner’s GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner’s GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner’s GCash number]</strong></div>${target === "balance" ? `<div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${money(b.deliveryFee || 0)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount)}</strong></div>` : `<div class="summary-line"><span>Total service price</span><strong>${money(b.total)}</strong></div>`}<div class="summary-line"><span>Amount to pay now</span><strong style="font-size:23px;color:var(--green)">${money(amount)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.</div></div></div><div class="panel" style="margin-top:20px"><h3 style="margin-top:0">Upload payment receipt</h3><p class="muted">The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/*,.pdf" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: image or PDF, up to 8 MB.</p></div><div class="wizard-actions"><button class="secondary" onclick="setPage('mybookings')">Cancel</button><button class="primary" onclick="submitPaymentProof('${b.ref}','${target}')">I’ve Paid — Submit Receipt</button></div></div></div>`;
+  const isBalancePayment = target === "balance";
+  const pageTitle = isBalancePayment
+    ? "Pay Outstanding Balance"
+    : "Pay 50% Down Payment";
+  const paymentType = isBalancePayment ? "Balance payment" : "Down payment";
+  const paymentDetails = isBalancePayment
+    ? `<div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${money(b.deliveryFee || 0)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount)}</strong></div>`
+    : `<div class="summary-line"><span>Total service price</span><strong>${money(b.total)}</strong></div>`;
+  return `<div class="breadcrumbs">Customer Portal / My Bookings / GCash Payment</div><div class="panel" style="max-width:900px;margin:0 auto"><div class="admin-header"><div><h1 class="page-title">${pageTitle}</h1><p class="muted">Booking ${safe(b.ref)} · ${safe(b.pkg)}</p></div><span class="status green">${paymentType}</span></div><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner’s GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner’s GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner’s GCash number]</strong></div>${paymentDetails}<div class="summary-line"><span>Amount to pay now</span><strong style="font-size:23px;color:var(--green)">${money(amount)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.</div></div></div><div class="panel" style="margin-top:20px"><h3 style="margin-top:0">Upload payment receipt</h3><p class="muted">The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/*,.pdf" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: image or PDF, up to 8 MB.</p></div><div class="wizard-actions"><button class="secondary" onclick="setPage('mybookings')">Cancel</button><button class="primary" onclick="submitPaymentProof('${b.ref}','${target}')">I’ve Paid — Submit Receipt</button></div></div></div>`;
 }
 async function submitPaymentProof(ref, target) {
   const b = bookings.find((x) => x.ref === ref);
@@ -1372,7 +1634,7 @@ async function submitPaymentProof(ref, target) {
   let dataUrl;
   try {
     dataUrl = await readReceiptAsDataURL(file);
-  } catch (e) {
+  } catch {
     alert("The receipt file could not be read. Please try again.");
     return;
   }
@@ -1441,7 +1703,14 @@ function admin() {
     faqs: adminFaqs,
   };
   const cur = tabs.find((t) => t[0] === adminTab) || ["", "Dashboard"];
-  return `<div class="breadcrumbs">Admin Portal / ${cur[1]}</div><div class="admin-header"><div><h1 class="page-title">Admin Dashboard</h1><p class="muted">Manage bookings, payments, visits, the calendar, packages, customers and assistant answers.</p></div></div><div class="layout" style="margin-top:20px"><aside class="sidebar">${tabs.map((t) => (t[0] === "g" ? `<div class="group">${t[1]}</div>` : `<button class="${adminTab === t[0] ? "active" : ""}" onclick="adminTab='${t[0]}';render()">${t[1]}${t[2] ? `<span class="count">${t[2]}</span>` : ""}</button>`)).join("")}</aside><section style="min-width:0">${views[adminTab]()}</section></div>`;
+  const tabMarkup = tabs.map(adminTabMarkup).join("");
+  return `<div class="breadcrumbs">Admin Portal / ${cur[1]}</div><div class="admin-header"><div><h1 class="page-title">Admin Dashboard</h1><p class="muted">Manage bookings, payments, visits, the calendar, packages, customers and assistant answers.</p></div></div><div class="layout" style="margin-top:20px"><aside class="sidebar">${tabMarkup}</aside><section style="min-width:0">${views[adminTab]()}</section></div>`;
+}
+function adminTabMarkup(tab) {
+  if (tab[0] === "g") return `<div class="group">${tab[1]}</div>`;
+  const activeClass = adminTab === tab[0] ? "active" : "";
+  const countMarkup = tab[2] ? `<span class="count">${tab[2]}</span>` : "";
+  return `<button class="${activeClass}" onclick="adminTab='${tab[0]}';render()">${tab[1]}${countMarkup}</button>`;
 }
 
 function adminOverview() {
@@ -1475,14 +1744,40 @@ function adminOverview() {
       l: `${v.ref} · ${v.name} · ${v.visitors} visitor${v.visitors > 1 ? "s" : ""}`,
     })),
   ].sort((a, b) => a.d.localeCompare(b.d));
-  return `<div class="stat-grid"><div class="stat"><div class="label">Needs your action</div><div class="value">${todo.length + spec.length}</div></div><div class="stat" role="button" style="cursor:pointer" onclick="adminTab='payments';render()"><div class="label">Payments to verify</div><div class="value">${c.payments}</div></div><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(received)}</div></div></div><div class="stat-grid" style="margin-top:12px"><div class="stat"><div class="label">Active package bookings</div><div class="value">${live.length}</div></div><div class="stat"><div class="label">Upcoming visits</div><div class="value">${upcomingV.length}</div></div><div class="stat"><div class="label">Still to collect</div><div class="value" style="font-size:22px">${money(toCollect)}</div></div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Action needed</h3><span class="muted" style="font-size:12px">${todo.length + spec.length} item${todo.length + spec.length === 1 ? "" : "s"}</span></div>${todo
-    .map((b) => {
-      const na = nextAction(b);
-      return `<div class="todo"><div><strong>${b.ref} · ${safe(b.name)}</strong><div class="muted">${safe(b.pkg)} · ${safe(b.date)} · ${safe(b.booking)} / ${safe(b.payment)}</div></div><button class="primary small" onclick="${na.fn}">${na.label}</button></div>`;
+  const actionCount = todo.length + spec.length;
+  const actionMarkup = adminActionMarkup(todo, spec);
+  const comingMarkup = comingUpMarkup(coming);
+  const actionLabel = actionCount === 1 ? "item" : "items";
+  return `<div class="stat-grid"><div class="stat"><div class="label">Needs your action</div><div class="value">${actionCount}</div></div><div class="stat" role="button" style="cursor:pointer" onclick="adminTab='payments';render()"><div class="label">Payments to verify</div><div class="value">${c.payments}</div></div><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(received)}</div></div></div><div class="stat-grid" style="margin-top:12px"><div class="stat"><div class="label">Active package bookings</div><div class="value">${live.length}</div></div><div class="stat"><div class="label">Upcoming visits</div><div class="value">${upcomingV.length}</div></div><div class="stat"><div class="label">Still to collect</div><div class="value" style="font-size:22px">${money(toCollect)}</div></div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Action needed</h3><span class="muted" style="font-size:12px">${actionCount} ${actionLabel}</span></div>${actionMarkup}</div><div class="panel"><h3 style="margin-top:0">Coming up</h3>${comingMarkup}</div><div class="notice" style="margin-top:15px"><strong>How a booking flows:</strong> customer pays the 50% down payment → you verify it in GCash → the booking is <strong>Confirmed</strong> automatically and the customer sees an update → after the service you mark it <strong>Completed</strong> and add the delivery fee → the customer pays the outstanding balance → you verify it → <strong>Paid</strong>.</div>`;
+}
+function adminActionMarkup(todo, specialVisits) {
+  const bookingItems = todo
+    .map((booking) => {
+      const action = nextAction(booking);
+      return `<div class="todo"><div><strong>${booking.ref} · ${safe(booking.name)}</strong><div class="muted">${safe(booking.pkg)} · ${safe(booking.date)} · ${safe(booking.booking)} / ${safe(booking.payment)}</div></div><button class="primary small" onclick="${action.fn}">${action.label}</button></div>`;
     })
-    .join(
-      "",
-    )}${spec.map((v) => `<div class="todo"><div><strong>${v.ref} · ${safe(v.name)}</strong><div class="muted">Special-date visit request · ${fmtDate(v.date)}</div></div><button class="primary small" onclick="adminTab='special';render()">Review request</button></div>`).join("")}${todo.length + spec.length ? "" : '<div class="empty">🎉 Nothing needs your attention right now.</div>'}</div><div class="panel"><h3 style="margin-top:0">Coming up</h3>${coming.length ? coming.map((x) => `<div class="summary-line"><span><span class="status gray">${x.t}</span> &nbsp;${safe(x.l)}</span><strong>${fmtDate(x.d)}</strong></div>`).join("") : '<p class="muted">No confirmed services or visits scheduled.</p>'}</div><div class="notice" style="margin-top:15px"><strong>How a booking flows:</strong> customer pays the 50% down payment → you verify it in GCash → the booking is <strong>Confirmed</strong> automatically and the customer sees an update → after the service you mark it <strong>Completed</strong> and add the delivery fee → the customer pays the outstanding balance → you verify it → <strong>Paid</strong>.</div>`;
+    .join("");
+  const visitItems = specialVisits
+    .map(
+      (visit) =>
+        `<div class="todo"><div><strong>${visit.ref} · ${safe(visit.name)}</strong><div class="muted">Special-date visit request · ${fmtDate(visit.date)}</div></div><button class="primary small" onclick="adminTab='special';render()">Review request</button></div>`,
+    )
+    .join("");
+  if (!bookingItems && !visitItems) {
+    return '<div class="empty">🎉 Nothing needs your attention right now.</div>';
+  }
+  return bookingItems + visitItems;
+}
+function comingUpMarkup(items) {
+  if (!items.length) {
+    return '<p class="muted">No confirmed services or visits scheduled.</p>';
+  }
+  return items
+    .map(
+      (item) =>
+        `<div class="summary-line"><span><span class="status gray">${item.t}</span> &nbsp;${safe(item.l)}</span><strong>${fmtDate(item.d)}</strong></div>`,
+    )
+    .join("");
 }
 
 /* ----- bookings ----- */
@@ -1525,7 +1820,26 @@ function bookingRow(b) {
   const na = nextAction(b),
     closed = ["Rejected", "Cancelled"].includes(b.booking),
     left = Math.max(0, Number(b.total || 0) - Number(b.paidAmount || 0));
-  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${b.pondWidth ? ` · ${b.pondWidth}×${b.pondHeight} m · Filtration ${safe(b.filtration)}` : ""}</span>${b.freebie ? `<br><span class="muted">🎁 ${safe(b.freebie)}</span>` : ""}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="status ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="status ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${b.deliveryFee == null ? "not set" : money(b.deliveryFee)}</span></td><td>${na.fn ? `<button class="${na.cls} small" onclick="${na.fn}">${na.label}</button>` : na.wait ? `<span class="muted">⏳ ${na.wait}</span>` : `<span class="muted">✓ ${na.label || "Closed"}</span>`}</td><td><div class="actions"><button class="secondary small" onclick="viewBooking('${b.ref}',true)">View</button><button class="secondary small" onclick="openBookingForm('${b.ref}')">Edit</button>${closed ? "" : `<button class="danger small" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`}<button class="danger small" onclick="deleteBooking('${b.ref}')">Delete</button></div></td></tr>`;
+  let actionMarkup;
+  if (na.fn) {
+    actionMarkup = `<button class="${na.cls} small" onclick="${na.fn}">${na.label}</button>`;
+  } else if (na.wait) {
+    actionMarkup = `<span class="muted">⏳ ${na.wait}</span>`;
+  } else {
+    actionMarkup = `<span class="muted">✓ ${na.label || "Closed"}</span>`;
+  }
+  const pondMarkup = b.pondWidth
+    ? ` · ${b.pondWidth}×${b.pondHeight} m · Filtration ${safe(b.filtration)}`
+    : "";
+  const freebieMarkup = b.freebie
+    ? `<br><span class="muted">🎁 ${safe(b.freebie)}</span>`
+    : "";
+  const deliveryLabel =
+    b.deliveryFee == null ? "not set" : money(b.deliveryFee);
+  const cancelMarkup = closed
+    ? ""
+    : `<button class="danger small" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`;
+  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="status ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="status ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${deliveryLabel}</span></td><td>${actionMarkup}</td><td><div class="actions"><button class="secondary small" onclick="viewBooking('${b.ref}',true)">View</button><button class="secondary small" onclick="openBookingForm('${b.ref}')">Edit</button>${cancelMarkup}<button class="danger small" onclick="deleteBooking('${b.ref}')">Delete</button></div></td></tr>`;
 }
 function bookingTableHtml() {
   const list = bookings.filter(bookingMatches);
@@ -1548,7 +1862,12 @@ function adminBookings() {
     ["completed", "Completed"],
     ["closed", "Cancelled / Rejected"],
   ];
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Pending → Confirmed (when the down payment is verified) → Completed (service done) → balance paid</span></div><button class="primary" onclick="openBookingForm()">＋ New booking</button></div><div class="toolbar"><input type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${F.map((f) => `<button class="${bFilter === f[0] ? "active" : ""}" onclick="setBFilter('${f[0]}')">${f[1]}</button>`).join("")}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
+  const filters = F.map(bookingFilterButton).join("");
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Pending → Confirmed (when the down payment is verified) → Completed (service done) → balance paid</span></div><button class="primary" onclick="openBookingForm()">＋ New booking</button></div><div class="toolbar"><input type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
+}
+function bookingFilterButton(filter) {
+  const activeClass = bFilter === filter[0] ? "active" : "";
+  return `<button class="${activeClass}" onclick="setBFilter('${filter[0]}')">${filter[1]}</button>`;
 }
 function bfToggleCustom() {
   const s = document.getElementById("m_pkg"),
@@ -1567,7 +1886,7 @@ function openBookingForm(ref) {
   const opts = [...names, "Custom Pond Design"],
     cur = b ? b.pkg : opts[0],
     dis = locked ? "disabled" : "";
-  const body = `<div class="field-grid">${fld("m_name", "Customer name", b?.name, "text", 'list="custList"')}${fld("m_phone", "Contact number", b?.phone)}${fld("m_email", "Email (optional)", b?.email, "email")}${fld("m_location", "Service location", b?.location)}${fld("m_date", "Service date", b?.isoDate || "", "date")}${sel("m_pkg", "Package / service", opts, cur, `onchange="bfToggleCustom()" ${dis}`)}</div><datalist id="custList">${customers.map((c) => `<option value="${safe(c.name)}">`).join("")}</datalist><div id="m_customBox" class="${cur === "Custom Pond Design" ? "" : "hidden"}"><div class="field-grid">${sel("m_layers", "Layers", ["1 layer", "2 layers", "3 layers"], b?.layers || "2 layers", dis)}${sel("m_filt", "Filtration", ["Yes", "No"], b?.filtration === "No" ? "No" : "Yes", dis)}${fld("m_w", "Width (m)", b?.pondWidth || 2, "number", 'min="1" max="10" step="0.5" ' + dis)}${fld("m_h", "Length (m)", b?.pondHeight || 3, "number", 'min="1" max="10" step="0.5" ' + dis)}</div></div>${locked ? '<div class="notice">Package and pricing are locked because a payment has been verified or is awaiting verification.</div>' : ""}<div class="field"><label for="m_notes">Notes</label><textarea id="m_notes">${safe(b?.notes || "")}</textarea></div>${b ? sel("m_status", "Booking status (owner override)", ["Pending", "Confirmed", "Completed", "Rejected", "Cancelled"], b.booking) + '<p class="muted" style="font-size:12px;margin:0">Normally the status updates by itself: a verified down payment confirms the booking, and “Mark service completed” completes it.</p>' : '<label class="check-row"><input type="checkbox" id="m_deposit"><span>Walk-in: 50% down payment already received and checked (booking becomes Confirmed)</span></label>'}`;
+  const body = bookingFormBody(b, opts, cur, dis, locked);
   openModal(
     b ? "Edit booking" : "New booking",
     b ? b.ref : "Create a booking for a walk-in or phone customer",
@@ -1575,6 +1894,63 @@ function openBookingForm(ref) {
     `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveBooking('${b ? b.ref : ""}')">${b ? "Save changes" : "Create booking"}</button>`,
     true,
   );
+}
+function bookingFormBody(b, opts, currentPackage, disabled, locked) {
+  const basicFields =
+    fld("m_name", "Customer name", b?.name, "text", 'list="custList"') +
+    fld("m_phone", "Contact number", b?.phone) +
+    fld("m_email", "Email (optional)", b?.email, "email") +
+    fld("m_location", "Service location", b?.location) +
+    fld("m_date", "Service date", b?.isoDate || "", "date") +
+    sel(
+      "m_pkg",
+      "Package / service",
+      opts,
+      currentPackage,
+      `onchange="bfToggleCustom()" ${disabled}`,
+    );
+  const customerOptions = customers
+    .map((customer) => `<option value="${safe(customer.name)}">`)
+    .join("");
+  const customClass =
+    currentPackage === "Custom Pond Design" ? "" : "hidden";
+  const filtration = b?.filtration === "No" ? "No" : "Yes";
+  const customFields =
+    sel(
+      "m_layers",
+      "Layers",
+      ["1 layer", "2 layers", "3 layers"],
+      b?.layers || "2 layers",
+      disabled,
+    ) +
+    sel("m_filt", "Filtration", ["Yes", "No"], filtration, disabled) +
+    fld(
+      "m_w",
+      "Width (m)",
+      b?.pondWidth || 2,
+      "number",
+      'min="1" max="10" step="0.5" ' + disabled,
+    ) +
+    fld(
+      "m_h",
+      "Length (m)",
+      b?.pondHeight || 3,
+      "number",
+      'min="1" max="10" step="0.5" ' + disabled,
+    );
+  const lockMarkup = locked
+    ? '<div class="notice">Package and pricing are locked because a payment has been verified or is awaiting verification.</div>'
+    : "";
+  const statusMarkup = b
+    ? sel(
+        "m_status",
+        "Booking status (owner override)",
+        ["Pending", "Confirmed", "Completed", "Rejected", "Cancelled"],
+        b.booking,
+      ) +
+        '<p class="muted" style="font-size:12px;margin:0">Normally the status updates by itself: a verified down payment confirms the booking, and “Mark service completed” completes it.</p>'
+    : '<label class="check-row"><input type="checkbox" id="m_deposit"><span>Walk-in: 50% down payment already received and checked (booking becomes Confirmed)</span></label>';
+  return `<div class="field-grid">${basicFields}</div><datalist id="custList">${customerOptions}</datalist><div id="m_customBox" class="${customClass}"><div class="field-grid">${customFields}</div></div>${lockMarkup}<div class="field"><label for="m_notes">Notes</label><textarea id="m_notes">${safe(b?.notes || "")}</textarea></div>${statusMarkup}`;
 }
 function saveBooking(ref) {
   const b = ref ? bookings.find((x) => x.ref === ref) : null;
@@ -1597,6 +1973,7 @@ function saveBooking(ref) {
     filt = document.getElementById("m_filt").value,
     w = Number(V("m_w")) || 1,
     h = Number(V("m_h")) || 1;
+  const packageLayers = pre ? pre.layers : "Not applicable";
   const apply = (o) => {
     if (locked) return;
     o.pkg = pkgName;
@@ -1606,7 +1983,7 @@ function saveBooking(ref) {
     o.servicePrice = pre ? pre.price : 0;
     o.customizationFee = custom ? customPrice(layers, w, h, filt) : 0;
     o.deposit = r2((o.servicePrice + o.customizationFee) / 2);
-    o.layers = custom ? layers : pre ? pre.layers : "Not applicable";
+    o.layers = custom ? layers : packageLayers;
     o.pondWidth = custom ? w : null;
     o.pondHeight = custom ? h : null;
     o.pondArea = custom ? w * h : null;
@@ -1816,46 +2193,76 @@ function adminPayments() {
       (b) => b.payment === "Pending Verification" && b.proof,
     ),
     owed = bookings.filter((b) => canPay(b));
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Needs verification</h3><p class="muted" style="margin:6px 0 0">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="status ${waiting.length ? "" : "green"}">${waiting.length} waiting</span></div><div class="callout" style="margin-top:14px"><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</div>${waiting.length ? waiting.map((b) => `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(b.proof.submittedAt || "")}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${b.proof.target === "balance" ? "Balance payment" : "50% down payment"}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(b.proof.reference)}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(b.proof.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(b.proof.target === "balance" ? b.balance : b.deposit)}</strong></div><div class="summary-line"><span>If verified</span><strong>${b.proof.target === "balance" ? "Payment becomes Paid" : "Booking becomes Confirmed"}</strong></div><div style="margin-top:14px"><button class="primary" onclick="reviewPayment('${b.ref}')">Review & verify</button></div></div>`).join("") : '<div class="empty"><h3>No payments awaiting verification</h3><p>New receipts appear here with their reference, amount and verification actions.</p></div>'}</div><div class="panel"><div class="admin-header"><h3 style="margin:0">Waiting on the customer</h3><span class="muted" style="font-size:12px">${owed.length}</span></div>${owed.length ? `<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment due</th><th>Amount</th><th>Status</th></tr></thead><tbody>${owed.map((b) => `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${canPay(b) === "balance" ? "Outstanding balance" : "50% down payment"}</td><td>${money(canPay(b) === "balance" ? b.balance : b.deposit)}</td><td><span class="status ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">No customer payments are currently due.</p>'}</div>`;
+  const waitingMarkup = waiting.length
+    ? waiting.map(pendingPaymentCard).join("")
+    : '<div class="empty"><h3>No payments awaiting verification</h3><p>New receipts appear here with their reference, amount and verification actions.</p></div>';
+  const owedMarkup = owed.length
+    ? owedPaymentTable(owed)
+    : '<p class="muted">No customer payments are currently due.</p>';
+  const waitingClass = waiting.length ? "" : "green";
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Needs verification</h3><p class="muted" style="margin:6px 0 0">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="status ${waitingClass}">${waiting.length} waiting</span></div><div class="callout" style="margin-top:14px"><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</div>${waitingMarkup}</div><div class="panel"><div class="admin-header"><h3 style="margin:0">Waiting on the customer</h3><span class="muted" style="font-size:12px">${owed.length}</span></div>${owedMarkup}</div>`;
+}
+function pendingPaymentCard(b) {
+  const isBalance = b.proof.target === "balance";
+  const paymentType = isBalance ? "Balance payment" : "50% down payment";
+  const requiredAmount = isBalance ? b.balance : b.deposit;
+  const result = isBalance
+    ? "Payment becomes Paid"
+    : "Booking becomes Confirmed";
+  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(b.proof.submittedAt || "")}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(b.proof.reference)}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(b.proof.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(requiredAmount)}</strong></div><div class="summary-line"><span>If verified</span><strong>${result}</strong></div><div style="margin-top:14px"><button class="primary" onclick="reviewPayment('${b.ref}')">Review & verify</button></div></div>`;
+}
+function owedPaymentTable(owed) {
+  const rows = owed.map(owedPaymentRow).join("");
+  return `<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment due</th><th>Amount</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function owedPaymentRow(b) {
+  const isBalance = canPay(b) === "balance";
+  const paymentDue = isBalance ? "Outstanding balance" : "50% down payment";
+  const amount = isBalance ? b.balance : b.deposit;
+  return `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${paymentDue}</td><td>${money(amount)}</td><td><span class="status ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
 }
 function reviewPayment(ref) {
   const b = bookings.find((x) => x.ref === ref);
-  if (!b || b.payment !== "Pending Verification" || !b.proof) {
+  if (!b?.proof || b.payment !== "Pending Verification") {
     toast("No receipt is waiting for this booking.");
     return;
   }
   const p = b.proof,
     exp = p.target === "balance" ? b.balance : b.deposit,
     ok = Math.abs(Number(p.amount) - Number(exp)) <= 0.01;
+  const isBalance = p.target === "balance";
+  const paymentType = isBalance ? "Outstanding balance" : "50% down payment";
+  const result = isBalance
+    ? "Payment status becomes Paid"
+    : "Booking becomes Confirmed and the customer is notified";
+  const mismatchMarkup = ok
+    ? ""
+    : '<div class="notice" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:10px">The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</div>';
+  const receiptAction = p.dataUrl
+    ? `<button class="secondary" onclick="viewPaymentProof('${b.ref}')">View receipt</button>`
+    : "";
+  const body = paymentReviewBody(p, exp, paymentType, result, mismatchMarkup);
+  const actions = `<button class="secondary" onclick="closeModal()">Close</button>${receiptAction}<button class="danger" onclick="verifyPayment('${b.ref}',false)">Reject proof</button><button class="primary" onclick="verifyPayment('${b.ref}',true)">Verify payment</button>`;
   openModal(
     "Verify GCash payment",
     `${b.ref} · ${safe(b.name)} · ${safe(b.pkg)}`,
-    `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${p.target === "balance" ? "Outstanding balance" : "50% down payment"}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.reference)}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(exp)}</strong></div>${ok ? "" : '<div class="notice" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:10px">The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</div>'}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.fileName)}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${p.target === "balance" ? "Payment status becomes Paid" : "Booking becomes Confirmed and the customer is notified"}</strong></div><label class="check-row"><input type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label><div class="field" style="margin-top:14px"><label for="m_reason">Reason (shown to the customer if you reject)</label><input id="m_reason" placeholder="e.g. Reference number not found in GCash"></div>`,
-    `<button class="secondary" onclick="closeModal()">Close</button>${p.dataUrl ? `<button class="secondary" onclick="viewPaymentProof('${b.ref}')">View receipt</button>` : ""}<button class="danger" onclick="verifyPayment('${b.ref}',false)">Reject proof</button><button class="primary" onclick="verifyPayment('${b.ref}',true)">Verify payment</button>`,
+    body,
+    actions,
   );
+}
+function paymentReviewBody(proof, expectedAmount, paymentType, result, mismatchMarkup) {
+  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(proof.reference)}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(proof.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(expectedAmount)}</strong></div>${mismatchMarkup}<div class="summary-line"><span>Receipt file</span><strong>${safe(proof.fileName)}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${result}</strong></div><label class="check-row"><input type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label><div class="field" style="margin-top:14px"><label for="m_reason">Reason (shown to the customer if you reject)</label><input id="m_reason" placeholder="e.g. Reference number not found in GCash"></div>`;
 }
 function verifyPayment(ref, valid) {
   try {
     const b = bookings.find((x) => x.ref === ref);
-    if (!b || b.payment !== "Pending Verification" || !b.proof) {
+    if (!b?.proof || b.payment !== "Pending Verification") {
       alert("This booking has no receipt awaiting verification.");
       return false;
     }
-    const target = b.pendingPaymentTarget || b.proof.target,
-      label = target === "balance" ? "outstanding balance" : "50% down payment";
+    const target = b.pendingPaymentTarget || b.proof.target;
     if (!valid) {
-      const reason = V("m_reason");
-      b.payment = "Rejected";
-      b.lastRejectedProof = { ...b.proof };
-      b.proof = null;
-      b.pendingPaymentTarget = null;
-      addUpdate(
-        b,
-        `Your ${label} receipt could not be verified${reason ? ": " + reason : ""}. Please check the details and resubmit.`,
-      );
-      closeModal();
-      toast("Proof rejected — customer notified. No money recorded.");
-      render();
+      rejectPaymentProof(b, target);
       return false;
     }
     if (!document.getElementById("m_checked")?.checked) {
@@ -1864,70 +2271,87 @@ function verifyPayment(ref, valid) {
       );
       return false;
     }
-    const amount = Number(b.proof.amount),
-      expected = Number(target === "balance" ? b.balance : b.deposit);
-    if (
-      !Number.isFinite(amount) ||
-      !Number.isFinite(expected) ||
-      expected <= 0
-    ) {
-      alert("The required payment amount is missing or invalid.");
-      return false;
-    }
-    if (Math.abs(amount - expected) > 0.01) {
-      alert(
-        "The submitted amount (" +
-          money(amount) +
-          ") does not match the required amount (" +
-          money(expected) +
-          "). Nothing was recorded.",
-      );
-      return false;
-    }
-    b.paidAmount = Math.min(
-      Number(b.paidAmount || 0) + amount,
-      Number(b.total || 0),
-    );
-    recalc(b);
-    b.payment = b.balance <= 0 ? "Paid" : "Partially Paid";
-    b.paymentHistory = b.paymentHistory || [];
-    b.paymentHistory.push({
-      target,
-      amount,
-      reference: b.proof.reference,
-      fileName: b.proof.fileName,
-      verifiedAt: ts(),
-      status: "Verified",
-    });
-    b.proof = null;
-    b.pendingPaymentTarget = null;
-    if (target === "deposit") {
-      if (b.booking === "Pending") {
-        b.booking = "Confirmed";
-      }
-      addUpdate(
-        b,
-        "Your 50% down payment was verified. Your booking is now confirmed and your date is reserved.",
-      );
-      toast("Down payment verified — booking confirmed and customer notified.");
-    } else {
-      addUpdate(
-        b,
-        "Your outstanding balance was verified. Your booking is fully paid. Thank you!",
-      );
-      toast("Balance verified — booking fully paid, customer notified.");
-    }
-    closeModal();
-    render();
+    const amount = validatedPaymentAmount(b, target);
+    if (amount === null) return false;
+    recordVerifiedPayment(b, target, amount);
     return true;
   } catch (err) {
     console.error(err);
     alert(
       "The payment could not be verified: " +
-        (err && err.message ? err.message : "Unknown error"),
+        (err?.message || "Unknown error"),
     );
     return false;
   }
+}
+function rejectPaymentProof(b, target) {
+  const reason = V("m_reason"),
+    label = target === "balance" ? "outstanding balance" : "50% down payment";
+  b.payment = "Rejected";
+  b.lastRejectedProof = { ...b.proof };
+  b.proof = null;
+  b.pendingPaymentTarget = null;
+  addUpdate(
+    b,
+    `Your ${label} receipt could not be verified${reason ? ": " + reason : ""}. Please check the details and resubmit.`,
+  );
+  closeModal();
+  toast("Proof rejected — customer notified. No money recorded.");
+  render();
+}
+function validatedPaymentAmount(b, target) {
+  const amount = Number(b.proof.amount),
+    expected = Number(target === "balance" ? b.balance : b.deposit);
+  if (!Number.isFinite(amount) || !Number.isFinite(expected) || expected <= 0) {
+    alert("The required payment amount is missing or invalid.");
+    return null;
+  }
+  if (Math.abs(amount - expected) > 0.01) {
+    alert(
+      "The submitted amount (" +
+        money(amount) +
+        ") does not match the required amount (" +
+        money(expected) +
+        "). Nothing was recorded.",
+    );
+    return null;
+  }
+  return amount;
+}
+function recordVerifiedPayment(b, target, amount) {
+  b.paidAmount = Math.min(
+    Number(b.paidAmount || 0) + amount,
+    Number(b.total || 0),
+  );
+  recalc(b);
+  b.payment = b.balance <= 0 ? "Paid" : "Partially Paid";
+  b.paymentHistory = b.paymentHistory || [];
+  b.paymentHistory.push({
+    target,
+    amount,
+    reference: b.proof.reference,
+    fileName: b.proof.fileName,
+    verifiedAt: ts(),
+    status: "Verified",
+  });
+  b.proof = null;
+  b.pendingPaymentTarget = null;
+  if (target === "deposit") {
+    if (b.booking === "Pending") b.booking = "Confirmed";
+    addUpdate(
+      b,
+      "Your 50% down payment was verified. Your booking is now confirmed and your date is reserved.",
+    );
+    toast("Down payment verified — booking confirmed and customer notified.");
+  } else {
+    addUpdate(
+      b,
+      "Your outstanding balance was verified. Your booking is fully paid. Thank you!",
+    );
+    toast("Balance verified — booking fully paid, customer notified.");
+  }
+  closeModal();
+  render();
 }
 window.verifyPayment = verifyPayment;
 
@@ -1950,34 +2374,83 @@ function adminVisits() {
       ["completed", "Completed"],
       ["cancelled", "Cancelled"],
     ],
-    list = base
-      .filter((v) =>
-        vFilter === "upcoming"
-          ? ["Booked", "Approved"].includes(v.status)
-          : vFilter === "completed"
-            ? v.status === "Completed"
-            : vFilter === "cancelled"
-              ? v.status === "Cancelled"
-              : true,
-      )
-      .sort((a, b) => a.date.localeCompare(b.date));
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Visitation Bookings</h3><p class="muted" style="margin:6px 0 0">Farm visits for 1–5 visitors on weekends, including approved special dates.</p></div><button class="primary" onclick="openVisitForm()">＋ Add visit</button></div><div class="toolbar"><div class="filters">${F.map((f) => `<button class="${vFilter === f[0] ? "active" : ""}" onclick="setVFilter('${f[0]}')">${f[1]}</button>`).join("")}</div></div><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Visitor</th><th>Farm</th><th>Visit date</th><th>Visitors</th><th>Type</th><th>Status</th><th>Manage</th></tr></thead><tbody>${list.length ? list.map((v) => `<tr><td><strong>${v.ref}</strong><br><span class="muted">Submitted ${safe(v.submittedAt)}</span></td><td>${safe(v.name)}<br><span class="muted">${safe(v.email)}</span><br><span class="muted">${safe(v.phone)}</span></td><td>${safe(v.farm || "—")}</td><td>${fmtDate(v.date, true)}</td><td>${v.visitors}</td><td>${v.type === "Special" ? "Special date" : "Regular"}</td><td><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></td><td><div class="actions">${["Booked", "Approved"].includes(v.status) ? `<button class="primary small" onclick="updateVisit('${v.ref}','Completed')">Mark completed</button><button class="danger small" onclick="updateVisit('${v.ref}','Cancelled')">Cancel</button>` : ""}<button class="secondary small" onclick="openVisitForm('${v.ref}')">Edit</button><button class="danger small" onclick="deleteVisit('${v.ref}')">Delete</button></div></td></tr>`).join("") : '<tr><td colspan="8" class="muted">No visitation bookings match.</td></tr>'}</tbody></table></div></div>`;
+    list = base.filter(matchesVisitFilter).sort((a, b) => a.date.localeCompare(b.date));
+  const filters = F.map(visitFilterButton).join("");
+  const rows = list.length
+    ? list.map(visitTableRow).join("")
+    : '<tr><td colspan="8" class="muted">No visitation bookings match.</td></tr>';
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Visitation Bookings</h3><p class="muted" style="margin:6px 0 0">Farm visits for 1–5 visitors on weekends, including approved special dates.</p></div><button class="primary" onclick="openVisitForm()">＋ Add visit</button></div><div class="toolbar"><div class="filters">${filters}</div></div><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Visitor</th><th>Farm</th><th>Visit date</th><th>Visitors</th><th>Type</th><th>Status</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function matchesVisitFilter(visit) {
+  if (vFilter === "upcoming") {
+    return ["Booked", "Approved"].includes(visit.status);
+  }
+  if (vFilter === "completed") return visit.status === "Completed";
+  if (vFilter === "cancelled") return visit.status === "Cancelled";
+  return true;
+}
+function visitFilterButton(filter) {
+  const activeClass = vFilter === filter[0] ? "active" : "";
+  return `<button class="${activeClass}" onclick="setVFilter('${filter[0]}')">${filter[1]}</button>`;
+}
+function visitTableRow(visit) {
+  const typeLabel = visit.type === "Special" ? "Special date" : "Regular";
+  return `<tr><td><strong>${visit.ref}</strong><br><span class="muted">Submitted ${safe(visit.submittedAt)}</span></td><td>${safe(visit.name)}<br><span class="muted">${safe(visit.email)}</span><br><span class="muted">${safe(visit.phone)}</span></td><td>${safe(visit.farm || "—")}</td><td>${fmtDate(visit.date, true)}</td><td>${visit.visitors}</td><td>${typeLabel}</td><td><span class="status ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></td><td><div class="actions">${visitManageButtons(visit)}</div></td></tr>`;
+}
+function visitManageButtons(visit) {
+  const statusActions = ["Booked", "Approved"].includes(visit.status)
+    ? `<button class="primary small" onclick="updateVisit('${visit.ref}','Completed')">Mark completed</button><button class="danger small" onclick="updateVisit('${visit.ref}','Cancelled')">Cancel</button>`
+    : "";
+  return `${statusActions}<button class="secondary small" onclick="openVisitForm('${visit.ref}')">Edit</button><button class="danger small" onclick="deleteVisit('${visit.ref}')">Delete</button>`;
 }
 function adminSpecial() {
   const list = visits.filter((v) => v.type === "Special"),
     pend = list.filter((v) => v.status === "Pending Review").length;
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Special-Date Requests</h3><p class="muted" style="margin:6px 0 0">Visit requests for dates outside the regular weekend schedule. Approve or decline each one.</p></div><span class="status ${pend ? "" : "green"}">${pend} awaiting review</span></div>${list.length ? list.map((v) => `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${v.ref} · Submitted ${safe(v.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(v.date, true)}</h3></div><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)} · ${safe(v.email)} · ${safe(v.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(v.reason)}</strong></div><div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${v.status === "Pending Review" ? `<button class="primary" onclick="updateVisit('${v.ref}','Approved')">Approve special date</button><button class="danger" onclick="updateVisit('${v.ref}','Declined')">Decline request</button>` : ""}<button class="secondary" onclick="openVisitForm('${v.ref}')">Edit</button><button class="danger" onclick="deleteVisit('${v.ref}')">Delete</button></div></div>`).join("") : '<div class="empty"><h3>No special-date requests</h3><p>Requests for dates outside the regular schedule will appear here.</p></div>'}</div>`;
+  const statusClass = pend ? "" : "green";
+  const requests = list.length
+    ? list.map(specialVisitCard).join("")
+    : '<div class="empty"><h3>No special-date requests</h3><p>Requests for dates outside the regular schedule will appear here.</p></div>';
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Special-Date Requests</h3><p class="muted" style="margin:6px 0 0">Visit requests for dates outside the regular weekend schedule. Approve or decline each one.</p></div><span class="status ${statusClass}">${pend} awaiting review</span></div>${requests}</div>`;
+}
+function specialVisitCard(visit) {
+  const reviewActions =
+    visit.status === "Pending Review"
+      ? `<button class="primary" onclick="updateVisit('${visit.ref}','Approved')">Approve special date</button><button class="danger" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
+      : "";
+  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${visit.ref} · Submitted ${safe(visit.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(visit.date, true)}</h3></div><span class="status ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div><div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${reviewActions}<button class="secondary" onclick="openVisitForm('${visit.ref}')">Edit</button><button class="danger" onclick="deleteVisit('${visit.ref}')">Delete</button></div></div>`;
 }
 function openVisitForm(ref) {
   const v = ref ? visits.find((x) => x.ref === ref) : null;
   if (ref && !v) return;
-  const body = `<div class="field-grid">${fld("m_vname", "Visitor name", v?.name, "text", 'list="custList"')}${fld("m_vphone", "Contact number", v?.phone)}${fld("m_vemail", "Email", v?.email, "email")}${fld("m_vfarm", "Farm name (optional)", v?.farm)}${fld("m_vdate", "Visit date", v?.date || "", "date")}${sel("m_vcount", "Number of visitors (max 5)", [1, 2, 3, 4, 5], v?.visitors || 1)}${sel("m_vtype", "Type", ["Regular", "Special"], v?.type || "Regular")}${sel("m_vstatus", "Status", ["Booked", "Approved", "Pending Review", "Declined", "Completed", "Cancelled"], v?.status || "Booked")}</div><datalist id="custList">${customers.map((c) => `<option value="${safe(c.name)}">`).join("")}</datalist><div class="field"><label for="m_vreason">Reason (for special dates)</label><input id="m_vreason" value="${safe(v?.reason || "")}" maxlength="160"></div>`;
+  const body = visitFormBody(v);
   openModal(
     v ? "Edit visitation" : "Add visitation",
     v ? v.ref : "Create a visit for a walk-in or phone booking",
     body,
     `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveVisit('${v ? v.ref : ""}')">${v ? "Save changes" : "Add visit"}</button>`,
   );
+}
+function visitFormBody(visit) {
+  const fields = [
+    fld("m_vname", "Visitor name", visit?.name, "text", 'list="custList"'),
+    fld("m_vphone", "Contact number", visit?.phone),
+    fld("m_vemail", "Email", visit?.email, "email"),
+    fld("m_vfarm", "Farm name (optional)", visit?.farm),
+    fld("m_vdate", "Visit date", visit?.date || "", "date"),
+    sel("m_vcount", "Number of visitors (max 5)", [1, 2, 3, 4, 5], visit?.visitors || 1),
+    sel("m_vtype", "Type", ["Regular", "Special"], visit?.type || "Regular"),
+    sel(
+      "m_vstatus",
+      "Status",
+      ["Booked", "Approved", "Pending Review", "Declined", "Completed", "Cancelled"],
+      visit?.status || "Booked",
+    ),
+  ].join("");
+  const customerOptions = customers
+    .map((customer) => `<option value="${safe(customer.name)}">`)
+    .join("");
+  const reason = safe(visit?.reason || "");
+  return `<div class="field-grid">${fields}</div><datalist id="custList">${customerOptions}</datalist><div class="field"><label for="m_vreason">Reason (for special dates)</label><input id="m_vreason" value="${reason}" maxlength="160"></div>`;
 }
 function saveVisit(ref) {
   const name = V("m_vname"),
@@ -1988,7 +2461,7 @@ function saveVisit(ref) {
     toast("Please enter name, contact number and date.");
     return;
   }
-  if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+  if (email && !document.getElementById("m_vemail")?.validity.valid) {
     toast("Please enter a valid email address.");
     return;
   }
@@ -2144,12 +2617,28 @@ function viewCustomer(id) {
   const c = customers.find((x) => x.id === id);
   if (!c) return;
   const s = custStats(c);
+  const notesMarkup = c.notes
+    ? `<div class="summary-line"><span>Notes</span><strong>${safe(c.notes)}</strong></div>`
+    : "";
+  const bookingMarkup = s.bs.length
+    ? s.bs.map(customerBookingSummary).join("")
+    : '<p class="muted">None.</p>';
+  const visitMarkup = s.vs.length
+    ? s.vs.map(customerVisitSummary).join("")
+    : '<p class="muted">None.</p>';
+  const body = `<div class="summary-line"><span>Contact</span><strong>${safe(c.phone || "—")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(c.email || "—")}</strong></div><div class="summary-line"><span>Address</span><strong>${safe(c.address || "—")}</strong></div>${notesMarkup}<h4 style="margin:18px 0 4px">Service bookings (${s.bs.length})</h4>${bookingMarkup}<h4 style="margin:18px 0 4px">Visits (${s.vs.length})</h4>${visitMarkup}`;
   openModal(
     safe(c.name),
     c.id,
-    `<div class="summary-line"><span>Contact</span><strong>${safe(c.phone || "—")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(c.email || "—")}</strong></div><div class="summary-line"><span>Address</span><strong>${safe(c.address || "—")}</strong></div>${c.notes ? `<div class="summary-line"><span>Notes</span><strong>${safe(c.notes)}</strong></div>` : ""}<h4 style="margin:18px 0 4px">Service bookings (${s.bs.length})</h4>${s.bs.map((b) => `<div class="summary-line"><span>${b.ref} · ${safe(b.pkg)} · ${safe(b.date)}</span><strong>${safe(b.booking)} / ${safe(b.payment)}</strong></div>`).join("") || '<p class="muted">None.</p>'}<h4 style="margin:18px 0 4px">Visits (${s.vs.length})</h4>${s.vs.map((v) => `<div class="summary-line"><span>${v.ref} · ${fmtDate(v.date)}</span><strong>${safe(v.status)}</strong></div>`).join("") || '<p class="muted">None.</p>'}`,
+    body,
     `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openCustomerForm('${c.id}')">Edit</button>`,
   );
+}
+function customerBookingSummary(booking) {
+  return `<div class="summary-line"><span>${booking.ref} · ${safe(booking.pkg)} · ${safe(booking.date)}</span><strong>${safe(booking.booking)} / ${safe(booking.payment)}</strong></div>`;
+}
+function customerVisitSummary(visit) {
+  return `<div class="summary-line"><span>${visit.ref} · ${fmtDate(visit.date)}</span><strong>${safe(visit.status)}</strong></div>`;
 }
 
 /* ----- package catalog ----- */
@@ -2212,7 +2701,7 @@ function savePricingSettings() {
 function openPackageForm(i) {
   const x = i >= 0 ? pondPackageCatalog[i] : null;
   window.pendingPkgImage = null;
-  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="30" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div>${fld("m_pfree", "Included freebie", x?.freebie, "text", 'maxlength="120"')}<div class="field"><label for="m_pdesc">Description</label><textarea id="m_pdesc" maxlength="180">${safe(x?.description || "")}</textarea></div><div class="field"><label for="m_pimg">Package photo</label><input id="m_pimg" type="file" accept="image/*" onchange="uploadPackageImage(this)"><small class="muted">JPG, PNG or WebP, up to 8 MB. Leave empty to keep the current photo.</small><div class="pkg-media" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px"><img id="m_pprev" src="${safe(x?.image || "")}" alt="Photo preview" style="${x?.image ? "" : "display:none"}"></div></div><label class="check-row"><input type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label><label class="check-row"><input type="checkbox" id="m_pact" ${x && x.active === false ? "" : "checked"}><span>Visible to customers</span></label>`;
+  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="30" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div>${fld("m_pfree", "Included freebie", x?.freebie, "text", 'maxlength="120"')}<div class="field"><label for="m_pdesc">Description</label><textarea id="m_pdesc" maxlength="180">${safe(x?.description || "")}</textarea></div><div class="field"><label for="m_pimg">Package photo</label><input id="m_pimg" type="file" accept="image/*" onchange="uploadPackageImage(this)"><small class="muted">JPG, PNG or WebP, up to 8 MB. Leave empty to keep the current photo.</small><div class="pkg-media" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px"><img id="m_pprev" src="${safe(x?.image || "")}" alt="Photo preview" style="${x?.image ? "" : "display:none"}"></div></div><label class="check-row"><input type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>  <label class="check-row"><input type="checkbox" id="m_pact" ${x?.active === false ? "" : "checked"}><span>Visible to customers</span></label>`;
   openModal(
     x ? "Edit package" : "Add package",
     x ? safe(x.name) : "",
@@ -2222,7 +2711,7 @@ function openPackageForm(i) {
   );
 }
 function uploadPackageImage(input) {
-  const file = input.files && input.files[0];
+  const file = input.files?.[0];
   if (!file) return;
   if (!file.type.startsWith("image/")) {
     alert("Please choose an image file.");
@@ -2421,8 +2910,7 @@ function saveFaq(id) {
   render();
 }
 function deleteFaq(id) {
-  const f = faqs.find((x) => x.id === id);
-  if (!f) return;
+  if (!faqs.some((x) => x.id === id)) return;
   if (!confirm("Delete this FAQ?")) return;
   faqs = faqs.filter((x) => x.id !== id);
   toast("FAQ deleted.");
@@ -2453,22 +2941,52 @@ function adminSales() {
       (b) => !["Rejected", "Cancelled"].includes(b.booking),
     ),
     booked = live.reduce((s, b) => s + Number(b.total || 0), 0);
-  return `<div class="stat-grid"><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(received)}</div></div><div class="stat"><div class="label">Booked value (active)</div><div class="value" style="font-size:22px">${money(booked)}</div></div><div class="stat"><div class="label">Still to collect</div><div class="value" style="font-size:22px">${money(Math.max(0, booked - live.reduce((s, b) => s + Number(b.paidAmount || 0), 0)))}</div></div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Sales & transaction records</h3><span class="muted" style="font-size:12px">Verified transactions only</span></div><div class="notice" style="margin-top:12px">A submitted receipt is not counted as a sale until you verify the actual GCash transaction.</div><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Booking status</th><th>Total (with delivery)</th><th>Payment status</th><th>Verified received</th><th>Still to collect</th></tr></thead><tbody>${bookings.map((b) => `<tr><td>${b.ref}</td><td>${safe(b.name)}</td><td>${safe(b.booking)}</td><td>${money(b.total)}</td><td>${safe(b.payment)}</td><td>${money(b.paidAmount || 0)}</td><td>${["Rejected", "Cancelled"].includes(b.booking) ? "—" : money(Math.max(0, b.total - (b.paidAmount || 0)))}</td></tr>`).join("")}</tbody></table></div><h3 style="margin-top:24px">Verified payment history</h3><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment type</th><th>Amount</th><th>GCash reference</th><th>Receipt file</th><th>Verified</th><th>Status</th></tr></thead><tbody>${history.length ? history.map((p) => `<tr><td>${safe(p.ref)}</td><td>${safe(p.name)}</td><td>${p.target === "deposit" ? "50% down payment" : "Remaining balance"}</td><td>${money(p.amount)}</td><td>${safe(p.reference)}</td><td>${safe(p.fileName)}</td><td>${safe(p.verifiedAt)}</td><td><span class="status green">${safe(p.status)}</span></td></tr>`).join("") : '<tr><td colspan="8" class="muted">No verified transactions yet.</td></tr>'}</tbody></table></div></div>`;
+  const outstanding = Math.max(
+    0,
+    booked - live.reduce((sum, booking) => sum + Number(booking.paidAmount || 0), 0),
+  );
+  const bookingRows = bookings.map(salesBookingRow).join("");
+  const paymentRows = history.length
+    ? history.map(salesPaymentRow).join("")
+    : '<tr><td colspan="8" class="muted">No verified transactions yet.</td></tr>';
+  return `<div class="stat-grid"><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(received)}</div></div><div class="stat"><div class="label">Booked value (active)</div><div class="value" style="font-size:22px">${money(booked)}</div></div><div class="stat"><div class="label">Still to collect</div><div class="value" style="font-size:22px">${money(outstanding)}</div></div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Sales & transaction records</h3><span class="muted" style="font-size:12px">Verified transactions only</span></div><div class="notice" style="margin-top:12px">A submitted receipt is not counted as a sale until you verify the actual GCash transaction.</div><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Booking status</th><th>Total (with delivery)</th><th>Payment status</th><th>Verified received</th><th>Still to collect</th></tr></thead><tbody>${bookingRows}</tbody></table></div><h3 style="margin-top:24px">Verified payment history</h3><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment type</th><th>Amount</th><th>GCash reference</th><th>Receipt file</th><th>Verified</th><th>Status</th></tr></thead><tbody>${paymentRows}</tbody></table></div></div>`;
+}
+function salesBookingRow(booking) {
+  const outstanding = ["Rejected", "Cancelled"].includes(booking.booking)
+    ? "—"
+    : money(Math.max(0, booking.total - (booking.paidAmount || 0)));
+  return `<tr><td>${booking.ref}</td><td>${safe(booking.name)}</td><td>${safe(booking.booking)}</td><td>${money(booking.total)}</td><td>${safe(booking.payment)}</td><td>${money(booking.paidAmount || 0)}</td><td>${outstanding}</td></tr>`;
+}
+function salesPaymentRow(payment) {
+  const paymentType =
+    payment.target === "deposit" ? "50% down payment" : "Remaining balance";
+  return `<tr><td>${safe(payment.ref)}</td><td>${safe(payment.name)}</td><td>${paymentType}</td><td>${money(payment.amount)}</td><td>${safe(payment.reference)}</td><td>${safe(payment.fileName)}</td><td>${safe(payment.verifiedAt)}</td><td><span class="status green">${safe(payment.status)}</span></td></tr>`;
 }
 
 /* ----- render ----- */
 function render() {
   ensureNavigationShell();
   if (page === "home") {
-    const template = document.getElementById("homeTemplate");
-    if (template) app.replaceChildren(template.content.cloneNode(true));
-    const packages = activePackages();
-    const price = document.getElementById("homePackagePrice");
-    if (price)
-      price.textContent = packages.length
-        ? `From ${money(Math.min(...packages.map((item) => item.price)))}`
-        : "Packages coming soon";
+    renderHomePage();
   }
+  renderCurrentPage();
+  syncNavigationLinks();
+  bindCurrentPageForms();
+  if (page === "mybookings") markBookingsSeen();
+  updateNavBadge();
+}
+function renderHomePage() {
+  const template = document.getElementById("homeTemplate");
+  if (template) app.replaceChildren(template.content.cloneNode(true));
+  const packages = activePackages();
+  const price = document.getElementById("homePackagePrice");
+  if (!price) return;
+  price.textContent = packages.length
+    ? `From ${money(Math.min(...packages.map((item) => item.price)))}`
+    : "Packages coming soon";
+}
+function renderCurrentPage() {
+  if (page === "home") return;
   const views = {
     about,
     shop,
@@ -2480,40 +2998,53 @@ function render() {
     register,
     admin,
   };
-  if (page !== "home") app.innerHTML = (views[page] || about)();
+  app.innerHTML = (views[page] || about)();
+}
+function syncNavigationLinks() {
   document
     .querySelectorAll(".nav a[data-page]")
     .forEach((link) => {
       link.classList.toggle("active", link.dataset.page === page);
-      // Show My Bookings only after the user has logged in.
       if (link.dataset.page === "mybookings")
         link.style.display = loggedIn ? "inline-block" : "none";
     });
+}
+function bindCurrentPageForms() {
   if (page === "login") {
-    const loginForm = document.getElementById("loginForm");
-    if (loginForm) loginForm.onsubmit = (e) => {
-      e.preventDefault();
-      loggedIn = true;
-      userName = userName || "Customer Account";
-      setPage("mybookings");
-    };
+    bindLoginForm();
   }
   if (page === "register") {
-    const registerForm = document.getElementById("registerForm");
-    if (registerForm) registerForm.onsubmit = (e) => {
-      e.preventDefault();
-      userName = document.getElementById("regName").value.trim();
-      upsertCustomer({ name: userName });
-      loggedIn = true;
-      alert("Account created for this session.");
-      setPage("mybookings");
-    };
+    bindRegisterForm();
   }
-  if (page === "mybookings")
-    myBookingList().forEach((b) =>
-      (b.timeline || []).forEach((e) => (e.seen = true)),
-    );
-  updateNavBadge();
+}
+function bindLoginForm() {
+  const loginForm = document.getElementById("loginForm");
+  if (!loginForm) return;
+  loginForm.onsubmit = (event) => {
+    event.preventDefault();
+    loggedIn = true;
+    userName = userName || "Customer Account";
+    setPage("mybookings");
+  };
+}
+function bindRegisterForm() {
+  const registerForm = document.getElementById("registerForm");
+  if (!registerForm) return;
+  registerForm.onsubmit = (event) => {
+    event.preventDefault();
+    userName = document.getElementById("regName").value.trim();
+    upsertCustomer({ name: userName });
+    loggedIn = true;
+    alert("Account created for this session.");
+    setPage("mybookings");
+  };
+}
+function markBookingsSeen() {
+  myBookingList().forEach((booking) =>
+    (booking.timeline || []).forEach((event) => {
+      event.seen = true;
+    }),
+  );
 }
 
 document.querySelectorAll("#footerYear, .footer-year").forEach((year) => {
@@ -2570,7 +3101,7 @@ document.addEventListener("click", (e) => {
   if (action === "show-visit") chooseBookingType("visit");
 });
 window.addEventListener("popstate", () => {
-  const currentFile = location.pathname.replace(/\\/g, "/"),
+  const currentFile = location.pathname.replaceAll("\\", "/"),
     route = Object.keys(pageFiles).find(
     (key) =>
       currentFile.endsWith(`/${pageFiles[key]}`) ||
