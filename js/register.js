@@ -8,7 +8,10 @@ const fields = [
   "password",
   "confirmPassword",
 ];
-
+const passwordStrengthMessage =
+  "Use at least 8 characters with an uppercase letter, a lowercase letter, a number, and a symbol.";
+const submitButton = form?.querySelector('button[type="submit"]');
+let submitting = false;
 function setFieldError(id, message) {
   const field = document.getElementById(id);
   const error = document.getElementById(`${id}Error`);
@@ -27,7 +30,11 @@ function clearFieldError(id) {
 }
 
 function valueOf(id) {
-  return document.getElementById(id).value.trim();
+  const field = document.getElementById(id);
+  if (!field) return "";
+  return id === "password" || id === "confirmPassword"
+    ? field.value
+    : field.value.trim();
 }
 
 function validateField(id) {
@@ -45,10 +52,26 @@ function validateField(id) {
   }
 
   if (id === "phone") {
-    const digits = value.replace(/\D/g, "");
-    const allowedFormat = /^[+()\d\s-]+$/.test(value);
-    if (!allowedFormat || digits.length < 7 || digits.length > 15) {
-      setFieldError(id, "Enter a valid phone or contact number.");
+    const normalizedPhone = value.replace(/[\s()-]/g, "");
+    const allowedCharacters = /^[+()\d\s-]+$/.test(value);
+    const validPhilippinePhone =
+      /^09\d{9}$/.test(normalizedPhone) ||
+      /^\+639\d{9}$/.test(normalizedPhone);
+    if (!allowedCharacters || !validPhilippinePhone) {
+      setFieldError(id, "Enter a valid PH number starting with 09 or +63.");
+      return false;
+    }
+  }
+
+  if (id === "password") {
+    const strongPassword =
+      value.length >= 8 &&
+      /[A-Z]/.test(value) &&
+      /[a-z]/.test(value) &&
+      /\d/.test(value) &&
+      /[^A-Za-z0-9\s]/.test(value);
+    if (!strongPassword) {
+      setFieldError(id, passwordStrengthMessage);
       return false;
     }
   }
@@ -73,30 +96,44 @@ function validateForm() {
   return valid;
 }
 
-fields.forEach((id) => {
-  document.getElementById(id).addEventListener("input", () => {
-    validateField(id);
-    if (id === "password" || id === "confirmPassword") {
-      validateField("confirmPassword");
-    }
-    if (feedback) {
-      feedback.textContent = "";
-      feedback.classList.remove("show", "success");
-    }
-  });
-});
+function handleFieldInput(event) {
+  const id = event.currentTarget.id;
+  validateField(id);
+  if (id === "password" || id === "confirmPassword") {
+    validateField("confirmPassword");
+  }
+  if (submitting) {
+    submitting = false;
+    if (submitButton) submitButton.disabled = false;
+    form?.removeAttribute("aria-busy");
+  }
+  if (feedback) {
+    feedback.textContent = "";
+    feedback.classList.remove("show", "success");
+  }
+}
 
-form.addEventListener("submit", (event) => {
+function handleFormSubmit(event) {
   event.preventDefault();
+  if (submitting) return;
   if (feedback) {
     feedback.textContent = "";
     feedback.classList.remove("show", "success");
   }
   if (!validateForm()) return;
 
+  submitting = true;
+  if (submitButton) submitButton.disabled = true;
+  form?.setAttribute("aria-busy", "true");
   if (feedback) {
     feedback.textContent =
       "Validation successful. Account creation will be completed once backend services are online.";
     feedback.classList.add("show", "success");
   }
+}
+
+fields.forEach((id) => {
+  document.getElementById(id).addEventListener("input", handleFieldInput);
 });
+
+form.addEventListener("submit", handleFormSubmit);
