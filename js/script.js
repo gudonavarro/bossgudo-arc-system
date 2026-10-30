@@ -940,14 +940,13 @@ function qrPlaceholder() {
   ).join("")}</div></div>`;
 }
 function readDetails() {
-  const g = (id) => (document.getElementById(id)?.value || "").trim();
   if (!document.getElementById("customerName")) return;
   window.bookingDraft = {
     ...window.bookingDraft,
-    name: g("customerName"),
-    phone: g("phone"),
-    email: g("email"),
-    location: g("location"),
+    name: V("customerName"),
+    phone: V("phone"),
+    email: V("email"),
+    location: V("location"),
     notes: extraNotes || window.bookingDraft?.notes || "",
   };
 }
@@ -1060,14 +1059,13 @@ function visitDetailsStep() {
   return `<h2>Visitor details</h2><p class="muted">Visit date: <strong>${fmtDate(visitDate, true)}</strong>${specialRequest}</p><div class="field-grid"><div class="field"><label for="vName">Full name</label><input id="vName" value="${safe(d.name || userName)}" placeholder="Full name"></div><div class="field"><label for="vEmail">Email</label><input id="vEmail" type="email" value="${safe(d.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="vPhone">Contact number</label><input id="vPhone" value="${safe(d.phone || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="vFarm">Farm name (optional)</label><input id="vFarm" value="${safe(d.farm || "")}" placeholder="Your farm, if you have one"></div><div class="field"><label for="vVisitors">Number of visitors (maximum 5)</label><select id="vVisitors">${visitorOptions}</select></div></div><div class="wizard-actions"><button class="secondary" onclick="readVisit();visitStep=1;render()">← Back</button><button class="primary" onclick="visitToReview()">Continue to Review →</button></div>`;
 }
 function readVisit() {
-  const g = (id) => (document.getElementById(id)?.value || "").trim();
   if (!document.getElementById("vName")) return;
   visitDraft = {
-    name: g("vName"),
-    email: g("vEmail"),
-    phone: g("vPhone"),
-    farm: g("vFarm"),
-    visitors: Math.min(5, Math.max(1, Number(g("vVisitors")) || 1)),
+    name: V("vName"),
+    email: V("vEmail"),
+    phone: V("vPhone"),
+    farm: V("vFarm"),
+    visitors: Math.min(5, Math.max(1, Number(V("vVisitors")) || 1)),
   };
 }
 function visitToReview() {
