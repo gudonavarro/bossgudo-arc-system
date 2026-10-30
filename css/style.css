@@ -3812,3 +3812,63 @@ tbody tr:hover {
     width: min(112px, 38vw);
   }
 }
+
+body[data-page="login"] {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background-image:
+    linear-gradient(rgba(13, 30, 21, 0.62), rgba(13, 30, 21, 0.72)),
+    url("../pictures/home-hero-bg.jpg");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+body[data-page="login"] main {
+  display: grid;
+  flex: 1;
+  width: 100%;
+  place-items: center;
+  padding: clamp(28px, 6vh, 64px) 24px;
+}
+
+body[data-page="login"] .auth-card {
+  width: min(100%, 440px);
+  margin: 0 auto;
+  padding: clamp(26px, 5vw, 40px);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 70px rgba(8, 24, 15, 0.3);
+  backdrop-filter: blur(12px);
+}
+
+body[data-page="login"] .auth-card .field input:focus-visible {
+  border-color: var(--green2);
+  outline: 3px solid rgba(47, 112, 80, 0.2);
+  outline-offset: 1px;
+}
+
+body[data-page="login"] .auth-card .primary {
+  min-height: 48px;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+body[data-page="login"] .auth-card .primary:hover {
+  background: var(--green2);
+  box-shadow: 0 8px 18px rgba(31, 81, 59, 0.22);
+}
+
+@media (max-width: 540px) {
+  body[data-page="login"] main {
+    padding: 28px 16px;
+  }
+
+  body[data-page="login"] .auth-card {
+    border-radius: 18px;
+  }
+}
