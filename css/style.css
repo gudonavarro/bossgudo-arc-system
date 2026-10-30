@@ -2479,3 +2479,61 @@ body[data-page="login"] .auth-card .primary:hover {
     transform: none;
   }
 }
+
+body[data-page="login"] .password-input-wrapper {
+  position: relative;
+}
+
+body[data-page="login"] .password-input-wrapper input {
+  padding-right: 3.5rem;
+}
+
+body[data-page="login"] .password-toggle-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 44px;
+  min-width: 44px;
+  height: 100%;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0 9px 9px 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  transform: none;
+}
+
+body[data-page="login"] .password-toggle-btn:hover {
+  background: rgba(47, 112, 80, 0.08);
+  color: var(--green);
+  transform: none;
+}
+
+body[data-page="login"] .password-toggle-btn:active {
+  transform: none;
+}
+
+body[data-page="login"] .password-toggle-btn:focus-visible {
+  z-index: 1;
+  outline: 3px solid rgba(47, 112, 80, 0.45);
+  outline-offset: -3px;
+}
+
+body[data-page="login"] .password-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
+body[data-page="login"] .password-toggle-slash {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+body[data-page="login"] .password-toggle-icon.is-slashed .password-toggle-slash {
+  opacity: 1;
+}
