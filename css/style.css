@@ -3798,3 +3798,17 @@ tbody tr:hover {
     padding: 22px 18px;
   }
 }
+
+.login-header .login-logo {
+  display: block;
+  width: min(132px, 40vw);
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto 15px;
+}
+
+@media (max-width: 540px) {
+  .login-header .login-logo {
+    width: min(112px, 38vw);
+  }
+}
