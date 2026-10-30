@@ -847,9 +847,6 @@ function calendarBlock(kind, mode = "select") {
   const calendarDays = calendarHtml(kind, mode);
   return `<div class="calendar"><div class="cal-head"><button onclick="changeMonth(-1)" aria-label="Previous month">←</button><strong>${monthLabel}</strong><button onclick="changeMonth(1)" aria-label="Next month">→</button></div><div class="cal-grid">${dayNames}${calendarDays}</div><div class="legend">${legend}</div></div>`;
 }
-function login() {
-  return `<div class="panel auth-card"><div class="auth-card-header login-header"><img class="login-logo" src="../pictures/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo"><h1 class="page-title">Welcome back</h1><p class="muted">Sign in to track your booking requests.</p></div><form id="loginForm"><div class="field"><label for="loginEmail">EMAIL ADDRESS</label><input type="email" id="loginEmail" required placeholder="you@example.com" value="customer@example.com"></div><div class="field"><label for="loginPassword">PASSWORD</label><input type="password" id="loginPassword" required placeholder="Enter password"></div><button class="primary" type="submit">Log In</button></form><p class="auth-card-footer"><a href="register.html">Don't have an account? Create Account</a></p></div>`;
-}
 function register() {
   return `<div class="panel auth-card"><div style="text-align:center"><h1 class="page-title">Create an account</h1><p class="muted">Register to submit and track bookings.</p></div><form id="registerForm"><div class="field"><label>Full name</label><input id="regName" required placeholder="Your full name"></div><div class="field"><label>Email address</label><input type="email" required placeholder="you@example.com"></div><div class="field"><label>Password</label><input type="password" required minlength="6" placeholder="At least 6 characters"></div><button class="primary">Create Account</button></form></div>`;
 }
@@ -2974,6 +2971,7 @@ function render() {
   bindCurrentPageForms();
   if (page === "mybookings") markBookingsSeen();
   updateNavBadge();
+  window.dispatchEvent(new Event("app:render"));
 }
 function renderHomePage() {
   const template = document.getElementById("homeTemplate");
@@ -2987,6 +2985,10 @@ function renderHomePage() {
 }
 function renderCurrentPage() {
   if (page === "home") return;
+  if (page === "login") {
+    app.replaceChildren();
+    return;
+  }
   const views = {
     about,
     shop,
@@ -2994,7 +2996,6 @@ function renderCurrentPage() {
     success,
     mybookings,
     customerpayment: customerPaymentPage,
-    login,
     register,
     admin,
   };
@@ -3010,22 +3011,9 @@ function syncNavigationLinks() {
     });
 }
 function bindCurrentPageForms() {
-  if (page === "login") {
-    bindLoginForm();
-  }
   if (page === "register") {
     bindRegisterForm();
   }
-}
-function bindLoginForm() {
-  const loginForm = document.getElementById("loginForm");
-  if (!loginForm) return;
-  loginForm.onsubmit = (event) => {
-    event.preventDefault();
-    loggedIn = true;
-    userName = userName || "Customer Account";
-    setPage("mybookings");
-  };
 }
 function bindRegisterForm() {
   const registerForm = document.getElementById("registerForm");
@@ -3039,6 +3027,16 @@ function bindRegisterForm() {
     setPage("mybookings");
   };
 }
+
+window.addEventListener("app:session-change", (event) => {
+  loggedIn = event.detail === true;
+});
+window.addEventListener("app:navigate", (event) => {
+  const targetPage = event.detail;
+  if (typeof targetPage === "string" && Object.hasOwn(pageFiles, targetPage))
+    setPage(targetPage);
+});
+
 function markBookingsSeen() {
   myBookingList().forEach((booking) =>
     (booking.timeline || []).forEach((event) => {
