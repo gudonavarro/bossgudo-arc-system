@@ -34,39 +34,66 @@
     }
   }
 
-  function setLoginEmailError(emailInput, message) {
-    const error = document.getElementById("loginEmailError");
+  function setLoginFieldError(input, errorId, message) {
+    const error = document.getElementById(errorId);
     if (!error) return;
 
     error.textContent = message;
     error.classList.toggle("show", Boolean(message));
-    emailInput.classList.toggle("input-error", Boolean(message));
+    input.classList.toggle("input-error", Boolean(message));
     if (message) {
-      emailInput.setAttribute("aria-invalid", "true");
-      emailInput.setAttribute("aria-describedby", "loginEmailError");
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-describedby", errorId);
     } else {
-      emailInput.removeAttribute("aria-invalid");
-      emailInput.removeAttribute("aria-describedby");
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("aria-describedby");
     }
   }
 
   function handleLoginEmailInvalid(event) {
     const emailInput = event.currentTarget;
     event.preventDefault();
-    setLoginEmailError(
+    setLoginFieldError(
       emailInput,
+      "loginEmailError",
       emailInput.validity.valueMissing
         ? "Please enter your email address."
         : "Enter a valid email address.",
     );
   }
 
-  function handleLoginEmailInput(event) {
-    const emailInput = event.currentTarget;
+  function handleLoginEmailInput(emailInput) {
     if (emailInput.validity.valid || !emailInput.value) {
-      setLoginEmailError(emailInput, "");
+      setLoginFieldError(emailInput, "loginEmailError", "");
     } else if (emailInput.validity.typeMismatch) {
-      setLoginEmailError(emailInput, "Enter a valid email address.");
+      setLoginFieldError(
+        emailInput,
+        "loginEmailError",
+        "Enter a valid email address.",
+      );
+    }
+  }
+
+  function handleLoginPasswordInvalid(event) {
+    const passwordInput = event.currentTarget;
+    event.preventDefault();
+    setLoginFieldError(
+      passwordInput,
+      "loginPasswordError",
+      "Please enter your password.",
+    );
+  }
+
+  function handleLoginPasswordInput(passwordInput) {
+    setLoginFieldError(passwordInput, "loginPasswordError", "");
+  }
+
+  function handleLoginFormInput(event) {
+    handleLoginInput(event);
+    if (event.target.id === "loginEmail") {
+      handleLoginEmailInput(event.target);
+    } else if (event.target.id === "loginPassword") {
+      handleLoginPasswordInput(event.target);
     }
   }
 
@@ -107,7 +134,16 @@
     const emailInput = app.querySelector("#loginEmail");
     if (emailInput) {
       emailInput.addEventListener("invalid", handleLoginEmailInvalid);
-      emailInput.addEventListener("input", handleLoginEmailInput);
+    }
+    const passwordInput = app.querySelector("#loginPassword");
+    const passwordWrapper = passwordInput?.closest(".password-input-wrapper");
+    if (passwordInput && passwordWrapper) {
+      const passwordError = document.createElement("p");
+      passwordError.className = "field-error";
+      passwordError.id = "loginPasswordError";
+      passwordError.setAttribute("aria-live", "polite");
+      passwordWrapper.insertAdjacentElement("afterend", passwordError);
+      passwordInput.addEventListener("invalid", handleLoginPasswordInvalid);
     }
 
     const forgotPasswordLink = app.querySelector(".login-forgot-password");
@@ -123,7 +159,7 @@
 
     boundLoginForms.add(loginForm);
     loginForm.addEventListener("submit", handleLoginSubmit);
-    loginForm.addEventListener("input", handleLoginInput);
+    loginForm.addEventListener("input", handleLoginFormInput);
   }
 
   function initializeLoginModule() {
