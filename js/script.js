@@ -694,7 +694,7 @@ function money(n) {
 const pageFiles = {
   home: "index.html",
   about: "pages/about.html",
-  packages: "pages/packages.html",
+  shop: "pages/shop.html",
   booking: "pages/booking.html",
   mybookings: "pages/mybookings.html",
   login: "pages/login.html",
@@ -703,7 +703,7 @@ const pageFiles = {
 const pageTitles = {
   home: "Home",
   about: "About",
-  packages: "Packages",
+  shop: "Shop",
   booking: "Bookings",
   mybookings: "My Bookings",
   login: "Log In",
@@ -714,7 +714,9 @@ const pageTitles = {
 };
 function syncPageChrome(nextPage) {
   document.body.dataset.page = nextPage;
-  document.title = `${pageTitles[nextPage] || "Home"} | BOSSGUDO A.R.C. AQUA FARM`;
+  document.title = nextPage === "shop"
+    ? "Shop | Boss Gudo A.R.C. Aqua Farm"
+    : `${pageTitles[nextPage] || "Home"} | BOSSGUDO A.R.C. AQUA FARM`;
 }
 function ensureNavigationShell() {
   let shell = document.querySelector("body > header.topbar");
@@ -1081,9 +1083,9 @@ function pkgCardPublic(x) {
 function pkgCardCustom() {
   return `<article class="pkg-card custom"><div class="pkg-media"><span>📐</span></div><div class="pkg-body"><h3>Custom Pond Design</h3><p>None of the packages fit? Choose 1–3 layers, enter your pond’s width and length, and decide on filtration.</p><div class="chips"><span class="chip">Up to 3 layers</span><span class="chip">Your own size</span></div><div class="pkg-foot"><div class="price-big"><small>Price from your size</small>${money(pondRatePerSqmPerLayer)}<small>per m² per layer</small></div><button class="primary" onclick="choosePkgById('custom')">Design</button></div></div></article>`;
 }
-function packages() {
+function shop() {
   const act = activePackages();
-  return `<div class="breadcrumbs">Home / Packages</div><h1 class="page-title">Pond Installation Packages</h1><p class="muted">Browse the owner’s predefined pond packages, each with one included freebie. Choose one option per booking, or design your own pond.</p><div class="pkg-grid" style="margin-top:24px">${act.map(pkgCardPublic).join("")}${pkgCardCustom()}</div><div class="notice" style="margin-top:22px"><strong>How pricing works.</strong> Custom pond price = width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected. You pay 50% when you book; your booking is confirmed once the owner verifies that payment. After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance.</div>`;
+  return `<div class="breadcrumbs">Home / Shop</div><h1 class="page-title">Shop</h1><p class="muted">Browse the owner’s predefined pond packages, each with one included freebie. Choose one option per booking, or design your own pond.</p><div class="pkg-grid" style="margin-top:24px">${act.map(pkgCardPublic).join("")}${pkgCardCustom()}</div><div class="notice" style="margin-top:22px"><strong>How pricing works.</strong> Custom pond price = width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected. You pay 50% when you book; your booking is confirmed once the owner verifies that payment. After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance.</div>`;
 }
 
 function pkgCardSelect(x, custom) {
@@ -2469,7 +2471,7 @@ function render() {
   }
   const views = {
     about,
-    packages,
+    shop,
     booking,
     success,
     mybookings,
@@ -2562,7 +2564,7 @@ document.addEventListener("click", (e) => {
   if (!actionButton) return;
   const action = actionButton.dataset.action;
   if (action === "start-booking") startBooking();
-  if (action === "show-packages") setPage("packages");
+  if (action === "show-packages") setPage("shop");
   if (action === "show-about") setPage("about");
   if (action === "custom-pond") choosePkgById("custom");
   if (action === "show-visit") chooseBookingType("visit");
