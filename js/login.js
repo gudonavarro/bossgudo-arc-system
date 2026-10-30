@@ -1,6 +1,6 @@
 (() => {
   const loginMarkup =
-    '<div class="panel auth-card"><div class="auth-card-header login-header"><img class="login-logo" src="../pictures/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo"><h1 class="page-title">Welcome back</h1><p class="muted">Sign in to track your booking requests.</p></div><form id="loginForm"><div class="field"><label for="loginEmail">EMAIL ADDRESS</label><input type="email" id="loginEmail" required placeholder="you@example.com" value="customer@example.com"></div><div class="field"><label for="loginPassword">PASSWORD</label><div class="password-input-wrapper"><input type="password" id="loginPassword" required placeholder="Enter password"><button class="password-toggle-btn" type="button" aria-label="Show password" aria-pressed="false"><svg class="password-toggle-icon is-slashed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle><path class="password-toggle-slash" d="M4 4 20 20"></path></svg></button></div><a class="login-forgot-password" href="#forgot-password">Forgot Password?</a></div><button class="primary" type="submit">Log In</button></form><p class="auth-card-footer"><a href="register.html">Don\'t have an account? Create Account</a></p></div>';
+    '<div class="panel auth-card"><div class="auth-card-header login-header"><img class="login-logo" src="../pictures/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo"><h1 class="page-title">Welcome back</h1><p class="muted">Sign in to track your booking requests.</p></div><form id="loginForm"><div class="field"><label for="loginEmail">EMAIL ADDRESS</label><input type="email" id="loginEmail" required placeholder="you@example.com"><p class="field-error" id="loginEmailError" aria-live="polite"></p></div><div class="field"><label for="loginPassword">PASSWORD</label><div class="password-input-wrapper"><input type="password" id="loginPassword" required placeholder="Enter password"><button class="password-toggle-btn" type="button" aria-label="Show password" aria-pressed="false"><svg class="password-toggle-icon is-slashed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle><path class="password-toggle-slash" d="M4 4 20 20"></path></svg></button></div><a class="login-forgot-password" href="#forgot-password">Forgot Password?</a></div><button class="primary" type="submit">Log In</button></form><p class="auth-card-footer"><a href="register.html">Don\'t have an account? Create Account</a></p></div>';
   const boundLoginForms = new WeakSet();
 
   function preventForgotPasswordNavigation(event) {
@@ -15,6 +15,42 @@
     window.dispatchEvent(
       new CustomEvent("app:navigate", { detail: "mybookings" }),
     );
+  }
+
+  function setLoginEmailError(emailInput, message) {
+    const error = document.getElementById("loginEmailError");
+    if (!error) return;
+
+    error.textContent = message;
+    error.classList.toggle("show", Boolean(message));
+    emailInput.classList.toggle("input-error", Boolean(message));
+    if (message) {
+      emailInput.setAttribute("aria-invalid", "true");
+      emailInput.setAttribute("aria-describedby", "loginEmailError");
+    } else {
+      emailInput.removeAttribute("aria-invalid");
+      emailInput.removeAttribute("aria-describedby");
+    }
+  }
+
+  function handleLoginEmailInvalid(event) {
+    const emailInput = event.currentTarget;
+    event.preventDefault();
+    setLoginEmailError(
+      emailInput,
+      emailInput.validity.valueMissing
+        ? "Please enter your email address."
+        : "Enter a valid email address.",
+    );
+  }
+
+  function handleLoginEmailInput(event) {
+    const emailInput = event.currentTarget;
+    if (emailInput.validity.valid || !emailInput.value) {
+      setLoginEmailError(emailInput, "");
+    } else if (emailInput.validity.typeMismatch) {
+      setLoginEmailError(emailInput, "Enter a valid email address.");
+    }
   }
 
   function togglePasswordVisibility(event) {
@@ -51,6 +87,12 @@
     if (!app) return;
 
     app.innerHTML = loginMarkup;
+    const emailInput = app.querySelector("#loginEmail");
+    if (emailInput) {
+      emailInput.addEventListener("invalid", handleLoginEmailInvalid);
+      emailInput.addEventListener("input", handleLoginEmailInput);
+    }
+
     const forgotPasswordLink = app.querySelector(".login-forgot-password");
     if (forgotPasswordLink) {
       forgotPasswordLink.addEventListener(
