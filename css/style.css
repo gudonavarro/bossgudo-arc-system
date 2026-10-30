@@ -2537,3 +2537,34 @@ body[data-page="login"] .password-toggle-slash {
 body[data-page="login"] .password-toggle-icon.is-slashed .password-toggle-slash {
   opacity: 1;
 }
+
+body[data-page="login"] .login-forgot-password {
+  display: block;
+  margin-top: 8px;
+  color: var(--green);
+  font-size: 0.875rem;
+  text-align: right;
+  text-decoration: none;
+  text-underline-offset: 3px;
+  transition:
+    color 0.18s ease,
+    text-decoration-color 0.18s ease;
+}
+
+body[data-page="login"] .login-forgot-password:hover,
+body[data-page="login"] .login-forgot-password:focus-visible {
+  color: var(--green2);
+  text-decoration: underline;
+}
+
+body[data-page="login"] .login-forgot-password:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid rgba(47, 112, 80, 0.35);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="login"] .login-forgot-password {
+    transition: none;
+  }
+}
