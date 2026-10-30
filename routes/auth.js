@@ -2,12 +2,18 @@ const crypto = require("node:crypto");
 const bcrypt = require("bcryptjs");
 const express = require("express");
 const mongoose = require("mongoose");
+const Session = require("../models/Session");
 const User = require("../models/User");
+const {
+  SESSION_COOKIE_NAME,
+  createAuthenticationMiddleware,
+} = require("../middleware/authenticate");
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^(?:09\d{9}|\+639\d{9})$/;
 const PASSWORD_MIN_LENGTH = 8;
 const DUMMY_BCRYPT_ROUNDS = 12;
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 let dummyPasswordHashPromise;
 
@@ -106,9 +112,16 @@ function compareAgainstDummyHash(password) {
 
 function createAuthRouter({
   UserModel = User,
+  SessionModel = Session,
   isDatabaseReady = () => mongoose.connection.readyState === 1,
+  isProduction = () => process.env.NODE_ENV === "production",
 } = {}) {
   const router = express.Router();
+  const authenticate = createAuthenticationMiddleware({
+    SessionModel,
+    UserModel,
+    isDatabaseReady,
+  });
 
   router.post("/login", async (request, response) => {
     const validation = validateLogin(request.body);
@@ -133,8 +146,23 @@ function createAuthRouter({
         return response.status(401).json({ error: "Invalid email or password." });
       }
 
+      const token = crypto.randomBytes(32).toString("base64url");
+      await SessionModel.create({
+        userId: user._id || user.id,
+        tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+        expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
+      });
+
+      response.cookie(SESSION_COOKIE_NAME, token, {
+        httpOnly: true,
+        secure: isProduction(),
+        sameSite: "lax",
+        path: "/",
+        maxAge: SESSION_DURATION_MS,
+      });
+
       return response.status(200).json({
-        message: "Credentials verified. No session has been established.",
+        message: "Login successful.",
         user: {
           id: user.id,
           firstName: user.firstName,
@@ -148,6 +176,26 @@ function createAuthRouter({
       return response
         .status(500)
         .json({ error: "Unable to log in right now." });
+    }
+  });
+
+  router.get("/me", authenticate, (request, response) => {
+    return response.status(200).json({ user: request.authUser });
+  });
+
+  router.post("/logout", authenticate, async (request, response) => {
+    try {
+      await SessionModel.deleteOne({ _id: request.authSessionId });
+      response.clearCookie(SESSION_COOKIE_NAME, {
+        httpOnly: true,
+        secure: isProduction(),
+        sameSite: "lax",
+        path: "/",
+      });
+      return response.status(200).json({ message: "Logged out." });
+    } catch (error) {
+      console.error("Logout request failed:", error?.name || "Error");
+      return response.status(500).json({ error: "Unable to log out right now." });
     }
   });
 

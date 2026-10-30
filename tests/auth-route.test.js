@@ -1,8 +1,11 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const express = require("express");
 const request = require("supertest");
 const test = require("node:test");
+const Session = require("../models/Session");
 const { createAuthRouter } = require("../routes/auth");
+const { SESSION_COOKIE_NAME } = require("../middleware/authenticate");
 
 const validRegistration = {
   firstName: "  Ana ",
@@ -21,21 +24,16 @@ function createTestApp(options) {
 }
 
 function fakeUserModel({ existingUser = null, createError = null } = {}) {
-  const calls = { findOne: [], select: [], create: [] };
+  const calls = { findOne: [], findById: [], select: [], create: [] };
   return {
     calls,
     findOne(query) {
       calls.findOne.push(query);
-      return {
-        select(selection) {
-          calls.select.push(selection);
-          return this;
-        },
-        lean: async () => existingUser,
-        then(resolve, reject) {
-          return Promise.resolve(existingUser).then(resolve, reject);
-        },
-      };
+      return fakeQuery(existingUser, calls);
+    },
+    findById(id) {
+      calls.findById.push(id);
+      return fakeQuery(existingUser, calls);
     },
     async create(user) {
       calls.create.push(user);
@@ -45,8 +43,49 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
   };
 }
 
+function fakeQuery(value, calls) {
+  return {
+    select(selection) {
+      calls.select.push(selection);
+      return this;
+    },
+    lean: async () => value,
+    then(resolve, reject) {
+      return Promise.resolve(value).then(resolve, reject);
+    },
+  };
+}
+
+function fakeSessionModel({
+  session = null,
+  createError = null,
+  deleteError = null,
+} = {}) {
+  const calls = { create: [], findOne: [], deleteOne: [] };
+  return {
+    calls,
+    async create(value) {
+      calls.create.push(value);
+      if (createError) throw createError;
+      return { id: "session-1", ...value };
+    },
+    findOne(query) {
+      calls.findOne.push(query);
+      const isUnexpired =
+        session && session.expiresAt > query.expiresAt.$gt;
+      return { lean: async () => (isUnexpired ? session : null) };
+    },
+    async deleteOne(query) {
+      calls.deleteOne.push(query);
+      if (deleteError) throw deleteError;
+      return { deletedCount: 1 };
+    },
+  };
+}
+
 function createLoginUser(overrides = {}) {
   return {
+    _id: "user-1",
     id: "user-1",
     firstName: "Ana",
     lastName: "Cruz",
@@ -200,8 +239,10 @@ test("returns unavailable when the database is disconnected for login", async ()
 test("verifies credentials using the selected password and returns safe user data", async () => {
   const user = createLoginUser();
   const model = fakeUserModel({ existingUser: user });
+  const sessions = fakeSessionModel();
   const app = createTestApp({
     UserModel: model,
+    SessionModel: sessions,
     isDatabaseReady: () => true,
   });
 
@@ -212,6 +253,16 @@ test("verifies credentials using the selected password and returns safe user dat
   assert.equal(response.status, 200);
   assert.equal(model.calls.findOne[0].email, "ana@example.com");
   assert.deepEqual(model.calls.select, ["+password"]);
+  assert.equal(sessions.calls.create.length, 1);
+  assert.equal(sessions.calls.create[0].userId, "user-1");
+  assert.match(sessions.calls.create[0].tokenHash, /^[a-f0-9]{64}$/);
+  assert.ok(sessions.calls.create[0].expiresAt > new Date());
+  const cookie = response.headers["set-cookie"][0];
+  assert.match(cookie, new RegExp(`^${SESSION_COOKIE_NAME}=`));
+  assert.match(cookie, /HttpOnly/i);
+  assert.match(cookie, /SameSite=Lax/i);
+  assert.match(cookie, /Path=\//i);
+  assert.equal(/;\s*Secure/i.test(cookie), false);
   assert.deepEqual(response.body.user, {
     id: "user-1",
     firstName: "Ana",
@@ -219,8 +270,12 @@ test("verifies credentials using the selected password and returns safe user dat
     email: "ana@example.com",
     role: "customer",
   });
-  assert.match(response.body.message, /No session has been established/);
+  assert.equal(response.body.message, "Login successful.");
   assert.equal("password" in response.body.user, false);
+  assert.equal(
+    JSON.stringify(response.body).includes(response.headers["set-cookie"][0].split("=")[1].split(";")[0]),
+    false,
+  );
 });
 
 test("uses the same unauthorized response for bad passwords and unknown accounts", async () => {
@@ -262,4 +317,126 @@ test("rejects inactive users with the same unauthorized response", async () => {
 
   assert.equal(response.status, 401);
   assert.deepEqual(response.body, { error: "Invalid email or password." });
+});
+
+test("protects the current-user route and rejects missing and invalid cookies", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    SessionModel: fakeSessionModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const noCookie = await request(app).get("/api/auth/me");
+  const badCookie = await request(app)
+    .get("/api/auth/me")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=not-a-token`);
+
+  assert.equal(noCookie.status, 401);
+  assert.equal(badCookie.status, 401);
+});
+
+test("authenticates using a hashed token, active user, and returns minimal identity", async () => {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const session = {
+    _id: "session-1",
+    userId: "user-1",
+    tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+  const sessions = fakeSessionModel({ session });
+  const userModel = fakeUserModel({ existingUser: createLoginUser() });
+  const app = createTestApp({
+    UserModel: userModel,
+    SessionModel: sessions,
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .get("/api/auth/me")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+
+  assert.equal(response.status, 200);
+  assert.equal(sessions.calls.findOne[0].tokenHash, session.tokenHash);
+  assert.ok(sessions.calls.findOne[0].expiresAt.$gt instanceof Date);
+  assert.deepEqual(userModel.calls.findById, ["user-1"]);
+  assert.deepEqual(response.body.user, {
+    id: "user-1",
+    firstName: "Ana",
+    lastName: "Cruz",
+    email: "ana@example.com",
+    role: "customer",
+  });
+});
+
+test("rejects expired sessions and inactive accounts", async () => {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const expiredSession = {
+    _id: "session-1",
+    userId: "user-1",
+    expiresAt: new Date(Date.now() - 60_000),
+  };
+  const expiredApp = createTestApp({
+    UserModel: fakeUserModel({ existingUser: createLoginUser() }),
+    SessionModel: fakeSessionModel({ session: expiredSession }),
+    isDatabaseReady: () => true,
+  });
+  const inactiveSession = {
+    ...expiredSession,
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+  const inactiveApp = createTestApp({
+    UserModel: fakeUserModel({
+      existingUser: createLoginUser({ isActive: false }),
+    }),
+    SessionModel: fakeSessionModel({ session: inactiveSession }),
+    isDatabaseReady: () => true,
+  });
+
+  const expiredResponse = await request(expiredApp)
+    .get("/api/auth/me")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+  const inactiveResponse = await request(inactiveApp)
+    .get("/api/auth/me")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+
+  assert.equal(expiredResponse.status, 401);
+  assert.equal(inactiveResponse.status, 401);
+});
+
+test("logs out by revoking the session and clearing the cookie", async () => {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const session = {
+    _id: "session-1",
+    userId: "user-1",
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+  const sessions = fakeSessionModel({ session });
+  const app = createTestApp({
+    UserModel: fakeUserModel({ existingUser: createLoginUser() }),
+    SessionModel: sessions,
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/logout")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(sessions.calls.deleteOne, [{ _id: "session-1" }]);
+  assert.match(response.headers["set-cookie"][0], new RegExp(`^${SESSION_COOKIE_NAME}=;`));
+  assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
+});
+
+test("defines a unique token hash and expiration cleanup index", () => {
+  const indexes = Session.schema.indexes();
+
+  assert.ok(
+    indexes.some(([keys, options]) => keys.tokenHash === 1 && options.unique),
+  );
+  assert.ok(
+    indexes.some(
+      ([keys, options]) => keys.expiresAt === 1 && options.expireAfterSeconds === 0,
+    ),
+  );
+  assert.equal(Session.schema.path("tokenHash").options.select, false);
 });
