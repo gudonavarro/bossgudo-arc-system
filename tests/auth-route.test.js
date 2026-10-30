@@ -21,16 +21,20 @@ function createTestApp(options) {
 }
 
 function fakeUserModel({ existingUser = null, createError = null } = {}) {
-  const calls = { findOne: [], create: [] };
+  const calls = { findOne: [], select: [], create: [] };
   return {
     calls,
     findOne(query) {
       calls.findOne.push(query);
       return {
-        select() {
+        select(selection) {
+          calls.select.push(selection);
           return this;
         },
         lean: async () => existingUser,
+        then(resolve, reject) {
+          return Promise.resolve(existingUser).then(resolve, reject);
+        },
       };
     },
     async create(user) {
@@ -38,6 +42,21 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
       if (createError) throw createError;
       return { id: "user-1", ...user };
     },
+  };
+}
+
+function createLoginUser(overrides = {}) {
+  return {
+    id: "user-1",
+    firstName: "Ana",
+    lastName: "Cruz",
+    email: "ana@example.com",
+    role: "customer",
+    isActive: true,
+    async comparePassword(password) {
+      return password === "StrongPass1!";
+    },
+    ...overrides,
   };
 }
 
@@ -141,4 +160,106 @@ test("maps duplicate index races to conflict", async () => {
 
   assert.equal(response.status, 409);
   assert.equal(response.body.error, "An account with those details already exists.");
+});
+
+test("validates login input before database access", async () => {
+  const model = fakeUserModel();
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => true,
+  });
+
+  for (const body of [
+    {},
+    { email: "not-an-email", password: "pass" },
+    { email: "ana@example.com", password: "" },
+    { email: "ana@example.com", password: 123 },
+  ]) {
+    const response = await request(app).post("/api/auth/login").send(body);
+    assert.equal(response.status, 400);
+    assert.equal(typeof response.body.error, "string");
+  }
+  assert.equal(model.calls.findOne.length, 0);
+});
+
+test("returns unavailable when the database is disconnected for login", async () => {
+  const model = fakeUserModel();
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => false,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+
+  assert.equal(response.status, 503);
+  assert.equal(model.calls.findOne.length, 0);
+});
+
+test("verifies credentials using the selected password and returns safe user data", async () => {
+  const user = createLoginUser();
+  const model = fakeUserModel({ existingUser: user });
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/login")
+    .send({ email: " ANA@EXAMPLE.COM ", password: "StrongPass1!" });
+
+  assert.equal(response.status, 200);
+  assert.equal(model.calls.findOne[0].email, "ana@example.com");
+  assert.deepEqual(model.calls.select, ["+password"]);
+  assert.deepEqual(response.body.user, {
+    id: "user-1",
+    firstName: "Ana",
+    lastName: "Cruz",
+    email: "ana@example.com",
+    role: "customer",
+  });
+  assert.match(response.body.message, /No session has been established/);
+  assert.equal("password" in response.body.user, false);
+});
+
+test("uses the same unauthorized response for bad passwords and unknown accounts", async () => {
+  const existingUserModel = fakeUserModel({
+    existingUser: createLoginUser(),
+  });
+  const existingUserApp = createTestApp({
+    UserModel: existingUserModel,
+    isDatabaseReady: () => true,
+  });
+  const unknownUserApp = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const badPasswordResponse = await request(existingUserApp)
+    .post("/api/auth/login")
+    .send({ email: "ana@example.com", password: "WrongPass1!" });
+  const unknownUserResponse = await request(unknownUserApp)
+    .post("/api/auth/login")
+    .send({ email: "nobody@example.com", password: "WrongPass1!" });
+
+  assert.equal(badPasswordResponse.status, 401);
+  assert.deepEqual(unknownUserResponse.body, badPasswordResponse.body);
+});
+
+test("rejects inactive users with the same unauthorized response", async () => {
+  const model = fakeUserModel({
+    existingUser: createLoginUser({ isActive: false }),
+  });
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(response.body, { error: "Invalid email or password." });
 });

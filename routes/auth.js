@@ -1,3 +1,5 @@
+const crypto = require("node:crypto");
+const bcrypt = require("bcryptjs");
 const express = require("express");
 const mongoose = require("mongoose");
 const User = require("../models/User");
@@ -5,6 +7,9 @@ const User = require("../models/User");
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^(?:09\d{9}|\+639\d{9})$/;
 const PASSWORD_MIN_LENGTH = 8;
+const DUMMY_BCRYPT_ROUNDS = 12;
+
+let dummyPasswordHashPromise;
 
 function normalizePhoneNumber(value) {
   const compact = value.replace(/[\s()-]/g, "");
@@ -70,11 +75,81 @@ function validateRegistration(body) {
   };
 }
 
+function validateLogin(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Provide your email and password." };
+  }
+
+  const { email, password } = body;
+  if (typeof email !== "string" || typeof password !== "string") {
+    return { error: "Provide your email and password." };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (normalizedEmail.length > 254 || !EMAIL_PATTERN.test(normalizedEmail)) {
+    return { error: "Enter a valid email address." };
+  }
+  if (!password || password.length > 1024) {
+    return { error: "Enter a valid password." };
+  }
+
+  return { value: { email: normalizedEmail, password } };
+}
+
+function compareAgainstDummyHash(password) {
+  if (!dummyPasswordHashPromise) {
+    const randomPassword = crypto.randomBytes(32).toString("hex");
+    dummyPasswordHashPromise = bcrypt.hash(randomPassword, DUMMY_BCRYPT_ROUNDS);
+  }
+  return dummyPasswordHashPromise.then((hash) => bcrypt.compare(password, hash));
+}
+
 function createAuthRouter({
   UserModel = User,
   isDatabaseReady = () => mongoose.connection.readyState === 1,
 } = {}) {
   const router = express.Router();
+
+  router.post("/login", async (request, response) => {
+    const validation = validateLogin(request.body);
+    if (validation.error) {
+      return response.status(400).json({ error: validation.error });
+    }
+
+    if (!isDatabaseReady()) {
+      return response
+        .status(503)
+        .json({ error: "Login is temporarily unavailable." });
+    }
+
+    try {
+      const user = await UserModel.findOne({ email: validation.value.email })
+        .select("+password");
+      const passwordMatches = user
+        ? await user.comparePassword(validation.value.password)
+        : await compareAgainstDummyHash(validation.value.password);
+
+      if (!user || !passwordMatches || !user.isActive) {
+        return response.status(401).json({ error: "Invalid email or password." });
+      }
+
+      return response.status(200).json({
+        message: "Credentials verified. No session has been established.",
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error("Login request failed:", error?.name || "Error");
+      return response
+        .status(500)
+        .json({ error: "Unable to log in right now." });
+    }
+  });
 
   router.post("/register", async (request, response) => {
     const validation = validateRegistration(request.body);
@@ -146,4 +221,4 @@ function createAuthRouter({
   return router;
 }
 
-module.exports = { createAuthRouter, validateRegistration };
+module.exports = { createAuthRouter, validateLogin, validateRegistration };
