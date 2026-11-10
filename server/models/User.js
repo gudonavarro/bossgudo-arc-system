@@ -1,8 +1,10 @@
 const bcrypt = require("bcryptjs");
-const mongoose = require("mongoose");
+const mongooseModule = require("mongoose");
+const mongoose = mongooseModule.default || mongooseModule;
 
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const BCRYPT_ROUNDS = 12;
+const BCRYPT_MAX_PASSWORD_BYTES = 72;
 
 function normalizePhoneNumber(phoneNumber) {
   const compact = String(phoneNumber ?? "").replace(/[\s()-]/g, "");
@@ -61,6 +63,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    passwordChangedAt: {
+      type: Date,
+      default: Date.now,
+      select: false,
+    },
     resetTokenHash: {
       type: String,
       select: false,
@@ -77,6 +84,7 @@ const userSchema = new mongoose.Schema(
         delete result.password;
         delete result.resetTokenHash;
         delete result.resetTokenExpires;
+        delete result.passwordChangedAt;
         return result;
       },
     },
@@ -93,6 +101,13 @@ userSchema.pre("validate", async function hashPasswordBeforeValidation() {
     return;
   }
   const password = this.password;
+  if (Buffer.byteLength(password, "utf8") > BCRYPT_MAX_PASSWORD_BYTES) {
+    this.invalidate(
+      "password",
+      "Password must not exceed 72 UTF-8 bytes.",
+    );
+    return;
+  }
   this.password = await bcrypt.hash(password, BCRYPT_ROUNDS);
   this.$locals.hashedPassword = this.password;
 });
@@ -105,4 +120,4 @@ userSchema.methods.comparePassword = function comparePassword(candidate) {
 userSchema.index({ resetTokenHash: 1 }, { unique: true, sparse: true });
 
 module.exports =
-  mongoose.models.User || mongoose.model("User", userSchema);
+  mongoose.models?.User || mongoose.model("User", userSchema);

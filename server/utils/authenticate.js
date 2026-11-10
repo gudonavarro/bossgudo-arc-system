@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
-const mongoose = require("mongoose");
+const mongooseModule = require("mongoose");
+const mongoose = mongooseModule.default || mongooseModule;
 const Session = require("../models/Session");
 const User = require("../models/User");
 
@@ -7,7 +8,7 @@ const SESSION_COOKIE_NAME = "bossgudo_session";
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 function readSessionToken(request) {
-  const cookieHeader = request.headers.cookie;
+  const cookieHeader = request?.headers?.cookie;
   if (typeof cookieHeader !== "string") return null;
 
   const cookiePrefix = `${SESSION_COOKIE_NAME}=`;
@@ -34,11 +35,13 @@ function createAuthenticationMiddleware({
   SessionModel = Session,
   UserModel = User,
   isDatabaseReady = () => mongoose.connection.readyState === 1,
+  respondUnauthenticated = (_request, response) =>
+    response.status(401).json({ error: "Authentication required." }),
 } = {}) {
   return async function authenticateRequest(request, response, next) {
     const token = readSessionToken(request);
     if (!token) {
-      return response.status(401).json({ error: "Authentication required." });
+      return respondUnauthenticated(request, response);
     }
     if (!isDatabaseReady()) {
       return response
@@ -52,14 +55,16 @@ function createAuthenticationMiddleware({
         expiresAt: { $gt: new Date() },
       }).lean();
       if (!session) {
-        return response.status(401).json({ error: "Authentication required." });
+        return respondUnauthenticated(request, response);
       }
 
       const user = await UserModel.findById(session.userId)
-        .select("firstName lastName email role isActive")
+        .select("firstName lastName email role isActive +passwordChangedAt")
         .lean();
-      if (!user || !user.isActive) {
-        return response.status(401).json({ error: "Authentication required." });
+      const passwordChangedAfterSession =
+        user?.passwordChangedAt?.getTime() > session.createdAt?.getTime();
+      if (!user || !user.isActive || passwordChangedAfterSession) {
+        return respondUnauthenticated(request, response);
       }
 
       request.authUser = {
@@ -72,7 +77,8 @@ function createAuthenticationMiddleware({
       request.authSessionId = session._id;
       return next();
     } catch (error) {
-      console.error("Authentication request failed:", error?.name || "Error");
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      console.error("Authentication request failed:", errorName);
       return response
         .status(500)
         .json({ error: "Unable to authenticate this request." });

@@ -2070,7 +2070,7 @@ body[data-page="home"] #app > .hero {
   border-radius: 0;
   background:
     linear-gradient(90deg, rgba(8, 31, 21, 0.86) 0%, rgba(12, 55, 35, 0.68) 52%, rgba(17, 58, 37, 0.26) 100%),
-    url("../pictures/home-hero-bg.jpg") center / cover no-repeat;
+    url("/images/home-hero-bg.jpg") center / cover no-repeat;
   box-shadow: none;
 }
 
@@ -2408,7 +2408,7 @@ body[data-page="login"] {
   flex-direction: column;
   background-image:
     linear-gradient(rgba(13, 30, 21, 0.62), rgba(13, 30, 21, 0.72)),
-    url("../pictures/home-hero-bg.jpg");
+    url("/images/home-hero-bg.jpg");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;

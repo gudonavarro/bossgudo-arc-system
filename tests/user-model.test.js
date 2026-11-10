@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const bcrypt = require("bcryptjs");
-const User = require("../models/User");
+const User = require("../server/models/User");
 
 test("normalizes email and Philippine phone, with safe defaults", () => {
   const user = new User({
@@ -72,6 +72,24 @@ test("hashes plaintext passwords before validation", async () => {
   assert.equal(await bcrypt.compare(password, user.password), true);
 });
 
+test("rejects passwords that bcrypt would silently truncate", async () => {
+  const user = new User({
+    firstName: "Ana",
+    lastName: "Cruz",
+    email: "ana@example.com",
+    phoneNumber: "+639171234567",
+    password: `StrongPass1!${"x".repeat(70)}`,
+  });
+  const error = await user.validate().then(
+    () => null,
+    (validationError) => validationError,
+  );
+
+  assert.ok(error);
+  assert.match(error.errors.password.message, /72 UTF-8 bytes/);
+  assert.equal(user.password, `StrongPass1!${"x".repeat(70)}`);
+});
+
 test("hashes only once during repeated validation and handles hash-shaped input", async () => {
   const password = `$2b$12$${"a".repeat(53)}`;
   const user = new User({
@@ -106,6 +124,8 @@ test("does not serialize password or reset token fields", () => {
   assert.equal("password" in serialized, false);
   assert.equal("resetTokenHash" in serialized, false);
   assert.equal("resetTokenExpires" in serialized, false);
+  assert.equal("passwordChangedAt" in serialized, false);
+  assert.equal(User.schema.path("passwordChangedAt").options.select, false);
 });
 
 test("defines unique indexes for email and reset token hashes", () => {

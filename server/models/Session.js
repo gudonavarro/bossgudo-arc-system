@@ -1,4 +1,5 @@
-const mongoose = require("mongoose");
+const mongooseModule = require("mongoose");
+const mongoose = mongooseModule.default || mongooseModule;
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -21,7 +22,8 @@ const sessionSchema = new mongoose.Schema(
 );
 
 sessionSchema.index({ tokenHash: 1 }, { unique: true });
+sessionSchema.index({ userId: 1 });
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports =
-  mongoose.models.Session || mongoose.model("Session", sessionSchema);
+  mongoose.models?.Session || mongoose.model("Session", sessionSchema);
