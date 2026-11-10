@@ -166,6 +166,42 @@ main {
   flex-wrap: wrap;
   margin-top: 25px;
 }
+.hero-actions > a,
+.card > a.action-link,
+.page-content a.action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 16px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.page-content {
+  width: 100%;
+}
+.feature-page {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.feature-page-content {
+  display: grid;
+  gap: 18px;
+}
+.page-content > .grid3,
+.page-content.grid3 {
+  align-items: stretch;
+}
+.page-content h2,
+.card h2 {
+  color: #143f39;
+  font-size: 1.15rem;
+}
+.booking-notice {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
 .section-head {
   display: flex;
   justify-content: space-between;

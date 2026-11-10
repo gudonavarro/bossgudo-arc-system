@@ -8,13 +8,23 @@ async function submit() {
   pending.value = true;
   feedback.value = "";
   try {
-    await $fetch("/api/auth/login", {
+    const result = await $fetch<{ user: { id: string; firstName: string } }>("/api/auth/login", {
       method: "POST",
       body: { email: email.value, password: password.value },
     });
+    window.dispatchEvent(
+      new CustomEvent("app:session-change", { detail: result.user }),
+    );
     await navigateTo("/mybookings");
   } catch (error) {
-    feedback.value = error instanceof Error ? error.message : "Unable to log in.";
+    const responseError = error as {
+      data?: { error?: string };
+      message?: string;
+    };
+    feedback.value =
+      responseError.data?.error ||
+      responseError.message ||
+      "Unable to log in.";
   } finally {
     pending.value = false;
   }

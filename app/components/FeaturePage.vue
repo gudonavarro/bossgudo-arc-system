@@ -6,11 +6,15 @@ defineProps<{
 </script>
 
 <template>
-  <section class="section-head page-section">
-    <div>
-      <h1 class="page-title">{{ title }}</h1>
-      <p class="muted">{{ description }}</p>
+  <section class="feature-page">
+    <div class="section-head">
+      <div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="muted">{{ description }}</p>
+      </div>
     </div>
-    <slot />
+    <div class="feature-page-content">
+      <slot />
+    </div>
   </section>
 </template>
