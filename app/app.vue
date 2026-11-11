@@ -6,7 +6,6 @@ const legacyPages = new Set([
   "home",
   "about",
   "shop",
-  "booking",
   "mybookings",
   "admin",
 ]);

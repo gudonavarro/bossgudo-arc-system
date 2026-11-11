@@ -1,20 +1,31 @@
 <template>
-  <FeaturePage title="Bookings" description="Choose the type of service you want to discuss with the farm.">
-    <div class="grid3 page-content">
-      <article class="card">
-        <h2>Pond service</h2>
-        <p>Review pond packages or discuss a custom pond setup.</p>
-        <NuxtLink class="secondary action-link" to="/shop">Browse packages</NuxtLink>
+  <FeaturePage
+    title="Booking"
+    description="Choose what you would like to arrange with the farm."
+  >
+    <section class="choice-grid" aria-label="Booking types">
+      <article class="choice">
+        <div class="service-icon" aria-hidden="true">🌊</div>
+        <h3>Book a Service</h3>
+        <p>
+          Choose a pond package or discuss manufacturing, installation, and
+          custom pond design.
+        </p>
+        <NuxtLink class="primary action-link" to="/servicebooking">
+          Select Service <span aria-hidden="true">→</span>
+        </NuxtLink>
       </article>
-      <article class="card">
-        <h2>Farm visitation</h2>
-        <p>Farm visits are planned for weekends and can accommodate 1–5 visitors.</p>
-        <p class="muted">Contact the farm to confirm availability before travelling.</p>
+
+      <article class="choice">
+        <div class="service-icon" aria-hidden="true">🏡</div>
+        <h3>Book a Visitation</h3>
+        <p>
+          Schedule a farm visit for 1–5 visitors on an available weekend.
+        </p>
+        <NuxtLink class="primary action-link" to="/visitationbooking">
+          Select Visitation <span aria-hidden="true">→</span>
+        </NuxtLink>
       </article>
-      <p class="panel booking-notice">
-        Online booking submission is not currently connected. These pages provide
-        service information but do not create or reserve a booking.
-      </p>
-    </div>
+    </section>
   </FeaturePage>
 </template>
