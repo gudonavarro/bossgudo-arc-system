@@ -4,6 +4,8 @@ definePageMeta({ middleware: ["guest"] });
 const form = reactive({ firstName: "", lastName: "", email: "", phoneNumber: "", password: "", confirmPassword: "" });
 const feedback = ref("");
 const pending = ref(false);
+const showPassword = ref(false);
+const showConfirmPassword = ref(false);
 
 async function submit() {
   pending.value = true;
@@ -52,11 +54,41 @@ async function submit() {
           <div class="field"><label for="lastName">LAST NAME</label><input id="lastName" v-model="form.lastName" required></div>
           <div class="field"><label for="email">EMAIL ADDRESS</label><input id="email" v-model="form.email" type="email" required></div>
           <div class="field"><label for="phoneNumber">PHONE NUMBER</label><input id="phoneNumber" v-model="form.phoneNumber" required></div>
-          <div class="field"><label for="password">PASSWORD</label><input id="password" v-model="form.password" type="password" required></div>
-          <div class="field"><label for="confirmPassword">CONFIRM PASSWORD</label><input id="confirmPassword" v-model="form.confirmPassword" type="password" required></div>
-          <button class="primary" type="submit" :disabled="pending">{{ pending ? "Creating..." : "Create Account" }}</button>
+          <div class="field">
+            <label for="password">PASSWORD</label>
+            <div class="register-password-wrap">
+              <input id="password" v-model="form.password" :type="showPassword ? 'text' : 'password'" required>
+              <button
+                class="register-password-toggle"
+                type="button"
+                :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                @click="showPassword = !showPassword"
+              >
+                {{ showPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="confirmPassword">CONFIRM PASSWORD</label>
+            <div class="register-password-wrap">
+              <input id="confirmPassword" v-model="form.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" required>
+              <button
+                class="register-password-toggle"
+                type="button"
+                :aria-label="showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'"
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                {{ showConfirmPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
+          </div>
+          <button class="primary register-submit" type="submit" :disabled="pending">{{ pending ? "Creating..." : "Create Account" }}</button>
           <output v-if="feedback" class="form-feedback show" aria-live="polite">{{ feedback }}</output>
         </form>
+        <p class="auth-card-footer register-login-link">
+          Already have an account?
+          <NuxtLink to="/login">Login</NuxtLink>
+        </p>
       </section>
     </section>
   </main>
