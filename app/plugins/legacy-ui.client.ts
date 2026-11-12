@@ -4,16 +4,31 @@ interface AuthSession {
   user: {
     id: string;
     firstName: string;
+    lastName?: string;
+    email?: string;
+    role?: string;
   } | null;
 }
 
 export default defineNuxtPlugin((nuxtApp) => {
   const router = useRouter();
+  const authUser = useState<AuthSession["user"]>("auth:user", () => null);
+  const authReady = useState<boolean>("auth:ready", () => false);
   const browserWindow = window as typeof window & {
     __bossGudoNavigate?: (path: string) => Promise<unknown>;
   };
 
+  const syncSession = (user: AuthSession["user"]) => {
+    authUser.value = user ?? null;
+    authReady.value = true;
+  };
+
   browserWindow.__bossGudoNavigate = (path) => router.push(path);
+
+  window.addEventListener("app:session-change", ((event: Event) => {
+    const detail = (event as CustomEvent<AuthSession["user"]>).detail;
+    syncSession(detail ?? null);
+  }) as EventListener);
 
   router.afterEach((route) => {
     const currentPage = route.path.replace(/^\/+|\/+$/g, "") || "home";
@@ -33,6 +48,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       credentials: "include",
     })
       .then(({ user }) => {
+        syncSession(user ?? null);
         if (user) {
           window.dispatchEvent(
             new CustomEvent("app:session-change", { detail: user }),
@@ -40,6 +56,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         }
       })
       .catch((error: unknown) => {
+        syncSession(null);
         console.error("Could not restore the signed-in user session:", error);
       });
   });

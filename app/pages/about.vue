@@ -1,3 +1,7 @@
+<script setup lang="ts">
+definePageMeta({ middleware: ["auth"] });
+</script>
+
 <template>
   <FeaturePage title="About the Farm" description="Practical Australian Red Claw support for people building or growing a farm.">
     <div class="page-content panel">

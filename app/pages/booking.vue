@@ -1,3 +1,7 @@
+<script setup lang="ts">
+definePageMeta({ middleware: ["auth"] });
+</script>
+
 <template>
   <FeaturePage title="Bookings" description="Choose the type of service you want to discuss with the farm.">
     <div class="grid3 page-content">

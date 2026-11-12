@@ -1,3 +1,7 @@
+<script setup lang="ts">
+definePageMeta({ middleware: ["auth"] });
+</script>
+
 <template>
   <FeaturePage title="Shop" description="Explore the pond service options available for your farm.">
     <section class="grid3 page-content" aria-label="Pond service options">

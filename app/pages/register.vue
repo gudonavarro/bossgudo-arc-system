@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ middleware: ["guest"] });
+
 const form = reactive({ firstName: "", lastName: "", email: "", phoneNumber: "", password: "", confirmPassword: "" });
 const feedback = ref("");
 const pending = ref(false);

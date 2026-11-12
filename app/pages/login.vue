@@ -1,8 +1,23 @@
 <script setup lang="ts">
+definePageMeta({ middleware: ["guest"] });
+
+const route = useRoute();
 const email = ref("");
 const password = ref("");
 const feedback = ref("");
 const pending = ref(false);
+const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
+const authReady = useState<boolean>("auth:ready", () => false);
+
+watch(
+  () => [authReady.value, authUser.value],
+  ([ready, user]) => {
+    if (ready && user) {
+      void navigateTo("/", { replace: true });
+    }
+  },
+  { immediate: true },
+);
 
 async function submit() {
   pending.value = true;
@@ -12,10 +27,15 @@ async function submit() {
       method: "POST",
       body: { email: email.value, password: password.value },
     });
+
+    authUser.value = result.user ?? null;
+    authReady.value = true;
     window.dispatchEvent(
       new CustomEvent("app:session-change", { detail: result.user }),
     );
-    await navigateTo("/mybookings");
+
+    const redirectTarget = typeof route.query.next === "string" && route.query.next.startsWith("/") ? route.query.next : "/";
+    await navigateTo(redirectTarget, { replace: true });
   } catch (error) {
     const responseError = error as {
       data?: { error?: string };
