@@ -2,6 +2,8 @@
 const route = useRoute();
 const password = ref("");
 const confirmPassword = ref("");
+const showPassword = ref(false);
+const showConfirmPassword = ref(false);
 const feedback = ref("");
 async function submit() {
   try {
@@ -46,8 +48,34 @@ async function submit() {
         <h1 class="page-title">Reset Password</h1>
         <p class="recovery-subtitle">Choose a new password for your account.</p>
         <form @submit.prevent="submit">
-          <div class="field"><label for="password">PASSWORD</label><input id="password" v-model="password" type="password" required></div>
-          <div class="field"><label for="confirmPassword">CONFIRM PASSWORD</label><input id="confirmPassword" v-model="confirmPassword" type="password" required></div>
+          <div class="field">
+            <label for="password">PASSWORD</label>
+            <div class="register-password-wrap">
+              <input id="password" v-model="password" :type="showPassword ? 'text' : 'password'" required>
+              <button
+                class="register-password-toggle"
+                type="button"
+                :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                @click="showPassword = !showPassword"
+              >
+                {{ showPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="confirmPassword">CONFIRM PASSWORD</label>
+            <div class="register-password-wrap">
+              <input id="confirmPassword" v-model="confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" required>
+              <button
+                class="register-password-toggle"
+                type="button"
+                :aria-label="showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'"
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                {{ showConfirmPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
+          </div>
           <button class="primary" type="submit">Reset Password</button>
           <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
         </form>
