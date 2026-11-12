@@ -20,17 +20,22 @@ async function submit() {
 </script>
 
 <template>
-  <section class="panel auth-card">
-    <h1 class="page-title">Create your account</h1>
-    <form @submit.prevent="submit">
-      <div class="field"><label for="firstName">FIRST NAME</label><input id="firstName" v-model="form.firstName" required></div>
-      <div class="field"><label for="lastName">LAST NAME</label><input id="lastName" v-model="form.lastName" required></div>
-      <div class="field"><label for="email">EMAIL ADDRESS</label><input id="email" v-model="form.email" type="email" required></div>
-      <div class="field"><label for="phoneNumber">PHONE NUMBER</label><input id="phoneNumber" v-model="form.phoneNumber" required></div>
-      <div class="field"><label for="password">PASSWORD</label><input id="password" v-model="form.password" type="password" required></div>
-      <div class="field"><label for="confirmPassword">CONFIRM PASSWORD</label><input id="confirmPassword" v-model="form.confirmPassword" type="password" required></div>
-      <button class="primary" type="submit" :disabled="pending">{{ pending ? "Creating..." : "Create Account" }}</button>
-      <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
-    </form>
-  </section>
+  <main class="register-shell">
+    <section class="register-visual" aria-hidden="true" />
+    <section class="register-panel" aria-label="Create account form">
+      <section class="panel auth-card">
+        <h1 class="page-title">Create your account</h1>
+        <form @submit.prevent="submit">
+          <div class="field"><label for="firstName">FIRST NAME</label><input id="firstName" v-model="form.firstName" required></div>
+          <div class="field"><label for="lastName">LAST NAME</label><input id="lastName" v-model="form.lastName" required></div>
+          <div class="field"><label for="email">EMAIL ADDRESS</label><input id="email" v-model="form.email" type="email" required></div>
+          <div class="field"><label for="phoneNumber">PHONE NUMBER</label><input id="phoneNumber" v-model="form.phoneNumber" required></div>
+          <div class="field"><label for="password">PASSWORD</label><input id="password" v-model="form.password" type="password" required></div>
+          <div class="field"><label for="confirmPassword">CONFIRM PASSWORD</label><input id="confirmPassword" v-model="form.confirmPassword" type="password" required></div>
+          <button class="primary" type="submit" :disabled="pending">{{ pending ? "Creating..." : "Create Account" }}</button>
+          <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
+        </form>
+      </section>
+    </section>
+  </main>
 </template>

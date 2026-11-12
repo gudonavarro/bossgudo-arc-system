@@ -2443,10 +2443,50 @@ body[data-page="login"] {
   background: var(--cream);
 }
 
+body[data-page="register"] {
+  background: var(--cream);
+}
+
 body[data-page="login"] main {
   max-width: none;
   margin: 0;
   padding: 0;
+}
+
+body[data-page="register"] main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+.register-visual,
+.register-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px clamp(32px, 5vw, 56px);
+}
+
+.register-visual {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: #123d37;
+}
+
+.register-panel {
+  background: #f5f6f2;
+}
+
+.register-panel .auth-card {
+  margin: 0;
 }
 
 .login-shell {
@@ -2822,6 +2862,18 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 900px) {
+  .register-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .register-visual {
+    min-height: 340px;
+  }
+
+  .register-panel {
+    padding: 40px 28px;
+  }
+
   .login-shell {
     grid-template-columns: 1fr;
   }
@@ -2845,6 +2897,14 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 540px) {
+  .register-visual {
+    padding: 32px 20px;
+  }
+
+  .register-panel {
+    padding: 32px 18px;
+  }
+
   .login-visual {
     padding: 32px 20px;
   }
