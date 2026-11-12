@@ -2482,6 +2482,76 @@ body[data-page="register"] main {
   margin: 0;
 }
 
+.register-panel .register-card {
+  width: min(100%, 448px);
+  max-width: 448px;
+  padding: 32px;
+  border: 1px solid rgba(120, 113, 108, 0.2);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 20px 45px rgba(28, 45, 37, 0.1);
+}
+
+.register-card .page-title {
+  margin: 0 0 20px;
+  color: #1c1917;
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.register-card form {
+  display: grid;
+  gap: 14px;
+}
+
+.register-card .field {
+  gap: 6px;
+  margin: 0;
+}
+
+.register-card .field label {
+  color: #44403c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.register-card .field input {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 1px solid #d6d3d1;
+  border-radius: 12px;
+  background: #fff;
+  color: #1c1917;
+  outline: none;
+  box-shadow: none;
+}
+
+.register-card .field input::placeholder {
+  color: #a8a29e;
+  opacity: 1;
+}
+
+.register-card .field input:focus {
+  border-color: #1b4332;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(27, 67, 50, 0.14);
+}
+
+.register-card .primary {
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .register-panel .register-card {
+    padding: 36px;
+  }
+}
+
 .login-shell {
   display: grid;
   grid-template-columns: 1fr 1fr;

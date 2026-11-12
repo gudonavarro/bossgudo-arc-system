@@ -45,8 +45,8 @@ async function submit() {
       </div>
     </section>
     <section class="register-panel" aria-label="Create account form">
-      <section class="panel auth-card">
-        <h1 class="page-title">Create your account</h1>
+      <section class="panel auth-card register-card">
+        <h1 class="page-title">Create Account</h1>
         <form @submit.prevent="submit">
           <div class="field"><label for="firstName">FIRST NAME</label><input id="firstName" v-model="form.firstName" required></div>
           <div class="field"><label for="lastName">LAST NAME</label><input id="lastName" v-model="form.lastName" required></div>
@@ -55,7 +55,7 @@ async function submit() {
           <div class="field"><label for="password">PASSWORD</label><input id="password" v-model="form.password" type="password" required></div>
           <div class="field"><label for="confirmPassword">CONFIRM PASSWORD</label><input id="confirmPassword" v-model="form.confirmPassword" type="password" required></div>
           <button class="primary" type="submit" :disabled="pending">{{ pending ? "Creating..." : "Create Account" }}</button>
-          <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
+          <output v-if="feedback" class="form-feedback show" aria-live="polite">{{ feedback }}</output>
         </form>
       </section>
     </section>
