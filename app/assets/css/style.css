@@ -2726,11 +2726,20 @@ body[data-page="login"] main {
   font-size: 1rem;
   font-weight: 600;
   box-shadow: 0 2px 5px rgba(20, 51, 38, 0.12);
-  transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  transition: none;
+  transform: none;
+  animation: none;
 }
 
 .login-submit:hover:not(:disabled) {
   background: #143326;
+  transform: none;
+  animation: none;
+}
+
+.login-submit:active {
+  transform: none;
+  animation: none;
 }
 
 .login-submit:disabled {

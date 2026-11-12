@@ -82,7 +82,6 @@ async function submit() {
       <div class="login-card">
         <div class="login-card-header">
           <h2>Login</h2>
-          <p class="muted">Welcome back. Log in to manage your bookings and farm services.</p>
         </div>
 
         <form @submit.prevent="submit">
