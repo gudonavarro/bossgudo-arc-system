@@ -4,7 +4,7 @@ definePageMeta({ middleware: ["guest"] });
 const route = useRoute();
 const email = ref("");
 const password = ref("");
-const feedback = ref("");
+const errorMessage = ref("");
 const pending = ref(false);
 const showPassword = ref(false);
 const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
@@ -22,7 +22,7 @@ watch(
 
 async function submit() {
   pending.value = true;
-  feedback.value = "";
+  errorMessage.value = "";
   try {
     const result = await $fetch<{ user: { id: string; firstName: string } }>("/api/auth/login", {
       method: "POST",
@@ -42,7 +42,7 @@ async function submit() {
       data?: { error?: string };
       message?: string;
     };
-    feedback.value =
+    errorMessage.value =
       responseError.data?.error ||
       responseError.message ||
       "Unable to log in.";
@@ -89,7 +89,7 @@ async function submit() {
         <form @submit.prevent="submit">
           <div class="field">
             <label for="email">Email address</label>
-            <input id="email" v-model="email" type="email" autocomplete="email" required>
+            <input id="email" v-model="email" type="email" autocomplete="email" placeholder="name@example.com" required>
           </div>
 
           <div class="field">
@@ -100,6 +100,7 @@ async function submit() {
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="current-password"
+                placeholder="••••••••"
                 required
               >
               <button
@@ -117,11 +118,11 @@ async function submit() {
             <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
           </div>
 
-          <button class="primary login-submit" type="submit" :disabled="pending">
+          <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
             {{ pending ? "Signing in..." : "Sign In" }}
           </button>
 
-          <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
+          <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>
         </form>
 
         <p class="auth-card-footer login-signup">

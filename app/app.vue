@@ -49,7 +49,7 @@ useHead(() => ({
   <div id="modalHost" />
   <output class="toast" id="toast" aria-live="polite" />
 
-  <footer class="footer">
+  <footer v-if="currentPage !== 'login'" class="footer">
     <div class="footer-social">
       <h3>SOCIAL</h3>
       <div class="social-links">
