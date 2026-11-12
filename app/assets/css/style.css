@@ -2461,6 +2461,7 @@ body[data-page="register"] main {
 
 body[data-page="forgot-password"],
 body[data-page="reset-password"] {
+  position: relative;
   background: var(--cream);
 }
 
@@ -2494,6 +2495,22 @@ body[data-page="reset-password"] main {
 
 .recovery-panel .auth-card {
   margin: 0;
+}
+
+.recovery-login-link {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.recovery-login-link a {
+  color: #1b4332;
+  font-weight: 600;
+}
+
+.recovery-login-link a:hover,
+.recovery-login-link a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .recovery-panel .recovery-card {
@@ -2585,6 +2602,22 @@ body[data-page="reset-password"] main {
 
 .recovery-submit:focus-visible {
   background: #1b4332;
+}
+
+body[data-page="forgot-password"] .chat-launch,
+body[data-page="reset-password"] .chat-launch {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+}
+
+body[data-page="forgot-password"] .chat-box,
+body[data-page="reset-password"] .chat-box {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  z-index: 41;
 }
 
 @media (min-width: 640px) {
@@ -3155,7 +3188,17 @@ body[data-page="login"] .auth-card .primary:hover {
 
   .recovery-panel {
     min-height: auto;
-    padding: 40px 28px;
+    padding: 40px 28px 112px;
+  }
+
+  body[data-page="forgot-password"] .chat-launch,
+  body[data-page="reset-password"] .chat-launch {
+    position: absolute;
+  }
+
+  body[data-page="forgot-password"] .chat-box,
+  body[data-page="reset-password"] .chat-box {
+    position: absolute;
   }
 
   .register-shell {
@@ -3190,7 +3233,19 @@ body[data-page="login"] .auth-card .primary:hover {
 
 @media (max-width: 540px) {
   .recovery-panel {
-    padding: 32px 18px;
+    padding: 32px 18px 112px;
+  }
+
+  body[data-page="forgot-password"] .chat-launch,
+  body[data-page="reset-password"] .chat-launch {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  body[data-page="forgot-password"] .chat-box,
+  body[data-page="reset-password"] .chat-box {
+    right: 12px;
+    bottom: 76px;
   }
 
   .register-panel {

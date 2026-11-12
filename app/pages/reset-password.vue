@@ -83,6 +83,9 @@ async function submit() {
           <button class="primary recovery-submit" type="submit">Reset Password</button>
           <output v-if="feedback" class="form-feedback show" :class="{ success: feedbackStatus === 'success' }" aria-live="polite">{{ feedback }}</output>
         </form>
+        <p class="auth-card-footer recovery-login-link">
+          <NuxtLink to="/login">Back to Login</NuxtLink>
+        </p>
       </section>
     </section>
   </main>
