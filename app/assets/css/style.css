@@ -2443,10 +2443,203 @@ body[data-page="login"] {
   background: var(--cream);
 }
 
+body[data-page="register"] {
+  background: var(--cream);
+}
+
 body[data-page="login"] main {
   max-width: none;
   margin: 0;
   padding: 0;
+}
+
+body[data-page="register"] main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+.register-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px clamp(32px, 5vw, 56px);
+}
+
+.register-panel {
+  background: #f5f6f2;
+}
+
+.register-panel .auth-card {
+  margin: 0;
+}
+
+.register-panel .register-card {
+  width: min(100%, 448px);
+  max-width: 448px;
+  padding: 32px;
+  border: 1px solid rgba(120, 113, 108, 0.2);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 20px 45px rgba(28, 45, 37, 0.1);
+}
+
+.register-card .page-title {
+  margin: 0 0 20px;
+  color: #1c1917;
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.register-card form {
+  display: grid;
+  gap: 14px;
+}
+
+.register-card .field {
+  gap: 6px;
+  margin: 0;
+}
+
+.register-card .field label {
+  color: #44403c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.register-card .field input {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 1px solid #d6d3d1;
+  border-radius: 12px;
+  background: #fff;
+  color: #1c1917;
+  outline: none;
+  box-shadow: none;
+}
+
+.register-card .field input::placeholder {
+  color: #a8a29e;
+  opacity: 1;
+}
+
+.register-card .field input:focus {
+  border-color: #1b4332;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(27, 67, 50, 0.14);
+}
+
+.register-card .primary {
+  margin: 0;
+}
+
+.register-password-wrap {
+  position: relative;
+}
+
+.register-password-wrap input {
+  padding-right: 82px;
+}
+
+.register-password-toggle {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  bottom: 0;
+  height: 32px;
+  min-height: 32px;
+  margin: auto 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #78716c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: none;
+  transform: none;
+  animation: none;
+}
+
+.register-password-toggle:hover,
+.register-password-toggle:focus-visible,
+.register-password-toggle:active {
+  background: transparent;
+  color: #1b4332;
+  transition: none;
+  transform: none;
+  animation: none;
+}
+
+.register-submit {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #1b4332;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(20, 51, 38, 0.12);
+  transition: none;
+  transform: none;
+  animation: none;
+}
+
+.register-submit:hover:not(:disabled) {
+  background: #143326;
+  box-shadow: 0 2px 5px rgba(20, 51, 38, 0.12);
+  transform: none;
+  animation: none;
+}
+
+.register-submit:active {
+  transform: none;
+  animation: none;
+}
+
+.register-submit:focus-visible {
+  background: #1b4332;
+}
+
+.register-submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+body[data-page="register"] .chat-launch {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+}
+
+body[data-page="register"] .chat-box {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  z-index: 41;
+}
+
+@media (min-width: 640px) {
+  .register-panel .register-card {
+    padding: 36px;
+  }
 }
 
 .login-shell {
@@ -2822,6 +3015,14 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 900px) {
+  .register-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .register-panel {
+    padding: 40px 28px;
+  }
+
   .login-shell {
     grid-template-columns: 1fr;
   }
@@ -2845,6 +3046,10 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 540px) {
+  .register-panel {
+    padding: 32px 18px;
+  }
+
   .login-visual {
     padding: 32px 20px;
   }
