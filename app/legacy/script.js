@@ -512,10 +512,21 @@ function pickPkg(id) {
   }
   render();
 }
+function requireBookingLogin() {
+  if (loggedIn) return false;
+  const loginPath = `/login?next=${encodeURIComponent("/booking")}`;
+  if (typeof window.__bossGudoNavigate === "function") {
+    void window.__bossGudoNavigate(loginPath);
+  } else {
+    window.location.assign(loginPath);
+  }
+  return true;
+}
 function choosePkgById(id) {
   pickPkg(id);
   bookingType = "service";
   wizardStep = 1;
+  if (requireBookingLogin()) return;
   setPage("booking");
 }
 
@@ -922,6 +933,7 @@ function chooseBookingType(t) {
   bookingType = t;
   wizardStep = 1;
   visitStep = 1;
+  if (requireBookingLogin()) return;
   setPage("booking");
 }
 function changeBookingType() {
@@ -984,6 +996,10 @@ function paymentStep() {
   return `<h2>Payment</h2><p class="muted">Pay the 50% down payment in GCash, then upload your receipt. Your booking and receipt are submitted together, and your booking is confirmed once the owner verifies your payment.</p><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner's GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner's GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner's GCash number]</strong></div><div class="summary-line"><span>Package</span><strong>${safe(selectedPackage)}</strong></div><div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment to pay now</span><strong style="font-size:23px;color:var(--green)">${money(p.deposit)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the account details above, and pay the exact amount. After the transfer succeeds, upload your receipt below and submit.</div></div></div><div class="panel" style="margin-top:20px"><h3>Upload payment receipt</h3><p class="muted">Your booking is submitted together with this receipt. The owner checks the receipt against the actual GCash transaction.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/*,.pdf" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: image or PDF, up to 8 MB.</p></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=4;render()">← Back</button><button class="primary" onclick="submitBooking()">Submit Booking and Receipt</button></div></div>`;
 }
 function booking() {
+  if (!loggedIn) {
+    bookingType = null;
+    return bookingChooser();
+  }
   if (bookingType === "service") return serviceBooking();
   if (bookingType === "visit") return visitBooking();
   return bookingChooser();
@@ -3009,8 +3025,6 @@ function syncNavigationLinks() {
     .querySelectorAll(".nav a[data-page]")
     .forEach((link) => {
       link.classList.toggle("active", link.dataset.page === page);
-      if (link.dataset.page === "mybookings")
-        link.style.display = loggedIn ? "inline-block" : "none";
     });
 }
 function bindCurrentPageForms() {

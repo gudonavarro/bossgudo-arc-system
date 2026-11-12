@@ -1,18 +1,31 @@
 <script setup lang="ts">
 definePageMeta({ middleware: ["guest"] });
 
+const route = useRoute();
 const form = reactive({ firstName: "", lastName: "", email: "", phoneNumber: "", password: "", confirmPassword: "" });
 const feedback = ref("");
 const pending = ref(false);
 const showPassword = ref(false);
 const showConfirmPassword = ref(false);
 
+function getSafeNextPath() {
+  const next = route.query.next;
+  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
+    ? next
+    : null;
+}
+
+const loginTarget = computed(() => {
+  const next = getSafeNextPath();
+  return next ? { path: "/login", query: { next } } : "/login";
+});
+
 async function submit() {
   pending.value = true;
   feedback.value = "";
   try {
     await $fetch("/api/auth/register", { method: "POST", body: form });
-    await navigateTo("/login");
+    await navigateTo(loginTarget.value);
   } catch (error) {
     feedback.value = error instanceof Error ? error.message : "Unable to create your account.";
   } finally {
@@ -87,7 +100,7 @@ async function submit() {
         </form>
         <p class="auth-card-footer register-login-link">
           Already have an account?
-          <NuxtLink to="/login">Login</NuxtLink>
+          <NuxtLink :to="loginTarget">Login</NuxtLink>
         </p>
       </section>
     </section>
