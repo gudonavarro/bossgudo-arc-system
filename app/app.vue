@@ -1,11 +1,9 @@
 <script setup lang="ts">
 const route = useRoute();
 const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
-const authReady = useState<boolean>("auth:ready", () => false);
 
 const currentPage = computed(() => route.path.replace(/^\/+|\/+$/g, "") || "home");
 const legacyPages = new Set([
-  "home",
   "about",
   "shop",
   "booking",
@@ -14,14 +12,13 @@ const legacyPages = new Set([
 ]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
 const isAuthenticated = computed(() => Boolean(authUser.value));
-const customerNavVisible = computed(() => authReady.value && isAuthenticated.value);
+const navigationVisible = computed(() => legacyPageVisible.value && currentPage.value !== "home");
 
 const navItems = [
   { label: "Home", to: "/" },
   { label: "About", to: "/about" },
   { label: "Shop", to: "/shop" },
   { label: "Bookings", to: "/booking" },
-  { label: "My Bookings", to: "/mybookings" },
 ];
 
 useHead(() => ({
@@ -30,7 +27,7 @@ useHead(() => ({
 </script>
 
 <template>
-  <header v-if="customerNavVisible" class="topbar inner-navbar">
+  <header v-if="navigationVisible" class="topbar inner-navbar">
     <NuxtLink to="/" class="brand">
       <img src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo" class="brand-logo">
       <span class="brand-name">BOSSGUDO<small>A.R.C. AQUA FARM</small></span>
@@ -39,7 +36,9 @@ useHead(() => ({
       <NuxtLink v-for="item in navItems" :key="item.to" :to="item.to" :data-page="item.to.replace(/^\//, '') || 'home'">
         {{ item.label }}
       </NuxtLink>
-      <NuxtLink to="/logout" data-page="logout">Log Out</NuxtLink>
+      <NuxtLink v-if="isAuthenticated" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
+      <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
+      <NuxtLink v-else to="/login" class="primary">Log In</NuxtLink>
     </nav>
   </header>
 

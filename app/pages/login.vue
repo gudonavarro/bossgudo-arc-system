@@ -10,11 +10,27 @@ const showPassword = ref(false);
 const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
 const authReady = useState<boolean>("auth:ready", () => false);
 
+function getSafeNextPath() {
+  const next = route.query.next;
+  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
+    ? next
+    : null;
+}
+
+function getPostLoginTarget() {
+  return getSafeNextPath() ?? "/";
+}
+
+const registerTarget = computed(() => {
+  const next = getSafeNextPath();
+  return next ? { path: "/register", query: { next } } : "/register";
+});
+
 watch(
   () => [authReady.value, authUser.value],
   ([ready, user]) => {
     if (ready && user) {
-      void navigateTo("/", { replace: true });
+      void navigateTo(getPostLoginTarget(), { replace: true });
     }
   },
   { immediate: true },
@@ -35,8 +51,7 @@ async function submit() {
       new CustomEvent("app:session-change", { detail: result.user }),
     );
 
-    const redirectTarget = typeof route.query.next === "string" && route.query.next.startsWith("/") ? route.query.next : "/";
-    await navigateTo(redirectTarget, { replace: true });
+    await navigateTo(getPostLoginTarget(), { replace: true });
   } catch (error) {
     const responseError = error as {
       data?: { error?: string };
@@ -125,7 +140,7 @@ async function submit() {
 
         <p class="auth-card-footer login-signup">
           Need an account?
-          <NuxtLink to="/register">Create Account</NuxtLink>
+          <NuxtLink :to="registerTarget">Create Account</NuxtLink>
         </p>
       </div>
     </section>
