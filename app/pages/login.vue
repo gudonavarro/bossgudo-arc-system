@@ -81,7 +81,6 @@ async function submit() {
     <section class="login-panel" aria-label="Login form">
       <div class="login-card">
         <div class="login-card-header">
-          <p class="eyebrow">Account access</p>
           <h2>Login</h2>
           <p class="muted">Welcome back. Log in to manage your bookings and farm services.</p>
         </div>

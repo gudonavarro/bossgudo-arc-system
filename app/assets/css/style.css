@@ -2464,7 +2464,8 @@ body[data-page="login"] main {
   justify-content: center;
   min-height: 100vh;
   min-height: 100svh;
-  padding: 32px clamp(32px, 5vw, 56px);
+  flex-direction: column;
+  padding: 48px clamp(32px, 5vw, 56px);
   text-align: center;
   background-image:
     linear-gradient(135deg, rgba(15, 36, 29, 0.85), rgba(19, 42, 34, 0.75) 52%, rgba(0, 0, 0, 0.8)),
@@ -2582,7 +2583,8 @@ body[data-page="login"] main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(28px, 4vw, 56px);
+  flex-direction: column;
+  padding: 48px clamp(32px, 5vw, 56px);
   background: #f5f6f2;
 }
 
@@ -2600,25 +2602,19 @@ body[data-page="login"] main {
   text-align: center;
 }
 
-.login-card-header .eyebrow {
-  margin: 0 0 10px;
-  color: var(--green2);
-  font-size: 0.71rem;
-  letter-spacing: 0.15em;
-}
-
 .login-card-header h2 {
   margin: 0 0 8px;
   color: var(--ink);
-  font-size: clamp(2rem, 2.8vw, 2.5rem);
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.1;
 }
 
 .login-card-header .muted {
-  margin: 0;
+  margin: 8px 0 0;
   color: #57534e;
-  font-size: 0.97rem;
+  font-size: 0.875rem;
 }
 
 .login-card form {
@@ -2823,12 +2819,11 @@ body[data-page="login"] .auth-card .primary:hover {
 
   .login-visual {
     min-height: 340px;
-    padding-top: 48px;
-    padding-bottom: 42px;
+    padding: 48px 28px;
   }
 
   .login-panel {
-    padding: 0 28px 112px;
+    padding: 48px 28px 112px;
   }
 
   body[data-page="login"] .chat-launch {
@@ -2842,11 +2837,11 @@ body[data-page="login"] .auth-card .primary:hover {
 
 @media (max-width: 540px) {
   .login-visual {
-    padding: 26px 20px 30px;
+    padding: 32px 20px;
   }
 
   .login-panel {
-    padding: 0 18px 112px;
+    padding: 48px 18px 112px;
   }
 
   .login-card {
@@ -2855,7 +2850,7 @@ body[data-page="login"] .auth-card .primary:hover {
   }
 
   .login-card-header h2 {
-    font-size: 1.9rem;
+    font-size: 1.5rem;
   }
 
   .login-signup {
