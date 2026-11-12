@@ -2459,6 +2459,48 @@ body[data-page="register"] main {
   padding: 0;
 }
 
+body[data-page="forgot-password"],
+body[data-page="reset-password"] {
+  background: var(--cream);
+}
+
+body[data-page="forgot-password"] main,
+body[data-page="reset-password"] main {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recovery-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+.recovery-visual,
+.recovery-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 48px clamp(32px, 5vw, 56px);
+}
+
+.recovery-visual {
+  background: #123d37;
+}
+
+.recovery-panel {
+  background: #f5f6f2;
+}
+
+.recovery-panel .auth-card {
+  margin: 0;
+}
+
 .register-shell {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3015,6 +3057,19 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 900px) {
+  .recovery-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .recovery-visual {
+    min-height: 340px;
+  }
+
+  .recovery-panel {
+    min-height: auto;
+    padding: 40px 28px;
+  }
+
   .register-shell {
     grid-template-columns: 1fr;
   }
@@ -3046,6 +3101,14 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 540px) {
+  .recovery-visual {
+    padding: 32px 20px;
+  }
+
+  .recovery-panel {
+    padding: 32px 18px;
+  }
+
   .register-panel {
     padding: 32px 18px;
   }
