@@ -2478,7 +2478,6 @@ body[data-page="reset-password"] main {
   min-height: 100svh;
 }
 
-.recovery-visual,
 .recovery-panel {
   display: flex;
   flex-direction: column;
@@ -2487,10 +2486,6 @@ body[data-page="reset-password"] main {
   min-height: 100vh;
   min-height: 100svh;
   padding: 48px clamp(32px, 5vw, 56px);
-}
-
-.recovery-visual {
-  background: #123d37;
 }
 
 .recovery-panel {
@@ -3061,10 +3056,6 @@ body[data-page="login"] .auth-card .primary:hover {
     grid-template-columns: 1fr;
   }
 
-  .recovery-visual {
-    min-height: 340px;
-  }
-
   .recovery-panel {
     min-height: auto;
     padding: 40px 28px;
@@ -3101,10 +3092,6 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 540px) {
-  .recovery-visual {
-    padding: 32px 20px;
-  }
-
   .recovery-panel {
     padding: 32px 18px;
   }
