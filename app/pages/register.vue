@@ -21,7 +21,29 @@ async function submit() {
 
 <template>
   <main class="register-shell">
-    <section class="register-visual" aria-hidden="true" />
+    <section class="login-visual" aria-label="Boss Gudo farm preview">
+      <div class="login-visual-content">
+        <div class="brand-chip">
+          <img class="brand-mark" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
+          <div>
+            <strong>BOSSGUDO</strong>
+            <small>A.R.C. AQUA FARM</small>
+          </div>
+        </div>
+
+        <p class="eyebrow login-eyebrow">Sustainable aquaculture support</p>
+        <h1>Welcome to Boss Gudo.</h1>
+        <p class="login-visual-copy">
+          From pond packages to farm visits, we help growers build healthy, productive Australian Red Claw systems with practical support at every stage.
+        </p>
+
+        <ul class="login-benefits" aria-label="Business highlights">
+          <li>Pond packages and custom design</li>
+          <li>Farm guidance and setup support</li>
+          <li>Track services and bookings</li>
+        </ul>
+      </div>
+    </section>
     <section class="register-panel" aria-label="Create account form">
       <section class="panel auth-card">
         <h1 class="page-title">Create your account</h1>

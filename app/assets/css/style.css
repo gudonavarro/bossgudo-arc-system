@@ -2466,19 +2466,12 @@ body[data-page="register"] main {
   min-height: 100svh;
 }
 
-.register-visual,
 .register-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 40px clamp(32px, 5vw, 56px);
-}
-
-.register-visual {
-  min-height: 100vh;
-  min-height: 100svh;
-  background: #123d37;
 }
 
 .register-panel {
@@ -2866,10 +2859,6 @@ body[data-page="login"] .auth-card .primary:hover {
     grid-template-columns: 1fr;
   }
 
-  .register-visual {
-    min-height: 340px;
-  }
-
   .register-panel {
     padding: 40px 28px;
   }
@@ -2897,10 +2886,6 @@ body[data-page="login"] .auth-card .primary:hover {
 }
 
 @media (max-width: 540px) {
-  .register-visual {
-    padding: 32px 20px;
-  }
-
   .register-panel {
     padding: 32px 18px;
   }
