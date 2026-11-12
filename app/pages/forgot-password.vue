@@ -1,12 +1,16 @@
 <script setup lang="ts">
 const email = ref("");
 const feedback = ref("");
+const feedbackStatus = ref<"success" | "error">("error");
 async function submit() {
+  feedback.value = "";
   try {
     const result = await $fetch<{ message: string }>("/api/auth/forgot-password", { method: "POST", body: { email: email.value } });
     feedback.value = result.message;
+    feedbackStatus.value = "success";
   } catch (error) {
     feedback.value = error instanceof Error ? error.message : "Unable to send reset instructions.";
+    feedbackStatus.value = "error";
   }
 }
 </script>
@@ -42,8 +46,8 @@ async function submit() {
         <p class="recovery-subtitle">Enter your account email to receive reset instructions.</p>
         <form @submit.prevent="submit">
           <div class="field"><label for="email">EMAIL ADDRESS</label><input id="email" v-model="email" type="email" required></div>
-          <button class="primary" type="submit">Send reset instructions</button>
-          <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
+          <button class="primary recovery-submit" type="submit">Send Reset Link</button>
+          <output v-if="feedback" class="form-feedback show" :class="{ success: feedbackStatus === 'success' }" aria-live="polite">{{ feedback }}</output>
         </form>
         <NuxtLink to="/login">Return to Log In</NuxtLink>
       </section>

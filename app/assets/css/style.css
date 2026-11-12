@@ -2555,6 +2555,38 @@ body[data-page="reset-password"] main {
   box-shadow: 0 0 0 3px rgba(27, 67, 50, 0.14);
 }
 
+.recovery-submit {
+  width: 100%;
+  min-height: 54px;
+  margin-top: 0;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #1b4332;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(20, 51, 38, 0.12);
+  transition: none;
+  transform: none;
+  animation: none;
+}
+
+.recovery-submit:hover:not(:disabled) {
+  background: #143326;
+  box-shadow: 0 2px 5px rgba(20, 51, 38, 0.12);
+  transform: none;
+  animation: none;
+}
+
+.recovery-submit:active {
+  transform: none;
+  animation: none;
+}
+
+.recovery-submit:focus-visible {
+  background: #1b4332;
+}
+
 @media (min-width: 640px) {
   .recovery-panel .recovery-card {
     padding: 40px;

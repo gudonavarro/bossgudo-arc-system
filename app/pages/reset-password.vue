@@ -5,15 +5,19 @@ const confirmPassword = ref("");
 const showPassword = ref(false);
 const showConfirmPassword = ref(false);
 const feedback = ref("");
+const feedbackStatus = ref<"success" | "error">("error");
 async function submit() {
+  feedback.value = "";
   try {
     await $fetch("/api/auth/reset-password", {
       method: "POST",
       body: { token: route.query.token, password: password.value, confirmPassword: confirmPassword.value },
     });
     feedback.value = "Your password was reset. You can now log in.";
+    feedbackStatus.value = "success";
   } catch (error) {
     feedback.value = error instanceof Error ? error.message : "Unable to reset your password.";
+    feedbackStatus.value = "error";
   }
 }
 </script>
@@ -76,8 +80,8 @@ async function submit() {
               </button>
             </div>
           </div>
-          <button class="primary" type="submit">Reset Password</button>
-          <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
+          <button class="primary recovery-submit" type="submit">Reset Password</button>
+          <output v-if="feedback" class="form-feedback show" :class="{ success: feedbackStatus === 'success' }" aria-live="polite">{{ feedback }}</output>
         </form>
       </section>
     </section>
