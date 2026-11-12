@@ -6,6 +6,7 @@ const email = ref("");
 const password = ref("");
 const feedback = ref("");
 const pending = ref(false);
+const showPassword = ref(false);
 const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
 const authReady = useState<boolean>("auth:ready", () => false);
 
@@ -52,24 +53,82 @@ async function submit() {
 </script>
 
 <template>
-  <section class="panel auth-card">
-    <div class="auth-card-header login-header">
-      <img class="login-logo" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
-      <h1 class="page-title">Welcome back</h1>
-      <p class="muted">Sign in to track your booking requests.</p>
-    </div>
-    <form @submit.prevent="submit">
-      <div class="field">
-        <label for="email">EMAIL ADDRESS</label>
-        <input id="email" v-model="email" type="email" autocomplete="email" required>
+  <main class="login-shell">
+    <section class="login-visual" aria-label="Boss Gudo farm preview">
+      <div class="login-visual-content">
+        <div class="brand-chip">
+          <img class="brand-mark" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
+          <div>
+            <strong>BOSSGUDO</strong>
+            <small>A.R.C. AQUA FARM</small>
+          </div>
+        </div>
+
+        <p class="eyebrow login-eyebrow">Sustainable aquaculture support</p>
+        <h1>Welcome to Boss Gudo.</h1>
+        <p class="login-visual-copy">
+          From pond packages to farm visits, we help growers build healthy, productive Australian Red Claw systems with practical support at every stage.
+        </p>
+
+        <ul class="login-benefits" aria-label="Business highlights">
+          <li>Pond packages and custom design</li>
+          <li>Farm guidance and setup support</li>
+          <li>Track services and bookings</li>
+        </ul>
       </div>
-      <div class="field">
-        <label for="password">PASSWORD</label>
-        <input id="password" v-model="password" type="password" autocomplete="current-password" required>
+    </section>
+
+    <section class="login-panel" aria-label="Sign in form">
+      <div class="login-card">
+        <div class="login-card-header">
+          <p class="eyebrow">Account access</p>
+          <h2>Sign in</h2>
+          <p class="muted">Welcome back. Sign in to manage your bookings and farm services.</p>
+        </div>
+
+        <form @submit.prevent="submit">
+          <div class="field">
+            <label for="email">Email address</label>
+            <input id="email" v-model="email" type="email" autocomplete="email" required>
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="password-input-wrap">
+              <input
+                id="password"
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+                required
+              >
+              <button
+                class="password-toggle"
+                type="button"
+                :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                @click="showPassword = !showPassword"
+              >
+                {{ showPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
+          </div>
+
+          <div class="login-form-actions">
+            <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
+          </div>
+
+          <button class="primary login-submit" type="submit" :disabled="pending">
+            {{ pending ? "Signing in..." : "Sign In" }}
+          </button>
+
+          <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
+        </form>
+
+        <p class="auth-card-footer login-signup">
+          Need an account?
+          <NuxtLink to="/register">Create Account</NuxtLink>
+        </p>
       </div>
-      <button class="primary" type="submit" :disabled="pending">{{ pending ? "Signing in..." : "Log In" }}</button>
-      <output class="form-feedback show" aria-live="polite">{{ feedback }}</output>
-    </form>
-    <p class="auth-card-footer"><NuxtLink to="/forgot-password">Forgot Password?</NuxtLink> · <NuxtLink to="/register">Create Account</NuxtLink></p>
-  </section>
+    </section>
+  </main>
 </template>

@@ -12,6 +12,7 @@ interface AuthSession {
 
 export default defineNuxtPlugin((nuxtApp) => {
   const router = useRouter();
+  const route = useRoute();
   const authUser = useState<AuthSession["user"]>("auth:user", () => null);
   const authReady = useState<boolean>("auth:ready", () => false);
   const browserWindow = window as typeof window & {
@@ -39,10 +40,14 @@ export default defineNuxtPlugin((nuxtApp) => {
   });
 
   nuxtApp.hook("app:mounted", () => {
-    const script = document.createElement("script");
-    script.dataset.legacyUi = "true";
-    script.textContent = legacyScript;
-    document.body.append(script);
+    const publicPages = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/logout"]);
+
+    if (!publicPages.has(route.path)) {
+      const script = document.createElement("script");
+      script.dataset.legacyUi = "true";
+      script.textContent = legacyScript;
+      document.body.append(script);
+    }
 
     void $fetch<AuthSession>("/api/auth/session", {
       credentials: "include",
