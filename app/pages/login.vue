@@ -78,12 +78,12 @@ async function submit() {
       </div>
     </section>
 
-    <section class="login-panel" aria-label="Sign in form">
+    <section class="login-panel" aria-label="Login form">
       <div class="login-card">
         <div class="login-card-header">
           <p class="eyebrow">Account access</p>
-          <h2>Sign in</h2>
-          <p class="muted">Welcome back. Sign in to manage your bookings and farm services.</p>
+          <h2>Login</h2>
+          <p class="muted">Welcome back. Log in to manage your bookings and farm services.</p>
         </div>
 
         <form @submit.prevent="submit">
@@ -119,7 +119,7 @@ async function submit() {
           </div>
 
           <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
-            {{ pending ? "Signing in..." : "Sign In" }}
+            {{ pending ? "Logging in..." : "Login" }}
           </button>
 
           <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>
