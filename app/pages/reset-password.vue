@@ -42,8 +42,9 @@ async function submit() {
       </div>
     </section>
     <section class="recovery-panel" aria-label="Reset password form">
-      <section class="panel auth-card">
-        <h1 class="page-title">Choose a new password</h1>
+      <section class="panel auth-card recovery-card">
+        <h1 class="page-title">Reset Password</h1>
+        <p class="recovery-subtitle">Choose a new password for your account.</p>
         <form @submit.prevent="submit">
           <div class="field"><label for="password">PASSWORD</label><input id="password" v-model="password" type="password" required></div>
           <div class="field"><label for="confirmPassword">CONFIRM PASSWORD</label><input id="confirmPassword" v-model="confirmPassword" type="password" required></div>
