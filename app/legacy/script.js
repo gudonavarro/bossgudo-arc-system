@@ -3118,7 +3118,10 @@ document.addEventListener("click", (e) => {
   if (action === "show-visit") chooseBookingType("visit");
 });
 window.addEventListener("popstate", () => {
-  const currentPath = location.pathname.replace(/\/+$/, "") || "/";
+  const pathname = location.pathname;
+  let end = pathname.length;
+  while (end > 1 && pathname.charAt(end - 1) === "/") end -= 1;
+  const currentPath = pathname.slice(0, end) || "/";
   const route = Object.keys(pageFiles).find((key) => pageFiles[key] === currentPath);
   if (route) {
     page = route;

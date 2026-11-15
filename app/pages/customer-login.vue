@@ -30,9 +30,9 @@ const registerTarget = computed(() => {
 
 watch(
   () => [authReady.value, authUser.value],
-  ([ready, user]) => {
+  async ([ready, user]) => {
     if (ready && user) {
-      void navigateTo(getPostLoginTarget(), { replace: true });
+      await navigateTo(getPostLoginTarget(), { replace: true });
     }
   },
   { immediate: true },
