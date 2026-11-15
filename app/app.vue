@@ -49,7 +49,7 @@ useHead(() => ({
       </NuxtLink>
       <NuxtLink v-if="isAuthenticated" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
       <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
-      <NuxtLink v-else to="/customer-login" class="primary">Customer Login</NuxtLink>
+      <NuxtLink v-else to="/customer-login" class="primary">Login</NuxtLink>
     </nav>
   </header>
 
