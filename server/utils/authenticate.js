@@ -1,8 +1,5 @@
 const crypto = require("node:crypto");
-const mongooseModule = require("mongoose");
-const mongoose = mongooseModule.default || mongooseModule;
-const Session = require("../models/Session");
-const User = require("../models/User");
+const { ObjectId } = require("mongodb");
 
 const SESSION_COOKIE_NAME = "bossgudo_session";
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -31,10 +28,26 @@ function hashSessionToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+function getCollections(request) {
+  const database = request.mongoDb;
+  if (!database) {
+    throw new Error("Database is unavailable.");
+  }
+  return {
+    sessions: database.collection("sessions"),
+    users: database.collection("users"),
+  };
+}
+
+function asObjectId(value) {
+  return typeof value === "string" && /^[a-f\d]{24}$/i.test(value)
+    ? new ObjectId(value)
+    : value;
+}
+
 function createAuthenticationMiddleware({
-  SessionModel = Session,
-  UserModel = User,
-  isDatabaseReady = () => mongoose.connection.readyState === 1,
+  getCollections: getRequestCollections = getCollections,
+  isDatabaseReady = (request) => Boolean(request.mongoDb),
   respondUnauthenticated = (_request, response) =>
     response.status(401).json({ error: "Authentication required." }),
 } = {}) {
@@ -43,24 +56,35 @@ function createAuthenticationMiddleware({
     if (!token) {
       return respondUnauthenticated(request, response);
     }
-    if (!isDatabaseReady()) {
+    if (!isDatabaseReady(request)) {
       return response
         .status(503)
         .json({ error: "Authentication is temporarily unavailable." });
     }
 
     try {
-      const session = await SessionModel.findOne({
+      const { sessions, users } = getRequestCollections(request);
+      const session = await sessions.findOne({
         tokenHash: hashSessionToken(token),
         expiresAt: { $gt: new Date() },
-      }).lean();
+      });
       if (!session) {
         return respondUnauthenticated(request, response);
       }
 
-      const user = await UserModel.findById(session.userId)
-        .select("firstName lastName email role isActive +passwordChangedAt")
-        .lean();
+      const user = await users.findOne(
+        { _id: asObjectId(session.userId) },
+        {
+          projection: {
+            firstName: 1,
+            lastName: 1,
+            email: 1,
+            role: 1,
+            isActive: 1,
+            passwordChangedAt: 1,
+          },
+        },
+      );
       const passwordChangedAfterSession =
         user?.passwordChangedAt?.getTime() > session.createdAt?.getTime();
       if (!user || !user.isActive || passwordChangedAfterSession) {
