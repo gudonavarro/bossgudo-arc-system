@@ -4,7 +4,6 @@ const bcrypt = require("bcryptjs");
 const express = require("express");
 const request = require("supertest");
 const test = require("node:test");
-const Session = require("../server/models/Session");
 const { createAuthRouter } = require("../server/utils/auth-router");
 const { SESSION_COOKIE_NAME } = require("../server/utils/authenticate");
 
@@ -20,7 +19,56 @@ const validRegistration = {
 function createTestApp(options) {
   const app = express();
   app.use(express.json());
-  app.use("/api/auth", createAuthRouter(options));
+  const userModel = options.UserModel || fakeUserModel();
+  const sessionModel = options.SessionModel || fakeSessionModel();
+  const getCollections = () => ({
+    users: {
+      async findOne(query, options = {}) {
+        const result = query._id
+          ? userModel.findById(query._id)
+          : userModel.findOne(query);
+        if (options.projection) {
+          result.select(
+            Object.keys(options.projection)
+              .filter((key) => options.projection[key])
+              .join(" "),
+          );
+        }
+        return result.lean();
+      },
+      async insertOne(document) {
+        const result = await userModel.create(document);
+        return { insertedId: result._id || result.id };
+      },
+      updateOne(query, update) {
+        return userModel.updateOne(query, update);
+      },
+      findOneAndUpdate(query, update, updateOptions) {
+        return userModel.findOneAndUpdate(query, update, updateOptions);
+      },
+    },
+    sessions: {
+      async findOne(query) {
+        return sessionModel.findOne(query).lean();
+      },
+      async insertOne(document) {
+        const result = await sessionModel.create(document);
+        return { insertedId: result._id || result.id };
+      },
+      deleteOne(query) {
+        return sessionModel.deleteOne(query);
+      },
+      deleteMany(query) {
+        return sessionModel.deleteMany(query);
+      },
+    },
+  });
+  const { UserModel: _userModel, SessionModel: _sessionModel, ...routerOptions } =
+    options;
+  app.use(
+    "/api/auth",
+    createAuthRouter({ ...routerOptions, getCollections }),
+  );
   return app;
 }
 
@@ -57,7 +105,10 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     async updateOne(query, update) {
       calls.updateOne.push({ query, update });
       if (existingUser?._id === query._id) {
-        for (const key of Object.keys(update.$unset)) delete existingUser[key];
+        Object.assign(existingUser, update.$set || {});
+        for (const key of Object.keys(update.$unset || {})) {
+          delete existingUser[key];
+        }
       }
       return { modifiedCount: 1 };
     },
@@ -122,11 +173,9 @@ function createLoginUser(overrides = {}) {
     email: "ana@example.com",
     role: "customer",
     isActive: true,
+    password: bcrypt.hashSync("StrongPass1!", 4),
     async save() {
       return this;
-    },
-    async comparePassword(password) {
-      return password === "StrongPass1!";
     },
     ...overrides,
   };
@@ -186,14 +235,20 @@ test("creates a customer with normalized details and a minimal safe response", a
     .send({ ...validRegistration, role: "admin", resetTokenHash: "attacker-value" });
 
   assert.equal(response.status, 201);
-  assert.deepEqual(model.calls.create[0], {
-    firstName: "Ana",
-    lastName: "Cruz",
-    email: "ana@example.com",
-    phoneNumber: "+639171234567",
-    password: "StrongPass1!",
-    role: "customer",
-  });
+  const storedUser = model.calls.create[0];
+  assert.equal(storedUser.firstName, "Ana");
+  assert.equal(storedUser.lastName, "Cruz");
+  assert.equal(storedUser.email, "ana@example.com");
+  assert.equal(storedUser.phoneNumber, "+639171234567");
+  assert.equal(storedUser.role, "customer");
+  assert.equal(storedUser.isActive, true);
+  assert.equal(
+    await bcrypt.compare(validRegistration.password, storedUser.password),
+    true,
+  );
+  assert.ok(storedUser.passwordChangedAt instanceof Date);
+  assert.ok(storedUser.createdAt instanceof Date);
+  assert.ok(storedUser.updatedAt instanceof Date);
   assert.deepEqual(response.body.user, {
     id: "user-1",
     firstName: "Ana",
@@ -307,7 +362,9 @@ test("verifies credentials using the selected password and returns safe user dat
 
   assert.equal(response.status, 200);
   assert.equal(model.calls.findOne[0].email, "ana@example.com");
-  assert.deepEqual(model.calls.select, ["+password"]);
+  assert.deepEqual(model.calls.select, [
+    "_id firstName lastName email password role isActive",
+  ]);
   assert.equal(sessions.calls.create.length, 1);
   assert.equal(sessions.calls.create[0].userId, "user-1");
   assert.match(sessions.calls.create[0].tokenHash, /^[a-f0-9]{64}$/);
@@ -520,21 +577,6 @@ test("logs out by revoking the session and clearing the cookie", async () => {
   assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
 });
 
-test("defines a unique token hash and expiration cleanup index", () => {
-  const indexes = Session.schema.indexes();
-
-  assert.ok(
-    indexes.some(([keys, options]) => keys.tokenHash === 1 && options.unique),
-  );
-  assert.ok(indexes.some(([keys]) => keys.userId === 1));
-  assert.ok(
-    indexes.some(
-      ([keys, options]) => keys.expiresAt === 1 && options.expireAfterSeconds === 0,
-    ),
-  );
-  assert.equal(Session.schema.path("tokenHash").options.select, false);
-});
-
 test("does not claim email recovery when SMTP is not configured", async () => {
   const model = fakeUserModel({ existingUser: createLoginUser() });
   const app = createTestApp({
@@ -617,7 +659,7 @@ test("clears a reset token when email delivery fails", async () => {
     .send({ email: "ana@example.com" });
 
   assert.equal(response.status, 503);
-  assert.equal(model.calls.updateOne.length, 1);
+  assert.equal(model.calls.updateOne.length, 2);
   assert.equal("resetTokenHash" in user, false);
   assert.equal("resetTokenExpires" in user, false);
 });
@@ -669,6 +711,7 @@ test("rejects expired and malformed reset tokens", async () => {
     resetTokenHash: crypto.createHash("sha256").update(expiredToken).digest("hex"),
     resetTokenExpires: new Date(Date.now() - 60_000),
   });
+  const originalPassword = user.password;
   const app = createTestApp({
     UserModel: fakeUserModel({ existingUser: user }),
     SessionModel: fakeSessionModel(),
@@ -700,5 +743,5 @@ test("rejects expired and malformed reset tokens", async () => {
   assert.equal(expired.status, 400);
   assert.equal(malformed.status, 400);
   assert.equal(tooLongPassword.status, 400);
-  assert.equal(user.password, undefined);
+  assert.equal(user.password, originalPassword);
 });
