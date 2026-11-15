@@ -2833,6 +2833,27 @@ body[data-page="register"] .chat-box {
   background: var(--cream);
 }
 
+.admin-login-shell {
+  min-height: 100vh;
+}
+
+.admin-login-shell .login-panel {
+  padding-bottom: 48px;
+}
+
+.admin-portal-badge {
+  display: inline-flex;
+  margin-bottom: 14px;
+  padding: 7px 12px;
+  border: 1px solid #c6dbc9;
+  border-radius: 999px;
+  background: #e9f2ec;
+  color: #1b4332;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
 .login-visual {
   position: relative;
   display: flex;
