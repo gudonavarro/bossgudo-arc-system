@@ -2,10 +2,7 @@ const crypto = require("node:crypto");
 const bcrypt = require("bcryptjs");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
-const mongooseModule = require("mongoose");
-const mongoose = mongooseModule.default || mongooseModule;
-const Session = require("../models/Session");
-const User = require("../models/User");
+const { ObjectId } = require("mongodb");
 const {
   isPasswordResetMailConfigured,
   sendPasswordResetEmail,
@@ -160,10 +157,26 @@ function compareAgainstDummyHash(password) {
   return dummyPasswordHashPromise.then((hash) => bcrypt.compare(password, hash));
 }
 
+function getCollections(request) {
+  const database = request.mongoDb;
+  if (!database) {
+    throw new Error("Database is unavailable.");
+  }
+  return {
+    sessions: database.collection("sessions"),
+    users: database.collection("users"),
+  };
+}
+
+function asObjectId(value) {
+  return typeof value === "string" && /^[a-f\d]{24}$/i.test(value)
+    ? new ObjectId(value)
+    : value;
+}
+
 function createAuthRouter({
-  UserModel = User,
-  SessionModel = Session,
-  isDatabaseReady = () => mongoose.connection.readyState === 1,
+  getCollections: getRequestCollections = getCollections,
+  isDatabaseReady = (request) => Boolean(request.mongoDb),
   isProduction = () => process.env.NODE_ENV === "production",
   passwordResetMailConfigured = isPasswordResetMailConfigured,
   sendResetEmail = sendPasswordResetEmail,
@@ -191,13 +204,11 @@ function createAuthRouter({
     message: { error: "Too many attempts. Please try again later." },
   });
   const authenticate = createAuthenticationMiddleware({
-    SessionModel,
-    UserModel,
+    getCollections: getRequestCollections,
     isDatabaseReady,
   });
   const authenticateIfPresent = createAuthenticationMiddleware({
-    SessionModel,
-    UserModel,
+    getCollections: getRequestCollections,
     isDatabaseReady,
     respondUnauthenticated: (_request, response) =>
       response.status(200).json({ user: null }),
@@ -214,17 +225,30 @@ function createAuthRouter({
       return response.status(400).json({ error: validation.error });
     }
 
-    if (!isDatabaseReady()) {
+    if (!isDatabaseReady(request)) {
       return response
         .status(503)
         .json({ error: "Login is temporarily unavailable." });
     }
 
     try {
-      const user = await UserModel.findOne({ email: validation.value.email })
-        .select("+password");
+      const { users, sessions } = getRequestCollections(request);
+      const user = await users.findOne(
+        { email: validation.value.email },
+        {
+          projection: {
+            _id: 1,
+            firstName: 1,
+            lastName: 1,
+            email: 1,
+            password: 1,
+            role: 1,
+            isActive: 1,
+          },
+        },
+      );
       const passwordMatches = user
-        ? await user.comparePassword(validation.value.password)
+        ? await bcrypt.compare(validation.value.password, user.password)
         : await compareAgainstDummyHash(validation.value.password);
 
       if (!user || !passwordMatches || !user.isActive) {
@@ -232,10 +256,13 @@ function createAuthRouter({
       }
 
       const token = crypto.randomBytes(32).toString("base64url");
-      await SessionModel.create({
+      const now = new Date();
+      await sessions.insertOne({
         userId: user._id || user.id,
         tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
         expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
+        createdAt: now,
+        updatedAt: now,
       });
 
       response.cookie(SESSION_COOKIE_NAME, token, {
@@ -249,7 +276,7 @@ function createAuthRouter({
       return response.status(200).json({
         message: "Login successful.",
         user: {
-          id: user.id,
+          id: String(user._id || user.id),
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -274,7 +301,8 @@ function createAuthRouter({
 
   router.post("/logout", authenticate, async (request, response) => {
     try {
-      await SessionModel.deleteOne({ _id: request.authSessionId });
+      const { sessions } = getRequestCollections(request);
+      await sessions.deleteOne({ _id: asObjectId(request.authSessionId) });
       response.clearCookie(SESSION_COOKIE_NAME, {
         httpOnly: true,
         secure: isProduction(),
@@ -298,7 +326,7 @@ function createAuthRouter({
         .status(503)
         .json({ error: "Password recovery email is not configured; no email was sent." });
     }
-    if (!isDatabaseReady()) {
+    if (!isDatabaseReady(request)) {
       return response
         .status(503)
         .json({ error: "Password recovery is temporarily unavailable." });
@@ -307,19 +335,27 @@ function createAuthRouter({
     let user;
     let resetTokenHash;
     try {
-      user = await UserModel.findOne({
-        email: email.trim().toLowerCase(),
-        isActive: true,
-      });
+      const { users } = getRequestCollections(request);
+      user = await users.findOne(
+        { email: email.trim().toLowerCase(), isActive: true },
+        { projection: { _id: 1, email: 1 } },
+      );
       if (user) {
         const token = crypto.randomBytes(32).toString("base64url");
         resetTokenHash = crypto
           .createHash("sha256")
           .update(token)
           .digest("hex");
-        user.resetTokenHash = resetTokenHash;
-        user.resetTokenExpires = new Date(Date.now() + RESET_TOKEN_DURATION_MS);
-        await user.save();
+        await users.updateOne(
+          { _id: user._id, isActive: true },
+          {
+            $set: {
+              resetTokenHash,
+              resetTokenExpires: new Date(Date.now() + RESET_TOKEN_DURATION_MS),
+              updatedAt: new Date(),
+            },
+          },
+        );
         await sendResetEmail({ to: user.email, token });
       }
 
@@ -330,7 +366,8 @@ function createAuthRouter({
     } catch (error) {
       if (user && resetTokenHash) {
         try {
-          await UserModel.updateOne(
+          const { users } = getRequestCollections(request);
+          await users.updateOne(
             { _id: user._id, resetTokenHash },
             { $unset: { resetTokenHash: "", resetTokenExpires: "" } },
           );
@@ -353,7 +390,7 @@ function createAuthRouter({
     if (validation.error) {
       return response.status(400).json({ error: validation.error });
     }
-    if (!isDatabaseReady()) {
+    if (!isDatabaseReady(request)) {
       return response
         .status(503)
         .json({ error: "Password recovery is temporarily unavailable." });
@@ -363,25 +400,31 @@ function createAuthRouter({
       const { token, password } = validation.value;
       const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
       const passwordHash = await bcrypt.hash(password, 12);
-      const user = await UserModel.findOneAndUpdate(
+      const { users, sessions } = getRequestCollections(request);
+      const now = new Date();
+      const user = await users.findOneAndUpdate(
         {
           resetTokenHash: tokenHash,
           resetTokenExpires: { $gt: new Date() },
           isActive: true,
         },
         {
-          $set: { password: passwordHash, passwordChangedAt: new Date() },
+          $set: {
+            password: passwordHash,
+            passwordChangedAt: now,
+            updatedAt: now,
+          },
           $unset: { resetTokenHash: "", resetTokenExpires: "" },
         },
-        { new: true, runValidators: true },
-      ).select("_id");
+        { projection: { _id: 1 }, returnDocument: "after" },
+      );
 
       if (!user) {
         return response
           .status(400)
           .json({ error: "This password reset link is invalid or expired." });
       }
-      await SessionModel.deleteMany({ userId: user._id });
+      await sessions.deleteMany({ userId: user._id });
       return response.status(200).json({ message: "Password reset successfully." });
     } catch (error) {
       console.error("Password reset completion failed:", getErrorName(error));
@@ -397,7 +440,7 @@ function createAuthRouter({
       return response.status(400).json({ error: validation.error });
     }
 
-    if (!isDatabaseReady()) {
+    if (!isDatabaseReady(request)) {
       return response
         .status(503)
         .json({ error: "Registration is temporarily unavailable." });
@@ -405,33 +448,38 @@ function createAuthRouter({
 
     const { value } = validation;
     try {
-      const existingUser = await UserModel.findOne({
-        $or: [
-          { email: value.email },
-          { phoneNumber: value.phoneNumber },
-        ],
-      })
-        .select("_id")
-        .lean();
+      const { users } = getRequestCollections(request);
+      const existingUser = await users.findOne(
+        {
+          $or: [{ email: value.email }, { phoneNumber: value.phoneNumber }],
+        },
+        { projection: { _id: 1 } },
+      );
       if (existingUser) {
         return response
           .status(409)
           .json({ error: "An account with those details already exists." });
       }
 
-      const user = await UserModel.create({
+      const now = new Date();
+      const user = {
         firstName: value.firstName,
         lastName: value.lastName,
         email: value.email,
         phoneNumber: value.phoneNumber,
-        password: value.password,
+        password: await bcrypt.hash(value.password, 12),
         role: "customer",
-      });
+        isActive: true,
+        passwordChangedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const result = await users.insertOne(user);
 
       return response.status(201).json({
         message: "Account created.",
         user: {
-          id: user.id,
+          id: String(result.insertedId),
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -445,12 +493,6 @@ function createAuthRouter({
           .status(409)
           .json({ error: "An account with those details already exists." });
       }
-      if (error instanceof mongoose.Error.ValidationError) {
-        return response
-          .status(400)
-          .json({ error: "Registration details are invalid." });
-      }
-
       console.error("Registration request failed:", getErrorName(error));
       return response
         .status(500)
