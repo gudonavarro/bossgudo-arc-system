@@ -9,6 +9,10 @@ export default defineNuxtConfig({
     strict: true,
     typeCheck: false,
   },
+  runtimeConfig: {
+    mongodbUri: process.env.MONGODB_URI || "",
+    mongodbDatabase: process.env.MONGODB_DATABASE || "",
+  },
   app: {
     head: {
       title: "BOSSGUDO A.R.C. AQUA FARM",
