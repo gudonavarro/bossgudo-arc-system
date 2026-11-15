@@ -80,8 +80,8 @@ useHead(() => ({
     </aside>
   </footer>
 
-  <button class="chat-launch" id="chatLaunch" type="button">💬 Ask ARC Assistant</button>
-  <div class="chat-box" id="chatBox">
+  <button v-if="currentPage !== 'admin-login'" class="chat-launch" id="chatLaunch" type="button">💬 Ask ARC Assistant</button>
+  <div v-if="currentPage !== 'admin-login'" class="chat-box" id="chatBox">
     <div class="chat-head">
       ARC Inquiry Assistant
       <button class="small" id="chatClose" type="button" aria-label="Close assistant">✕</button>
