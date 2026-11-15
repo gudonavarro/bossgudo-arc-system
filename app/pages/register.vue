@@ -100,7 +100,7 @@ async function submit() {
         </form>
         <p class="auth-card-footer register-login-link">
           Already have an account?
-          <NuxtLink :to="loginTarget">Customer Login</NuxtLink>
+          <NuxtLink :to="loginTarget">Login</NuxtLink>
         </p>
       </section>
     </section>
