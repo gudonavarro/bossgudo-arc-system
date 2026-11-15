@@ -17,7 +17,7 @@ function getSafeNextPath() {
 
 const loginTarget = computed(() => {
   const next = getSafeNextPath();
-  return next ? { path: "/login", query: { next } } : "/login";
+  return next ? { path: "/customer-login", query: { next } } : "/customer-login";
 });
 
 async function submit() {
@@ -100,7 +100,7 @@ async function submit() {
         </form>
         <p class="auth-card-footer register-login-link">
           Already have an account?
-          <NuxtLink :to="loginTarget">Login</NuxtLink>
+          <NuxtLink :to="loginTarget">Customer Login</NuxtLink>
         </p>
       </section>
     </section>

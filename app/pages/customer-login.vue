@@ -1,5 +1,7 @@
 <script setup lang="ts">
+defineOptions({ name: "CustomerLogin" });
 definePageMeta({ middleware: ["guest"] });
+useHead({ title: "Customer Login | BOSSGUDO A.R.C. AQUA FARM" });
 
 const route = useRoute();
 const email = ref("");
@@ -93,10 +95,10 @@ async function submit() {
       </div>
     </section>
 
-    <section class="login-panel" aria-label="Login form">
+    <section class="login-panel" aria-label="Customer Login form">
       <div class="login-card">
         <div class="login-card-header">
-          <h2>Login</h2>
+          <h2>Customer Login</h2>
         </div>
 
         <form @submit.prevent="submit">
@@ -132,7 +134,7 @@ async function submit() {
           </div>
 
           <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
-            {{ pending ? "Logging in..." : "Login" }}
+            {{ pending ? "Logging in..." : "Log In" }}
           </button>
 
           <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>

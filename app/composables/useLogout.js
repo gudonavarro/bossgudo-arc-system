@@ -22,7 +22,7 @@ export function useLogout() {
         new CustomEvent("app:session-change", { detail: null }),
       );
 
-      await navigateTo("/login", { replace: true });
+      await navigateTo("/customer-login", { replace: true });
       return { ok: true };
     } catch (error) {
       const message = error?.data?.error || error?.message || "Unable to log out right now.";

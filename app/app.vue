@@ -18,7 +18,7 @@ const legacyPages = new Set([
   "mybookings",
   "admin",
 ]);
-const authPages = new Set(["login", "register"]);
+const authPages = new Set(["customer-login", "register"]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
 const isAuthenticated = computed(() => Boolean(authUser.value));
 const navigationVisible = computed(
@@ -49,7 +49,7 @@ useHead(() => ({
       </NuxtLink>
       <NuxtLink v-if="isAuthenticated" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
       <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
-      <NuxtLink v-else to="/login" class="primary">Log In</NuxtLink>
+      <NuxtLink v-else to="/customer-login" class="primary">Customer Login</NuxtLink>
     </nav>
   </header>
 
@@ -59,7 +59,7 @@ useHead(() => ({
   <div id="modalHost" />
   <output class="toast" id="toast" aria-live="polite" />
 
-  <footer v-if="!['login', 'register', 'forgot-password', 'reset-password'].includes(currentPage)" class="footer">
+  <footer v-if="!['customer-login', 'register', 'forgot-password', 'reset-password'].includes(currentPage)" class="footer">
     <div class="footer-social">
       <h3>SOCIAL</h3>
       <div class="social-links">

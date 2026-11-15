@@ -10,7 +10,7 @@
         <NuxtLink to="/about">About</NuxtLink>
         <NuxtLink to="/shop">Shop</NuxtLink>
         <NuxtLink to="/booking">Bookings</NuxtLink>
-        <NuxtLink to="/login" class="primary">Log In</NuxtLink>
+        <NuxtLink to="/customer-login" class="primary">Customer Login</NuxtLink>
       </nav>
     </header>
 

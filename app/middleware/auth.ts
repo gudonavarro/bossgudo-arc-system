@@ -5,7 +5,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   });
 
   if (error.value || !data.value?.user) {
-    const redirectPath = to.path === "/" ? "/login" : "/login";
+    const redirectPath = "/customer-login";
     return navigateTo({
       path: redirectPath,
       query: to.path !== "/" ? { next: to.fullPath } : undefined,

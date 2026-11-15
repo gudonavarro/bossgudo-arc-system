@@ -40,7 +40,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   });
 
   nuxtApp.hook("app:mounted", () => {
-    const publicPages = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/logout"]);
+    const publicPages = new Set(["/customer-login", "/register", "/forgot-password", "/reset-password", "/logout"]);
 
     if (!publicPages.has(route.path)) {
       const script = document.createElement("script");
