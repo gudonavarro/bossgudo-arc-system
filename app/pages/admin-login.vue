@@ -35,8 +35,7 @@ function submit() {
     <section class="login-panel" aria-label="Administrator login form">
       <div class="login-card">
         <div class="login-card-header">
-          <span class="admin-portal-badge">ADMINISTRATOR PORTAL</span>
-          <h2>Administrator Login</h2>
+          <h2>Admin Login</h2>
           <p class="muted">Admin sign-in is not connected. This page does not submit or verify credentials.</p>
         </div>
 
