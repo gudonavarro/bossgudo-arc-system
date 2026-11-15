@@ -1,9 +1,13 @@
-import mongoose from "mongoose";
+import { pingMongo } from "../utils/mongodb";
 
-export default defineEventHandler((event) => {
-  const databaseConnected = mongoose.connection.readyState === 1;
-  setResponseStatus(event, databaseConnected ? 200 : 503);
-  return {
-    status: databaseConnected ? "ok" : "database_unavailable",
-  };
+export default defineEventHandler(async (event) => {
+  try {
+    await pingMongo(useRuntimeConfig(event));
+    return { status: "ok" };
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    console.error("MongoDB health check failed:", errorName);
+    setResponseStatus(event, 503);
+    return { status: "database_unavailable" };
+  }
 });
