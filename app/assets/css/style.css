@@ -2460,7 +2460,8 @@ textarea:focus-visible,
   }
 }
 
-body[data-page="login"] {
+body[data-page="customer-login"],
+body[data-page="admin-login"] {
   position: relative;
   background: var(--cream);
 }
@@ -2469,7 +2470,8 @@ body[data-page="register"] {
   background: var(--cream);
 }
 
-body[data-page="login"] main {
+body[data-page="customer-login"] main,
+body[data-page="admin-login"] main {
   max-width: none;
   margin: 0;
   padding: 0;
@@ -2833,6 +2835,10 @@ body[data-page="register"] .chat-box {
   background: var(--cream);
 }
 
+.admin-login-shell {
+  min-height: 100vh;
+}
+
 .login-visual {
   position: relative;
   display: flex;
@@ -3141,26 +3147,26 @@ body[data-page="register"] .chat-box {
   text-underline-offset: 3px;
 }
 
-body[data-page="login"] .chat-launch {
+body[data-page="customer-login"] .chat-launch {
   right: 20px;
   bottom: 20px;
   z-index: 40;
 }
 
-body[data-page="login"] .chat-box {
+body[data-page="customer-login"] .chat-box {
   right: 20px;
   bottom: 84px;
   z-index: 41;
 }
 
-body[data-page="login"] .auth-card {
+body[data-page="customer-login"] .auth-card {
   background: transparent;
   padding: 0;
   box-shadow: none;
   border: 0;
 }
 
-body[data-page="login"] .auth-card .field label {
+body[data-page="customer-login"] .auth-card .field label {
   margin-bottom: 8px;
   font-size: 0.77rem;
   font-weight: 800;
@@ -3169,8 +3175,8 @@ body[data-page="login"] .auth-card .field label {
   color: var(--ink);
 }
 
-body[data-page="login"] .auth-card .field input,
-body[data-page="login"] .auth-card .field input:focus {
+body[data-page="customer-login"] .auth-card .field input,
+body[data-page="customer-login"] .auth-card .field input:focus {
   border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--white);
@@ -3178,13 +3184,13 @@ body[data-page="login"] .auth-card .field input:focus {
   color: var(--ink);
 }
 
-body[data-page="login"] .auth-card .field input:focus-visible {
+body[data-page="customer-login"] .auth-card .field input:focus-visible {
   border-color: var(--green2);
   outline: 3px solid rgba(47, 112, 80, 0.16);
   outline-offset: 1px;
 }
 
-body[data-page="login"] .auth-card .primary {
+body[data-page="customer-login"] .auth-card .primary {
   min-height: 52px;
   transition:
     transform 0.18s ease,
@@ -3192,7 +3198,7 @@ body[data-page="login"] .auth-card .primary {
     background-color 0.18s ease;
 }
 
-body[data-page="login"] .auth-card .primary:hover {
+body[data-page="customer-login"] .auth-card .primary:hover {
   background: var(--green2);
   box-shadow: 0 10px 22px rgba(31, 81, 59, 0.2);
 }
@@ -3238,11 +3244,11 @@ body[data-page="login"] .auth-card .primary:hover {
     padding: 48px 28px 112px;
   }
 
-  body[data-page="login"] .chat-launch {
+  body[data-page="customer-login"] .chat-launch {
     position: absolute;
   }
 
-  body[data-page="login"] .chat-box {
+  body[data-page="customer-login"] .chat-box {
     position: absolute;
   }
 }
@@ -3290,12 +3296,12 @@ body[data-page="login"] .auth-card .primary:hover {
     text-align: center;
   }
 
-  body[data-page="login"] .chat-launch {
+  body[data-page="customer-login"] .chat-launch {
     right: 16px;
     bottom: 16px;
   }
 
-  body[data-page="login"] .chat-box {
+  body[data-page="customer-login"] .chat-box {
     right: 12px;
     bottom: 76px;
     width: calc(100vw - 24px);
@@ -3310,7 +3316,7 @@ body[data-page="login"] .auth-card .primary:hover {
   button,
   .nav a,
   .pkg-card,
-  body[data-page="login"] .auth-card .primary {
+  body[data-page="customer-login"] .auth-card .primary {
     transition: none;
   }
 
@@ -3320,7 +3326,7 @@ body[data-page="login"] .auth-card .primary:hover {
   }
 }
 
-body[data-page="login"] .login-forgot-password {
+body[data-page="customer-login"] .login-forgot-password {
   display: block;
   margin-top: 8px;
   color: var(--green);
@@ -3333,20 +3339,20 @@ body[data-page="login"] .login-forgot-password {
     text-decoration-color 0.18s ease;
 }
 
-body[data-page="login"] .login-forgot-password:hover,
-body[data-page="login"] .login-forgot-password:focus-visible {
+body[data-page="customer-login"] .login-forgot-password:hover,
+body[data-page="customer-login"] .login-forgot-password:focus-visible {
   color: var(--green2);
   text-decoration: underline;
 }
 
-body[data-page="login"] .login-forgot-password:focus-visible {
+body[data-page="customer-login"] .login-forgot-password:focus-visible {
   border-radius: 2px;
   outline: 3px solid rgba(47, 112, 80, 0.35);
   outline-offset: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body[data-page="login"] .login-forgot-password {
+  body[data-page="customer-login"] .login-forgot-password {
     transition: none;
   }
 }

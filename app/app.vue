@@ -18,7 +18,7 @@ const legacyPages = new Set([
   "mybookings",
   "admin",
 ]);
-const authPages = new Set(["login", "register"]);
+const authPages = new Set(["customer-login", "register"]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
 const isAuthenticated = computed(() => Boolean(authUser.value));
 const navigationVisible = computed(
@@ -49,7 +49,7 @@ useHead(() => ({
       </NuxtLink>
       <NuxtLink v-if="isAuthenticated" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
       <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
-      <NuxtLink v-else to="/login" class="primary">Log In</NuxtLink>
+      <NuxtLink v-else to="/customer-login" class="primary">Login</NuxtLink>
     </nav>
   </header>
 
@@ -59,7 +59,7 @@ useHead(() => ({
   <div id="modalHost" />
   <output class="toast" id="toast" aria-live="polite" />
 
-  <footer v-if="!['login', 'register', 'forgot-password', 'reset-password'].includes(currentPage)" class="footer">
+  <footer v-if="!['customer-login', 'admin-login', 'register', 'forgot-password', 'reset-password'].includes(currentPage)" class="footer">
     <div class="footer-social">
       <h3>SOCIAL</h3>
       <div class="social-links">
@@ -80,8 +80,8 @@ useHead(() => ({
     </aside>
   </footer>
 
-  <button class="chat-launch" id="chatLaunch" type="button">💬 Ask ARC Assistant</button>
-  <div class="chat-box" id="chatBox">
+  <button v-if="currentPage !== 'admin-login'" class="chat-launch" id="chatLaunch" type="button">💬 Ask ARC Assistant</button>
+  <div v-if="currentPage !== 'admin-login'" class="chat-box" id="chatBox">
     <div class="chat-head">
       ARC Inquiry Assistant
       <button class="small" id="chatClose" type="button" aria-label="Close assistant">✕</button>

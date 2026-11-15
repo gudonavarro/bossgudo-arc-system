@@ -514,7 +514,7 @@ function pickPkg(id) {
 }
 function requireBookingLogin() {
   if (loggedIn) return false;
-  const loginPath = `/login?next=${encodeURIComponent("/booking")}`;
+  const loginPath = `/customer-login?next=${encodeURIComponent("/booking")}`;
   if (typeof window.__bossGudoNavigate === "function") {
     void window.__bossGudoNavigate(loginPath);
   } else {
@@ -722,7 +722,7 @@ const pageFiles = {
   shop: "/shop",
   booking: "/booking",
   mybookings: "/mybookings",
-  login: "/login",
+  "customer-login": "/customer-login",
   register: "/register",
   admin: "/admin",
 };
@@ -732,7 +732,7 @@ const pageTitles = {
   shop: "Shop",
   booking: "Bookings",
   mybookings: "My Bookings",
-  login: "Log In",
+  "customer-login": "Customer Login",
   admin: "Admin Dashboard",
   register: "Create an Account",
   success: "Booking Submitted",
@@ -3004,7 +3004,7 @@ function renderHomePage() {
 }
 function renderCurrentPage() {
   if (page === "home") return;
-  if (page === "login") {
+  if (page === "customer-login") {
     app.replaceChildren();
     return;
   }
@@ -3118,7 +3118,10 @@ document.addEventListener("click", (e) => {
   if (action === "show-visit") chooseBookingType("visit");
 });
 window.addEventListener("popstate", () => {
-  const currentPath = location.pathname.replace(/\/+$/, "") || "/";
+  const pathname = location.pathname;
+  let end = pathname.length;
+  while (end > 1 && pathname.charAt(end - 1) === "/") end -= 1;
+  const currentPath = pathname.slice(0, end) || "/";
   const route = Object.keys(pageFiles).find((key) => pageFiles[key] === currentPath);
   if (route) {
     page = route;

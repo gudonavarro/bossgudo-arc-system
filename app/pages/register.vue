@@ -17,7 +17,7 @@ function getSafeNextPath() {
 
 const loginTarget = computed(() => {
   const next = getSafeNextPath();
-  return next ? { path: "/login", query: { next } } : "/login";
+  return next ? { path: "/customer-login", query: { next } } : "/customer-login";
 });
 
 async function submit() {

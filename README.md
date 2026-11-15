@@ -25,6 +25,34 @@ state. The current booking and visitation data still lives in the browser-side
 application; it is not yet persisted as account-owned MongoDB records.
 Passwords are limited to 72 UTF-8 bytes because bcrypt truncates longer inputs.
 
+## Frontend authentication routes
+
+Nuxt creates these routes from the page files in `app/pages`:
+
+- `/customer-login` is the customer sign-in page. Its `guest` middleware sends
+  users with an existing session to the safe `next` destination or home. The
+  page submits to the existing `POST /api/auth/login` endpoint.
+- `/register` also uses the `guest` middleware and submits to the existing
+  `POST /api/auth/register` endpoint.
+- `/forgot-password` and `/reset-password` use the existing password recovery
+  API routes.
+- `/mybookings` uses the `auth` middleware, which checks
+  `GET /api/auth/session` and redirects signed-out users to
+  `/customer-login`, preserving their requested destination.
+- `/admin` uses the `admin` middleware. It checks the session and redirects
+  signed-out users to `/customer-login`; a signed-in user without the admin
+  role is redirected home.
+- `/admin-login` is a separate frontend-only interface. It does not submit or
+  verify credentials, call an admin sign-in endpoint, or provide registration.
+  The app-wide session restoration may still call `GET /api/auth/session`. The
+  page does not grant access to `/admin`.
+
+The `auth` and `admin` middleware provide frontend navigation behavior only;
+they are not a security boundary. Server-side endpoints and resources must
+enforce authorization independently. The application currently includes
+server-side auth and MongoDB integrations for its existing customer flows; the
+admin-login placeholder does not add or change those integrations.
+
 ## Password recovery email
 
 Password recovery requires a real SMTP account. Configure `SMTP_HOST`,

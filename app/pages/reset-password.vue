@@ -84,7 +84,7 @@ async function submit() {
           <output v-if="feedback" class="form-feedback show" :class="{ success: feedbackStatus === 'success' }" aria-live="polite">{{ feedback }}</output>
         </form>
         <p class="auth-card-footer recovery-login-link">
-          <NuxtLink to="/login">Back to Login</NuxtLink>
+          <NuxtLink to="/customer-login">Back to Customer Login</NuxtLink>
         </p>
       </section>
     </section>

@@ -32,7 +32,13 @@ export default defineNuxtPlugin((nuxtApp) => {
   }) as EventListener);
 
   router.afterEach((route) => {
-    const currentPage = route.path.replace(/^\/+|\/+$/g, "") || "home";
+    let start = 0;
+    let end = route.path.length;
+
+    while (route.path.charAt(start) === "/") start += 1;
+    while (end > start && route.path.charAt(end - 1) === "/") end -= 1;
+
+    const currentPage = route.path.slice(start, end) || "home";
     document.body.dataset.page = currentPage;
     window.dispatchEvent(
       new CustomEvent("app:route-change", { detail: currentPage }),
@@ -40,7 +46,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   });
 
   nuxtApp.hook("app:mounted", () => {
-    const publicPages = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/logout"]);
+    const publicPages = new Set(["/customer-login", "/admin-login", "/register", "/forgot-password", "/reset-password", "/logout"]);
 
     if (!publicPages.has(route.path)) {
       const script = document.createElement("script");

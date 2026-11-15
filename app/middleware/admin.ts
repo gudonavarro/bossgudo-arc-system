@@ -11,7 +11,7 @@ export default defineNuxtRouteMiddleware(async () => {
   });
 
   if (error.value || !data.value?.user) {
-    return navigateTo("/login");
+    return navigateTo("/customer-login");
   }
   if (data.value.user.role !== "admin") {
     return navigateTo("/");

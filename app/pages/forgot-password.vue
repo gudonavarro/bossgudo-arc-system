@@ -51,7 +51,7 @@ async function submit() {
         </form>
         <p class="auth-card-footer recovery-login-link">
           Remember your password?
-          <NuxtLink to="/login">Login</NuxtLink>
+          <NuxtLink to="/customer-login">Login</NuxtLink>
         </p>
       </section>
     </section>
