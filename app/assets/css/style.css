@@ -2509,9 +2509,6 @@ body[data-page="reset-password"] main {
   min-height: 100vh;
   min-height: 100svh;
   padding: 48px clamp(32px, 5vw, 56px);
-}
-
-.recovery-panel {
   background: #f5f6f2;
 }
 
@@ -2661,9 +2658,6 @@ body[data-page="reset-password"] .chat-box {
   align-items: center;
   justify-content: center;
   padding: 40px clamp(32px, 5vw, 56px);
-}
-
-.register-panel {
   background: #f5f6f2;
 }
 
@@ -2953,9 +2947,9 @@ body[data-page="register"] .chat-box {
   display: inline-flex;
   padding: 8px 16px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #10251c;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.95);
+  color: #fff;
   backdrop-filter: blur(12px);
   font-size: 0.75rem;
   font-weight: 500;
