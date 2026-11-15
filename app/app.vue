@@ -2,7 +2,15 @@
 const route = useRoute();
 const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
 
-const currentPage = computed(() => route.path.replace(/^\/+|\/+$/g, "") || "home");
+const currentPage = computed(() => {
+  let start = 0;
+  let end = route.path.length;
+
+  while (route.path.charAt(start) === "/") start += 1;
+  while (end > start && route.path.charAt(end - 1) === "/") end -= 1;
+
+  return route.path.slice(start, end) || "home";
+});
 const legacyPages = new Set([
   "about",
   "shop",
@@ -10,9 +18,12 @@ const legacyPages = new Set([
   "mybookings",
   "admin",
 ]);
+const authPages = new Set(["login", "register"]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
 const isAuthenticated = computed(() => Boolean(authUser.value));
-const navigationVisible = computed(() => legacyPageVisible.value && currentPage.value !== "home");
+const navigationVisible = computed(
+  () => legacyPageVisible.value || authPages.has(currentPage.value),
+);
 
 const navItems = [
   { label: "Home", to: "/" },
