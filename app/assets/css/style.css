@@ -2460,7 +2460,8 @@ textarea:focus-visible,
   }
 }
 
-body[data-page="customer-login"] {
+body[data-page="customer-login"],
+body[data-page="admin-login"] {
   position: relative;
   background: var(--cream);
 }
@@ -2469,7 +2470,8 @@ body[data-page="register"] {
   background: var(--cream);
 }
 
-body[data-page="customer-login"] main {
+body[data-page="customer-login"] main,
+body[data-page="admin-login"] main {
   max-width: none;
   margin: 0;
   padding: 0;
