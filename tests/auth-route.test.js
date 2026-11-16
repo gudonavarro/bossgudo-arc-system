@@ -89,16 +89,17 @@ function fakeUserModel({
     create: [],
     created: [],
   };
+  let storedUser = existingUser;
   return {
     calls,
     findOne(query) {
       calls.findOne.push(query);
       if (findError) throw findError;
-      return fakeQuery(existingUser, calls);
+      return fakeQuery(storedUser, calls);
     },
     findById(id) {
       calls.findById.push(id);
-      return fakeQuery(existingUser, calls);
+      return fakeQuery(storedUser, calls);
     },
     findOneAndUpdate(query, update, options) {
       calls.findOneAndUpdate.push({ query, update, options });
@@ -130,6 +131,7 @@ function fakeUserModel({
         password: await bcrypt.hash(user.password, 4),
       };
       calls.created.push(createdUser);
+      storedUser = createdUser;
       return createdUser;
     },
   };
@@ -319,6 +321,27 @@ test("creates a customer with normalized details and a minimal safe response", a
   assert.equal(JSON.stringify(response.body).includes("StrongPass1!"), false);
   assert.equal("password" in response.body.user, false);
   assert.equal("resetTokenHash" in response.body.user, false);
+});
+
+test("authenticates a customer immediately after successful registration", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const registration = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+  const login = await request(app)
+    .post("/api/auth/login")
+    .send({ email: "ANA@EXAMPLE.COM", password: validRegistration.password });
+
+  assert.equal(registration.status, 201);
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.email, "ana@example.com");
+  assert.equal(login.body.user.role, "customer");
+  assert.equal("password" in login.body.user, false);
+  assert.match(login.headers["set-cookie"][0], /HttpOnly/);
 });
 
 test("returns conflict for an existing account", async () => {
