@@ -1,14 +1,19 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { data, error } = await useFetch<{ user: unknown }>("/api/auth/session", {
-    credentials: "include",
-    cache: "no-store",
-  });
+  const { initialize } = useAuth();
+  const isHydrating = import.meta.client && useNuxtApp().isHydrating;
+  const user = await initialize({ force: !isHydrating });
 
-  if (error.value || !data.value?.user) {
-    const redirectPath = "/customer-login";
-    return navigateTo({
-      path: redirectPath,
-      query: to.path !== "/" ? { next: to.fullPath } : undefined,
-    }, { replace: true });
+  if (!user) {
+    return navigateTo(
+      {
+        path: "/customer-login",
+        query: to.path !== "/" ? { next: to.fullPath } : undefined,
+      },
+      { replace: true },
+    );
+  }
+
+  if (user.role !== "customer") {
+    return navigateTo("/", { replace: true });
   }
 });
