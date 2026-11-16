@@ -11,6 +11,61 @@ function getErrorName(error) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+function validateFaqInput(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Provide FAQ details." };
+  }
+
+  const question =
+    typeof body.question === "string" ? body.question.trim() : "";
+  const answer = typeof body.answer === "string" ? body.answer.trim() : "";
+  if (!question || question.length > 300) {
+    return { error: "Question is required and must be at most 300 characters." };
+  }
+  if (!answer || answer.length > 5000) {
+    return { error: "Answer is required and must be at most 5000 characters." };
+  }
+  if (
+    !Array.isArray(body.keywords) ||
+    body.keywords.length === 0 ||
+    body.keywords.length > 30
+  ) {
+    return { error: "Provide between 1 and 30 keywords." };
+  }
+
+  const keywords = [];
+  const seenKeywords = new Set();
+  for (const rawKeyword of body.keywords) {
+    if (typeof rawKeyword !== "string") {
+      return { error: "Each keyword must be text." };
+    }
+    const keyword = rawKeyword.trim();
+    if (!keyword || keyword.length > 80) {
+      return {
+        error: "Each keyword is required and must be at most 80 characters.",
+      };
+    }
+    const normalizedKeyword = keyword.toLowerCase();
+    if (!seenKeywords.has(normalizedKeyword)) {
+      seenKeywords.add(normalizedKeyword);
+      keywords.push(keyword);
+    }
+  }
+
+  if (body.active !== undefined && typeof body.active !== "boolean") {
+    return { error: "Active must be a boolean." };
+  }
+
+  return {
+    value: {
+      question,
+      keywords,
+      answer,
+      ...(body.active === undefined ? {} : { active: body.active }),
+    },
+  };
+}
+
 function createFaqRouter() {
   const router = express.Router();
   const authenticateAdmin = createAuthenticationMiddleware({
@@ -62,7 +117,31 @@ function createFaqRouter() {
     }
   });
 
+  router.post("/", async (request, response) => {
+    const validation = validateFaqInput(request.body);
+    if (validation.error) {
+      return response.status(400).json({ error: validation.error });
+    }
+
+    try {
+      const faq = await request.faqModel.create({
+        ...validation.value,
+        createdBy: request.authUser.id,
+        updatedBy: request.authUser.id,
+      });
+      return response.status(201).json({ faq });
+    } catch (error) {
+      if (getErrorName(error) === "ValidationError") {
+        return response.status(400).json({ error: "Invalid FAQ details." });
+      }
+      console.error("FAQ creation request failed:", getErrorName(error));
+      return response.status(503).json({
+        error: "FAQ data is temporarily unavailable.",
+      });
+    }
+  });
+
   return router;
 }
 
-export { createFaqRouter };
+export { createFaqRouter, validateFaqInput };

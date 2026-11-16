@@ -6,7 +6,9 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const jiti = createJiti(__filename);
-const { createFaqRouter } = jiti("../server/utils/faq-router.js");
+const { createFaqRouter, validateFaqInput } = jiti(
+  "../server/utils/faq-router.js",
+);
 const adminId = "111111111111111111111111";
 const faqId = "aaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -20,6 +22,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
     createdAt: new Date(),
   };
   const queryCalls = [];
+  const createCalls = [];
   const faqModel = {
     find(filter) {
       queryCalls.push({ operation: "find", filter });
@@ -47,6 +50,10 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
         },
       };
     },
+    async create(fields) {
+      createCalls.push(fields);
+      return createFaq(fields);
+    },
   };
   const app = express();
   app.use(express.json());
@@ -69,7 +76,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
     next();
   });
   app.use("/api/admin/faqs", createFaqRouter());
-  return { app, token, queryCalls };
+  return { app, token, queryCalls, createCalls };
 }
 
 function createFaq(overrides = {}) {
@@ -126,4 +133,77 @@ test("validates FAQ ids and distinguishes missing records", async () => {
     .expect(404)
     .expect({ error: "FAQ not found." });
   assert.deepEqual(queryCalls, [{ operation: "findById", id: faqId }]);
+});
+
+test("validates FAQ content and removes duplicate keywords", () => {
+  assert.deepEqual(
+    validateFaqInput({
+      question: "  How much crayfish? ",
+      keywords: [" crayfish ", "Crayfish", "juvenile"],
+      answer: " Stored answer. ",
+    }),
+    {
+      value: {
+        question: "How much crayfish?",
+        keywords: ["crayfish", "juvenile"],
+        answer: "Stored answer.",
+      },
+    },
+  );
+  for (const value of [
+    null,
+    {},
+    { question: "Question", keywords: [], answer: "Answer" },
+    {
+      question: "Question",
+      keywords: ["keyword"],
+      answer: "Answer",
+      active: "false",
+    },
+    {
+      question: "Question",
+      keywords: ["x".repeat(81)],
+      answer: "Answer",
+    },
+  ]) {
+    assert.ok(validateFaqInput(value).error);
+  }
+});
+
+test("creates FAQs with server-controlled audit fields", async () => {
+  const { app, token, createCalls } = createFaqApp();
+  const response = await request(app)
+    .post("/api/admin/faqs")
+    .set("Cookie", `bossgudo_session=${token}`)
+    .send({
+      question: "How much crayfish?",
+      keywords: ["crayfish"],
+      answer: "Stored answer.",
+      createdBy: "222222222222222222222222",
+      updatedBy: "333333333333333333333333",
+      createdAt: "2000-01-01",
+    })
+    .expect(201);
+
+  assert.equal(response.body.faq.createdBy, adminId);
+  assert.equal(response.body.faq.updatedBy, adminId);
+  assert.deepEqual(createCalls, [
+    {
+      question: "How much crayfish?",
+      keywords: ["crayfish"],
+      answer: "Stored answer.",
+      createdBy: adminId,
+      updatedBy: adminId,
+    },
+  ]);
+});
+
+test("rejects invalid FAQ creation without touching the model", async () => {
+  const { app, token, createCalls } = createFaqApp();
+  await request(app)
+    .post("/api/admin/faqs")
+    .set("Cookie", `bossgudo_session=${token}`)
+    .send({ question: "Question", keywords: [], answer: "Answer" })
+    .expect(400);
+  assert.deepEqual(createCalls, []);
 });
