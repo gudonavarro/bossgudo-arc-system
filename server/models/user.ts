@@ -1,3 +1,4 @@
+import bcrypt from "bcrypt";
 import { model, Schema, Types } from "mongoose";
 
 export type UserRole = "customer" | "admin";
@@ -18,6 +19,7 @@ export interface User {
 }
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
+const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 
 const userSchema = new Schema<User>({
   firstName: { type: String, required: true, trim: true, maxlength: 80 },
@@ -31,15 +33,22 @@ const userSchema = new Schema<User>({
     match: EMAIL_PATTERN,
   },
   phoneNumber: { type: String, required: true, trim: true },
-  password: { type: String, required: true },
+  password: { type: String, required: true, select: false },
   role: { type: String, enum: ["customer", "admin"], default: "customer" },
   isActive: { type: Boolean, default: true },
-  resetTokenHash: { type: String },
+  resetTokenHash: { type: String, select: false },
   resetTokenExpires: { type: Date },
 }, { timestamps: true });
 
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ phoneNumber: 1 }, { unique: true });
 userSchema.index({ resetTokenHash: 1 }, { unique: true, sparse: true });
+
+userSchema.pre("save", async function () {
+  if (!this.isModified("password") || BCRYPT_HASH_PATTERN.test(this.password)) {
+    return;
+  }
+  this.password = await bcrypt.hash(this.password, 12);
+});
 
 export const UserModel = model<User>("User", userSchema);
