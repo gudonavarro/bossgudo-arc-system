@@ -13,6 +13,7 @@ const showPassword = ref(false);
 const errorMessage = ref("");
 const pending = ref(false);
 const { loginAdmin } = useAuth();
+const { showToast } = useToast();
 
 async function submit() {
   if (pending.value) return;
@@ -43,6 +44,7 @@ async function submit() {
   }
 
   await navigateTo("/admin", { replace: true });
+  showToast("Login successful!", "success");
 }
 </script>
 

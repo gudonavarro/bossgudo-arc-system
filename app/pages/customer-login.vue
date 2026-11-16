@@ -16,6 +16,7 @@ const errorMessage = ref("");
 const pending = ref(false);
 const showPassword = ref(false);
 const { login } = useAuth();
+const { showToast } = useToast();
 
 function getSafeNextPath() {
   return getSafeRedirectPath(route.query.next);
@@ -59,6 +60,7 @@ async function submit() {
   }
 
   await navigateTo(getPostLoginTarget(), { replace: true });
+  showToast("Login successful!", "success");
 }
 </script>
 
