@@ -69,8 +69,47 @@ function containsWholePhrase(message, phrase) {
   );
 }
 
+function matchesPluralKeyword(messageWords, keywordWord) {
+  if (keywordWord.length < 4) return false;
+  return messageWords.some(
+    (word) =>
+      word.length > keywordWord.length &&
+      word.length <= keywordWord.length + 2 &&
+      word.startsWith(keywordWord) &&
+      word.endsWith("s"),
+  );
+}
+
+function matchesPartialKeyword(messageWords, keywordWord) {
+  if (keywordWord.length < 5) return false;
+  return messageWords.some(
+    (word) =>
+      word.length >= 5 &&
+      (word.includes(keywordWord) || keywordWord.includes(word)),
+  );
+}
+
+function getKeywordWordMatch(messageWords, keywordWord) {
+  if (
+    messageWords.includes(keywordWord) ||
+    matchesPluralKeyword(messageWords, keywordWord)
+  ) {
+    return "exact";
+  }
+  if (matchesPartialKeyword(messageWords, keywordWord)) {
+    return "partial";
+  }
+  return "";
+}
+
+function getExactKeywordScore(matchedWords) {
+  if (matchedWords.size > 1) return 40;
+  if (matchedWords.size === 1) return 25;
+  return 0;
+}
+
 function getKeywordScore(messageWords, messagePhrase, keywords) {
-  let highestScore = 0;
+  let phraseScore = 0;
   const matchedWords = new Set();
   const partialWords = new Set();
 
@@ -79,56 +118,26 @@ function getKeywordScore(messageWords, messagePhrase, keywords) {
     const keywordWords = getMeaningfulWords(keyword);
     if (keywordWords.length === 0) continue;
 
-    const keywordPhrase = keywordWords.join(" ");
-    const isPhraseMatch =
+    if (
       keywordWords.length > 1 &&
-      containsWholePhrase(messagePhrase, keywordPhrase);
-
-    if (isPhraseMatch) {
-      highestScore = Math.max(highestScore, 60);
+      containsWholePhrase(messagePhrase, keywordWords.join(" "))
+    ) {
+      phraseScore = 60;
     }
 
     for (const keywordWord of keywordWords) {
-      const exactWordMatch = messageWords.includes(keywordWord);
-      const pluralWordMatch =
-        keywordWord.length >= 4 &&
-        messageWords.some(
-          (word) =>
-            word.length > keywordWord.length &&
-            word.length <= keywordWord.length + 2 &&
-            word.startsWith(keywordWord) &&
-            /s$/.test(word),
-        );
-      if (exactWordMatch || pluralWordMatch) {
+      const match = getKeywordWordMatch(messageWords, keywordWord);
+      if (match === "exact") {
         matchedWords.add(keywordWord);
-      } else if (
-        keywordWord.length >= 5 &&
-        messageWords.some(
-          (word) =>
-            word.length >= 5 &&
-            (word.includes(keywordWord) || keywordWord.includes(word)),
-        )
-      ) {
-        highestScore = Math.max(highestScore, 10);
+      } else if (match === "partial") {
         partialWords.add(keywordWord);
       }
     }
   }
 
-  const exactWordScore =
-    matchedWords.size > 1 ? 40 : matchedWords.size === 1 ? 25 : 0;
-  const partialWordScore = partialWords.size * 10;
-  if (matchedWords.size > 1) {
-    highestScore = Math.max(highestScore, exactWordScore + partialWordScore);
-  } else {
-    highestScore = Math.max(
-      highestScore,
-      exactWordScore + partialWordScore,
-      partialWordScore,
-    );
-  }
-
-  return highestScore;
+  const wordScore =
+    getExactKeywordScore(matchedWords) + partialWords.size * 10;
+  return Math.max(phraseScore, wordScore);
 }
 
 function scoreFaqMatch(message, faq) {

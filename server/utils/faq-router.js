@@ -11,63 +11,72 @@ function getErrorName(error) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+function validateQuestion(question) {
+  const value = typeof question === "string" ? question.trim() : "";
+  if (!value || value.length > 300) {
+    return {
+      error: "Question is required and must be at most 300 characters.",
+    };
+  }
+  return { value };
+}
+
+function validateAnswer(answer) {
+  const value = typeof answer === "string" ? answer.trim() : "";
+  if (!value || value.length > 5000) {
+    return { error: "Answer is required and must be at most 5000 characters." };
+  }
+  return { value };
+}
+
+function validateKeywords(keywords) {
+  if (!Array.isArray(keywords) || keywords.length === 0 || keywords.length > 30) {
+    return { error: "Provide between 1 and 30 keywords." };
+  }
+
+  const values = [];
+  const seenKeywords = new Set();
+  for (const rawKeyword of keywords) {
+    if (typeof rawKeyword !== "string") {
+      return { error: "Each keyword must be text." };
+    }
+    const keyword = rawKeyword.trim();
+    if (!keyword || keyword.length > 80) {
+      return {
+        error: "Each keyword is required and must be at most 80 characters.",
+      };
+    }
+    const normalizedKeyword = keyword.toLowerCase();
+    if (!seenKeywords.has(normalizedKeyword)) {
+      seenKeywords.add(normalizedKeyword);
+      values.push(keyword);
+    }
+  }
+  return { value: values };
+}
+
 function validateFaqInput(body, { partial = false } = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { error: "Provide FAQ details." };
   }
 
   const value = {};
-  if (!partial || body.question !== undefined) {
-    const question =
-      typeof body.question === "string" ? body.question.trim() : "";
-    if (!question || question.length > 300) {
-      return {
-        error: "Question is required and must be at most 300 characters.",
-      };
-    }
-    value.question = question;
-  }
-  if (!partial || body.answer !== undefined) {
-    const answer = typeof body.answer === "string" ? body.answer.trim() : "";
-    if (!answer || answer.length > 5000) {
-      return { error: "Answer is required and must be at most 5000 characters." };
-    }
-    value.answer = answer;
-  }
-  if (!partial || body.keywords !== undefined) {
-    if (
-      !Array.isArray(body.keywords) ||
-      body.keywords.length === 0 ||
-      body.keywords.length > 30
-    ) {
-      return { error: "Provide between 1 and 30 keywords." };
-    }
-
-    const keywords = [];
-    const seenKeywords = new Set();
-    for (const rawKeyword of body.keywords) {
-      if (typeof rawKeyword !== "string") {
-        return { error: "Each keyword must be text." };
-      }
-      const keyword = rawKeyword.trim();
-      if (!keyword || keyword.length > 80) {
-        return {
-          error: "Each keyword is required and must be at most 80 characters.",
-        };
-      }
-      const normalizedKeyword = keyword.toLowerCase();
-      if (!seenKeywords.has(normalizedKeyword)) {
-        seenKeywords.add(normalizedKeyword);
-        keywords.push(keyword);
-      }
-    }
-    value.keywords = keywords;
+  const fields = [
+    ["question", validateQuestion],
+    ["answer", validateAnswer],
+    ["keywords", validateKeywords],
+  ];
+  for (const [field, validate] of fields) {
+    if (partial && body[field] === undefined) continue;
+    const validation = validate(body[field]);
+    if (validation.error) return validation;
+    value[field] = validation.value;
   }
 
-  if (body.active !== undefined && typeof body.active !== "boolean") {
-    return { error: "Active must be a boolean." };
-  }
   if (body.active !== undefined) {
+    if (typeof body.active !== "boolean") {
+      return { error: "Active must be a boolean." };
+    }
     value.active = body.active;
   }
   if (partial && Object.keys(value).length === 0) {

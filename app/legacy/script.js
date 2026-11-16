@@ -2839,7 +2839,7 @@ async function faqApiRequest(path, options = {}) {
   try {
     result = await response.json();
   } catch {
-    throw new Error("The FAQ service returned an invalid response.");
+    throw new SyntaxError("The FAQ service returned an invalid response.");
   }
   if (!response.ok) {
     throw new Error(
@@ -2858,7 +2858,7 @@ async function loadFaqs(force = false) {
   try {
     const result = await faqApiRequest("/api/admin/faqs");
     if (!Array.isArray(result.faqs)) {
-      throw new Error("The FAQ service returned invalid FAQ data.");
+      throw new TypeError("The FAQ service returned invalid FAQ data.");
     }
     faqs = result.faqs;
     faqsLoaded = true;
@@ -2873,22 +2873,30 @@ async function loadFaqs(force = false) {
   }
 }
 
+function faqCardMarkup(faq) {
+  const active = faq.active !== false;
+  const faqId = safe(faq._id);
+  const keywords = Array.isArray(faq.keywords) ? faq.keywords : [];
+  const statusClass = active ? "green" : "";
+  const statusLabel = active ? "Active" : "Inactive";
+  const actionLabel = active ? "Deactivate" : "Activate";
+  return `<div class="card" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(faq.question)}</h3><span class="status ${statusClass}">${statusLabel}</span><div class="chips" style="margin-top:8px">${keywords
+    .map((keyword) => `<span class="chip">${safe(keyword)}</span>`)
+    .join("")}</div></div><div class="mini-actions"><button class="secondary small" onclick="openFaqForm('${faqId}')">Edit</button><button class="secondary small" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${actionLabel}</button><button class="danger small" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>Delete</button></div></div><p class="muted" style="margin-bottom:0;white-space:pre-wrap">${safe(faq.answer)}</p></div>`;
+}
+
+function faqContentMarkup() {
+  if (faqLoading) return '<div class="notice">Loading FAQs...</div>';
+  if (faqLoadError) {
+    return `<div class="notice">${safe(faqLoadError)} <button class="secondary small" onclick="loadFaqs(true)">Retry</button></div>`;
+  }
+  const cards = faqs.map(faqCardMarkup).join("");
+  return cards || '<div class="empty">No FAQs yet.</div>';
+}
+
 function adminFaqs() {
   if (!faqsLoaded && !faqLoading && !faqLoadError) void loadFaqs();
-  const faqContent = faqLoading
-    ? '<div class="notice">Loading FAQs...</div>'
-    : faqLoadError
-      ? `<div class="notice">${safe(faqLoadError)} <button class="secondary small" onclick="loadFaqs(true)">Retry</button></div>`
-      : faqs
-          .map((faq) => {
-            const active = faq.active !== false;
-            const faqId = safe(faq._id);
-            const keywords = Array.isArray(faq.keywords) ? faq.keywords : [];
-            return `<div class="card" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(faq.question)}</h3><span class="status ${active ? "green" : ""}">${active ? "Active" : "Inactive"}</span><div class="chips" style="margin-top:8px">${keywords
-              .map((keyword) => `<span class="chip">${safe(keyword)}</span>`)
-              .join("")}</div></div><div class="mini-actions"><button class="secondary small" onclick="openFaqForm('${faqId}')">Edit</button><button class="secondary small" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${active ? "Deactivate" : "Activate"}</button><button class="danger small" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>Delete</button></div></div><p class="muted" style="margin-bottom:0;white-space:pre-wrap">${safe(faq.answer)}</p></div>`;
-          })
-          .join("") || '<div class="empty">No FAQs yet.</div>';
+  const faqContent = faqContentMarkup();
   return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Assistant FAQs</h3><p class="muted" style="margin:6px 0 0">The assistant matches customer questions to active, administrator-maintained FAQ answers.</p></div><div class="mini-actions"><button class="secondary" onclick="loadFaqs(true)" ${faqLoading ? "disabled" : ""}>Refresh</button><button class="primary" onclick="openFaqForm()">＋ Add FAQ</button></div></div><div class="card" style="margin-top:16px"><h3 style="margin-top:0">Test the assistant</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="faqTestInput" placeholder="Type a customer question…" style="flex:1;min-width:200px;padding:10px;border:1px solid #cfd9d0;border-radius:9px" onkeydown="if(event.key==='Enter')testFaq()"><button class="secondary" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice" style="margin-top:10px">The answer will appear here.</div></div>${faqContent}</div>`;
 }
 
