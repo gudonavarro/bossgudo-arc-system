@@ -17,6 +17,18 @@ export interface RegistrationApiError {
   fieldErrors: RegistrationFieldErrors;
 }
 
+export interface RegistrationSuccessResponse {
+  message: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phoneNumber: string;
+    role: "customer";
+  };
+}
+
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
 const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const PASSWORD_ERROR =
@@ -112,4 +124,25 @@ export function getRegistrationApiError(
         : REGISTRATION_ERROR,
     fieldErrors,
   };
+}
+
+export function isRegistrationSuccessResponse(
+  response: unknown,
+): response is RegistrationSuccessResponse {
+  if (typeof response !== "object" || response === null) return false;
+
+  const { message, user } = response as Record<string, unknown>;
+  if (typeof message !== "string" || typeof user !== "object" || user === null) {
+    return false;
+  }
+
+  const registeredUser = user as Record<string, unknown>;
+  return (
+    typeof registeredUser.id === "string" &&
+    typeof registeredUser.firstName === "string" &&
+    typeof registeredUser.lastName === "string" &&
+    typeof registeredUser.email === "string" &&
+    typeof registeredUser.phoneNumber === "string" &&
+    registeredUser.role === "customer"
+  );
 }

@@ -5,6 +5,7 @@ const { createJiti } = require("jiti");
 const jiti = createJiti(__filename);
 const {
   getRegistrationApiError,
+  isRegistrationSuccessResponse,
   normalizeRegistrationPhoneNumber,
   validateRegistration,
 } = jiti("../app/utils/registration.ts");
@@ -91,5 +92,30 @@ test("uses a safe fallback for network and unexpected server errors", () => {
       message: "Unable to create your account right now. Please try again.",
       fieldErrors: {},
     },
+  );
+});
+
+test("accepts only the registration response shape returned by the API", () => {
+  assert.equal(
+    isRegistrationSuccessResponse({
+      message: "Account created.",
+      user: {
+        id: "user-1",
+        firstName: "Ana",
+        lastName: "Cruz",
+        email: "ana@example.com",
+        phoneNumber: "+639171234567",
+        role: "customer",
+      },
+    }),
+    true,
+  );
+  assert.equal(isRegistrationSuccessResponse({ message: "Account created." }), false);
+  assert.equal(
+    isRegistrationSuccessResponse({
+      message: "Account created.",
+      user: { id: "user-1", role: "admin" },
+    }),
+    false,
   );
 });
