@@ -47,7 +47,15 @@ export function validateLoginCredentials(
   if (!normalizedEmail || !password.trim()) {
     return "Enter your email address and password.";
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+  const atIndex = normalizedEmail.indexOf("@");
+  const domainDotIndex = normalizedEmail.indexOf(".", atIndex + 1);
+  if (
+    atIndex <= 0 ||
+    normalizedEmail.includes("@", atIndex + 1) ||
+    domainDotIndex <= atIndex + 1 ||
+    domainDotIndex === normalizedEmail.length - 1 ||
+    /\s/.test(normalizedEmail)
+  ) {
     return "Enter a valid email address.";
   }
   return null;

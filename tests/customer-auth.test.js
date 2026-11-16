@@ -21,6 +21,20 @@ test("normalizes email and validates login credentials", () => {
     validateLoginCredentials("not-an-email", "secret"),
     "Enter a valid email address.",
   );
+  for (const email of [
+    "@example.com",
+    "user@.com",
+    "user@example.",
+    "user@@example.com",
+    "user name@example.com",
+    "user@example .com",
+  ]) {
+    assert.equal(
+      validateLoginCredentials(email, "secret"),
+      "Enter a valid email address.",
+    );
+  }
+  assert.equal(validateLoginCredentials("user@sub.example.com", "secret"), null);
 });
 
 test("accepts only safe same-site redirect paths", () => {
