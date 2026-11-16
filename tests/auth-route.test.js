@@ -391,6 +391,26 @@ test("identifies which registration fields are already in use", async () => {
   assert.equal(model.calls.create.length, 0);
 });
 
+test("rate limits repeated customer registration attempts", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+  const responses = [];
+
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    responses.push(
+      await request(app)
+        .post("/api/auth/register")
+        .send({}),
+    );
+  }
+
+  assert.ok(responses.slice(0, 10).every((response) => response.status === 400));
+  assert.equal(responses[10].status, 429);
+  assert.equal(responses[10].body.error, "Too many attempts. Please try again later.");
+});
+
 test("maps duplicate index races to conflict", async () => {
   const model = fakeUserModel({
     createError: { code: 11000, keyPattern: { email: 1 } },
