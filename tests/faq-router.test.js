@@ -17,6 +17,7 @@ function createFaqApp({
   faqRecords = [createFaq()],
   findError = null,
   createError = null,
+  userActive = true,
 } = {}) {
   const token = crypto.randomBytes(32).toString("base64url");
   const session = {
@@ -100,7 +101,7 @@ function createFaqApp({
           email: "admin@example.com",
           phoneNumber: "+639171234567",
           role,
-          isActive: true,
+          isActive: userActive,
         }),
       },
     };
@@ -137,6 +138,13 @@ test("requires an authenticated administrator", async () => {
     .set("Cookie", `bossgudo_session=${token}`)
     .expect(403)
     .expect({ error: "Forbidden." });
+
+  const inactiveAdmin = createFaqApp({ userActive: false });
+  await request(inactiveAdmin.app)
+    .get("/api/admin/faqs")
+    .set("Cookie", `bossgudo_session=${inactiveAdmin.token}`)
+    .expect(401)
+    .expect({ error: "Authentication required." });
 });
 
 test("lists FAQs for an administrator without caching the response", async () => {
