@@ -59,6 +59,10 @@ test("validates email and role and declares unique indexes", async () => {
     mongoose.Error.ValidationError,
   );
   await assert.rejects(
+    createValidUser({ phoneNumber: "12345" }).validate(),
+    mongoose.Error.ValidationError,
+  );
+  await assert.rejects(
     createValidUser({ role: "owner" }).validate(),
     mongoose.Error.ValidationError,
   );

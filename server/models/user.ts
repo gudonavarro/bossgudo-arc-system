@@ -27,6 +27,7 @@ export interface User {
 export type UserDocument = HydratedDocument<User>;
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
+const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 
 const userSchema = new Schema<User>({
@@ -40,7 +41,12 @@ const userSchema = new Schema<User>({
     maxlength: 254,
     match: EMAIL_PATTERN,
   },
-  phoneNumber: { type: String, required: true, trim: true },
+  phoneNumber: {
+    type: String,
+    required: true,
+    trim: true,
+    match: PHONE_PATTERN,
+  },
   password: { type: String, required: true, select: false },
   role: { type: String, enum: ["customer", "admin"], default: "customer" },
   isActive: { type: Boolean, default: true },
