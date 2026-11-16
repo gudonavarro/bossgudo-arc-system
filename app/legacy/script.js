@@ -353,64 +353,11 @@ let visits = [
     submittedAt: "Oct 19, 2026",
   },
 ];
-let faqs = [
-  {
-    id: "f1",
-    question: "How do payments, deposits and delivery work?",
-    keywords: "pay,payment,gcash,deposit,delivery,balance,lalamove,refund",
-    answer:
-      "You pay a 50% down payment in GCash when you book and upload your receipt. Your booking is confirmed once the owner verifies it. After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings. Down payments are non-refundable.",
-  },
-  {
-    id: "f2",
-    question: "How much does it cost?",
-    keywords: "price,cost,how much",
-    answer:
-      "Package prices are shown on the Packages and Bookings pages. A service booking needs a 50% down payment, and any Lalamove delivery fee is quoted separately by the owner after the service is done.",
-  },
-  {
-    id: "f3",
-    question: "How do I book?",
-    keywords: "book,schedule,date,appointment",
-    answer:
-      "Open the Bookings page and choose Book a Service or Book a Visitation. For a service, pick your package, then your date, then your details, and pay the 50% GCash down payment. Farm visits are for 1–5 visitors on available weekends, and special dates are reviewed by the admin.",
-  },
-  {
-    id: "f4",
-    question: "Is training available?",
-    keywords: "training,train,learn",
-    answer:
-      "Training and support may be available. Please confirm the current training requirements with the owner before receiving crayfish.",
-  },
-  {
-    id: "f5",
-    question: "Where is the farm?",
-    keywords: "location,address,where",
-    answer:
-      "BOSSGUDO A.R.C. AQUA FARM is located in Bacao II, General Trias, Cavite. Please contact the owner to confirm visit arrangements.",
-  },
-  {
-    id: "f6",
-    question: "What pond options are there?",
-    keywords: "pond,setup,layer,filtration",
-    answer:
-      "Choose a predefined pond package, or design a custom pond with your own layers (up to 3), size and filtration. The price updates automatically from your pond size.",
-  },
-  {
-    id: "f7",
-    question: "What does the farm offer?",
-    keywords: "crayfish,supply,arc",
-    answer:
-      "The farm offers Australian Red Claw crayfish-related services. Visit Packages to explore pond packages or design your own pond.",
-  },
-  {
-    id: "f8",
-    question: "How do I contact the owner?",
-    keywords: "contact,phone,message",
-    answer:
-      "For questions not covered here, please contact the farm owner through the business’s official contact channel.",
-  },
-];
+let faqs = [];
+let faqsLoaded = false;
+let faqLoading = false;
+let faqLoadError = "";
+let faqSaving = false;
 
 /* ---------- package catalog ---------- */
 let pondPackageCatalog = [
@@ -2874,78 +2821,189 @@ function deletePackage(i) {
 }
 
 /* ----- assistant FAQs ----- */
+async function faqApiRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new Error("Unable to reach the FAQ service.");
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error("The FAQ service returned an invalid response.");
+  }
+  if (!response.ok) {
+    throw new Error(
+      typeof result?.error === "string"
+        ? result.error
+        : "Unable to complete the FAQ request.",
+    );
+  }
+  return result;
+}
+
+async function loadFaqs(force = false) {
+  if (faqLoading || (faqsLoaded && !force)) return;
+  faqLoading = true;
+  faqLoadError = "";
+  try {
+    const result = await faqApiRequest("/api/admin/faqs");
+    if (!Array.isArray(result.faqs)) {
+      throw new Error("The FAQ service returned invalid FAQ data.");
+    }
+    faqs = result.faqs;
+    faqsLoaded = true;
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    console.error("FAQ loading failed:", errorName);
+    faqLoadError =
+      error instanceof Error ? error.message : "Unable to load FAQs.";
+  } finally {
+    faqLoading = false;
+    if (page === "admin" && adminTab === "faqs") render();
+  }
+}
+
 function adminFaqs() {
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Assistant FAQs</h3><p class="muted" style="margin:6px 0 0">The ARC Inquiry Assistant answers with the first FAQ whose keywords appear in the customer’s question.</p></div><button class="primary" onclick="openFaqForm()">＋ Add FAQ</button></div><div class="card" style="margin-top:16px"><h3 style="margin-top:0">Test the assistant</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="faqTestInput" placeholder="Type a customer question…" style="flex:1;min-width:200px;padding:10px;border:1px solid #cfd9d0;border-radius:9px" onkeydown="if(event.key==='Enter')testFaq()"><button class="secondary" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice" style="margin-top:10px">The answer will appear here.</div></div>${
-    faqs
-      .map(
-        (f, i) =>
-          `<div class="card" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(f.question)}</h3><div class="chips" style="margin-top:8px">${f.keywords
-            .split(",")
-            .map((k) => k.trim())
-            .filter(Boolean)
-            .map((k) => `<span class="chip">${safe(k)}</span>`)
-            .join(
-              "",
-            )}</div></div><div class="mini-actions"><button class="secondary small" onclick="openFaqForm('${f.id}')">Edit</button><button class="danger small" onclick="deleteFaq('${f.id}')">Delete</button></div></div><p class="muted" style="margin-bottom:0">${safe(f.answer)}</p></div>`,
-      )
-      .join("") || '<div class="empty">No FAQs yet.</div>'
-  }</div>`;
+  if (!faqsLoaded && !faqLoading && !faqLoadError) void loadFaqs();
+  const faqContent = faqLoading
+    ? '<div class="notice">Loading FAQs...</div>'
+    : faqLoadError
+      ? `<div class="notice">${safe(faqLoadError)} <button class="secondary small" onclick="loadFaqs(true)">Retry</button></div>`
+      : faqs
+          .map((faq) => {
+            const active = faq.active !== false;
+            const faqId = safe(faq._id);
+            const keywords = Array.isArray(faq.keywords) ? faq.keywords : [];
+            return `<div class="card" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(faq.question)}</h3><span class="status ${active ? "green" : ""}">${active ? "Active" : "Inactive"}</span><div class="chips" style="margin-top:8px">${keywords
+              .map((keyword) => `<span class="chip">${safe(keyword)}</span>`)
+              .join("")}</div></div><div class="mini-actions"><button class="secondary small" onclick="openFaqForm('${faqId}')">Edit</button><button class="secondary small" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${active ? "Deactivate" : "Activate"}</button><button class="danger small" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>Delete</button></div></div><p class="muted" style="margin-bottom:0;white-space:pre-wrap">${safe(faq.answer)}</p></div>`;
+          })
+          .join("") || '<div class="empty">No FAQs yet.</div>';
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Assistant FAQs</h3><p class="muted" style="margin:6px 0 0">The assistant matches customer questions to active, administrator-maintained FAQ answers.</p></div><div class="mini-actions"><button class="secondary" onclick="loadFaqs(true)" ${faqLoading ? "disabled" : ""}>Refresh</button><button class="primary" onclick="openFaqForm()">＋ Add FAQ</button></div></div><div class="card" style="margin-top:16px"><h3 style="margin-top:0">Test the assistant</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="faqTestInput" placeholder="Type a customer question…" style="flex:1;min-width:200px;padding:10px;border:1px solid #cfd9d0;border-radius:9px" onkeydown="if(event.key==='Enter')testFaq()"><button class="secondary" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice" style="margin-top:10px">The answer will appear here.</div></div>${faqContent}</div>`;
 }
-function testFaq() {
-  const q = V("faqTestInput"),
-    el = document.getElementById("faqTest");
-  if (el) el.textContent = q ? botAnswer(q) : "Type a question first.";
+
+async function testFaq() {
+  const message = V("faqTestInput");
+  const resultElement = document.getElementById("faqTest");
+  if (!resultElement) return;
+  if (!message) {
+    resultElement.textContent = "Type a question first.";
+    return;
+  }
+  resultElement.textContent = "Checking active FAQ answers...";
+  try {
+    const result = await faqApiRequest("/api/chatbot/message", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    });
+    resultElement.textContent = result.answer;
+  } catch (error) {
+    resultElement.textContent =
+      error instanceof Error ? error.message : "Unable to test the assistant.";
+  }
 }
+
 function openFaqForm(id) {
-  const f = id ? faqs.find((x) => x.id === id) : null;
+  const faq = id ? faqs.find((item) => item._id === id) : null;
+  const keywords = Array.isArray(faq?.keywords) ? faq.keywords.join(", ") : "";
   openModal(
-    f ? "Edit FAQ" : "Add FAQ",
+    faq ? "Edit FAQ" : "Add FAQ",
     "",
-    `${fld("m_fq", "Question (for your reference)", f?.question)}${fld("m_fk", "Keywords (comma-separated)", f?.keywords, "text", 'placeholder="e.g. price, cost, how much"')}<div class="field"><label for="m_fa">Answer shown to the customer</label><textarea id="m_fa" style="min-height:120px">${safe(f?.answer || "")}</textarea></div>`,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveFaq('${f ? f.id : ""}')">${f ? "Save FAQ" : "Add FAQ"}</button>`,
+    `${fld("m_fq", "Question", faq?.question, "text", 'maxlength="300"')}${fld("m_fk", "Keywords (comma-separated)", keywords, "text", 'maxlength="1000" placeholder="e.g. crayfish, craylings"')}<div class="field"><label for="m_fa">Predefined answer shown to the customer</label><textarea id="m_fa" maxlength="5000" style="min-height:120px">${safe(faq?.answer || "")}</textarea></div><label class="check-row"><input type="checkbox" id="m_factive" ${faq?.active === false ? "" : "checked"}><span>Active and available to customers</span></label>`,
+    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveFaq('${faq ? safe(faq._id) : ""}')">${faq ? "Save FAQ" : "Add FAQ"}</button>`,
   );
 }
-function saveFaq(id) {
-  const question = V("m_fq"),
-    keywords = V("m_fk"),
-    answer = V("m_fa");
-  if (!question || !keywords || !answer) {
+
+async function saveFaq(id) {
+  if (faqSaving) return;
+  const question = V("m_fq");
+  const keywords = V("m_fk")
+    .split(",")
+    .map((keyword) => keyword.trim())
+    .filter(Boolean);
+  const answer = V("m_fa");
+  const active = document.getElementById("m_factive")?.checked ?? true;
+  if (!question || !keywords.length || !answer) {
     toast("Question, keywords and answer are all required.");
     return;
   }
-  if (id) {
-    Object.assign(
-      faqs.find((x) => x.id === id),
-      { question, keywords, answer },
+
+  faqSaving = true;
+  try {
+    const result = await faqApiRequest(
+      id ? `/api/admin/faqs/${encodeURIComponent(id)}` : "/api/admin/faqs",
+      {
+        method: id ? "PATCH" : "POST",
+        body: JSON.stringify({ question, keywords, answer, active }),
+      },
     );
-    toast("FAQ updated.");
-  } else {
-    faqs.push({ id: "f" + Date.now(), question, keywords, answer });
-    toast("FAQ added.");
+    if (id) {
+      faqs = faqs.map((faq) => (faq._id === id ? result.faq : faq));
+    } else {
+      faqs.unshift(result.faq);
+    }
+    faqsLoaded = true;
+    faqLoadError = "";
+    closeModal();
+    toast(id ? "FAQ updated." : "FAQ added.");
+    faqSaving = false;
+    render();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Unable to save FAQ.");
+  } finally {
+    faqSaving = false;
   }
-  closeModal();
-  render();
 }
-function deleteFaq(id) {
-  if (!faqs.some((x) => x.id === id)) return;
+
+async function toggleFaq(id, active) {
+  if (faqSaving) return;
+  faqSaving = true;
+  try {
+    const result = await faqApiRequest(
+      `/api/admin/faqs/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ active }),
+      },
+    );
+    faqs = faqs.map((faq) => (faq._id === id ? result.faq : faq));
+    toast(active ? "FAQ activated." : "FAQ deactivated.");
+    faqSaving = false;
+    render();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Unable to update FAQ.");
+  } finally {
+    faqSaving = false;
+  }
+}
+
+async function deleteFaq(id) {
+  if (faqSaving || !faqs.some((faq) => faq._id === id)) return;
   if (!confirm("Delete this FAQ?")) return;
-  faqs = faqs.filter((x) => x.id !== id);
-  toast("FAQ deleted.");
-  render();
-}
-function botAnswer(q) {
-  q = q.toLowerCase();
-  for (const f of faqs) {
-    if (
-      f.keywords
-        .split(",")
-        .map((k) => k.trim().toLowerCase())
-        .filter(Boolean)
-        .some((k) => q.includes(k))
-    )
-      return f.answer;
+  faqSaving = true;
+  try {
+    await faqApiRequest(`/api/admin/faqs/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    faqs = faqs.filter((faq) => faq._id !== id);
+    toast("FAQ deleted.");
+    faqSaving = false;
+    render();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Unable to delete FAQ.");
+  } finally {
+    faqSaving = false;
   }
-  return "Sorry, I do not have a predefined answer for that question yet. Please contact the farm owner for assistance.";
 }
 
 /* ----- sales ----- */
