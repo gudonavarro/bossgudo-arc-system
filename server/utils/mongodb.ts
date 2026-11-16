@@ -18,7 +18,7 @@ export async function connectMongo({
     throw new Error("MongoDB configuration is missing.");
   }
 
-  if (connection) {
+  if (connection !== undefined) {
     if (mongodbUri !== connectionUri || mongodbDatabase !== databaseName) {
       throw new Error("MongoDB configuration changed after connecting.");
     }

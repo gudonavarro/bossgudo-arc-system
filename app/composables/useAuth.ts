@@ -53,7 +53,7 @@ export function useAuth() {
 
     const nuxtApp = useNuxtApp();
     const pending = pendingInitializations.get(nuxtApp);
-    if (pending) return pending;
+    if (pending !== undefined) return pending;
 
     const fetcher = import.meta.server ? useRequestFetch() : $fetch;
     let request: Promise<AuthUser | null>;
