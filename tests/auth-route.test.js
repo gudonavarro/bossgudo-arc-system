@@ -5,7 +5,10 @@ const express = require("express");
 const request = require("supertest");
 const test = require("node:test");
 const { createAuthRouter } = require("../server/utils/auth-router");
-const { SESSION_COOKIE_NAME } = require("../server/utils/authenticate");
+const {
+  SESSION_COOKIE_NAME,
+  createRoleAuthenticationMiddleware,
+} = require("../server/utils/authenticate");
 
 const validRegistration = {
   firstName: "  Ana ",
@@ -482,6 +485,46 @@ test("administrator login accepts only active administrator accounts", async () 
   assert.deepEqual(customerResponse.body, {
     error: "Invalid email or password.",
   });
+});
+
+test("reusable administrator middleware rejects customer sessions", async () => {
+  async function checkRole(role) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const session = {
+      _id: "session-1",
+      userId: "user-1",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const app = express();
+    app.get(
+      "/admin",
+      createRoleAuthenticationMiddleware("admin", {
+        isDatabaseReady: () => true,
+        getCollections: () => ({
+          sessions: { findOne: async () => session },
+          users: {
+            findOne: async () => ({
+                _id: "user-1",
+                firstName: "Ana",
+                lastName: "Cruz",
+                email: "ana@example.com",
+                role,
+                isActive: true,
+            }),
+          },
+        }),
+      }),
+      (_request, response) => response.json({ access: "granted" }),
+    );
+    return request(app)
+      .get("/admin")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+  }
+
+  const customerResponse = await checkRole("customer");
+  const adminResponse = await checkRole("admin");
+  assert.equal(customerResponse.status, 403);
+  assert.equal(adminResponse.status, 200);
 });
 
 test("protects the current-user route and rejects missing and invalid cookies", async () => {

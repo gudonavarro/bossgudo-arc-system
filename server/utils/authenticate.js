@@ -29,6 +29,9 @@ function hashSessionToken(token) {
 }
 
 function getCollections(request) {
+  if (request.authCollections) {
+    return request.authCollections;
+  }
   const database = request.mongoDb;
   if (!database) {
     throw new Error("Database is unavailable.");
@@ -47,7 +50,9 @@ function asObjectId(value) {
 
 function createAuthenticationMiddleware({
   getCollections: getRequestCollections = getCollections,
-  isDatabaseReady = (request) => Boolean(request.mongoDb),
+  isDatabaseReady = (request) =>
+    Boolean(request.authCollections || request.mongoDb),
+  requiredRole,
   respondUnauthenticated = (_request, response) =>
     response.status(401).json({ error: "Authentication required." }),
 } = {}) {
@@ -90,6 +95,9 @@ function createAuthenticationMiddleware({
       if (!user || !user.isActive || passwordChangedAfterSession) {
         return respondUnauthenticated(request, response);
       }
+      if (requiredRole && user.role !== requiredRole) {
+        return response.status(403).json({ error: "Forbidden." });
+      }
 
       request.authUser = {
         id: String(user._id),
@@ -110,7 +118,12 @@ function createAuthenticationMiddleware({
   };
 }
 
+function createRoleAuthenticationMiddleware(requiredRole, options = {}) {
+  return createAuthenticationMiddleware({ ...options, requiredRole });
+}
+
 module.exports = {
   SESSION_COOKIE_NAME,
   createAuthenticationMiddleware,
+  createRoleAuthenticationMiddleware,
 };
