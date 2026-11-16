@@ -1594,6 +1594,22 @@ select:focus-visible {
   background: #fbfcfa;
   flex-wrap: wrap;
 }
+
+@media (max-width: 480px) {
+  .logout-confirmation-backdrop {
+    padding: 12px;
+  }
+
+  .logout-confirmation .modal-foot {
+    flex-wrap: nowrap;
+  }
+
+  .logout-confirmation .logout-action {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .modal-body h4 {
   font-size: 0.8125rem;
   text-transform: uppercase;
