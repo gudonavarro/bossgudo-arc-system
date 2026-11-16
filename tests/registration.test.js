@@ -4,6 +4,7 @@ const { createJiti } = require("jiti");
 
 const jiti = createJiti(__filename);
 const {
+  getRegistrationApiError,
   normalizeRegistrationPhoneNumber,
   validateRegistration,
 } = jiti("../app/utils/registration.ts");
@@ -56,4 +57,39 @@ test("rejects passwords that exceed bcrypt's UTF-8 byte limit", () => {
   });
 
   assert.ok(errors.password);
+});
+
+test("extracts safe server messages and known field errors", () => {
+  assert.deepEqual(
+    getRegistrationApiError({
+      data: {
+        error: "An account with those details already exists.",
+        fieldErrors: {
+          email: "An account with this email already exists.",
+          password: { internal: "ignored" },
+          database: "ignored",
+        },
+      },
+    }),
+    {
+      message: "An account with those details already exists.",
+      fieldErrors: {
+        email: "An account with this email already exists.",
+      },
+    },
+  );
+});
+
+test("uses a safe fallback for network and unexpected server errors", () => {
+  assert.deepEqual(getRegistrationApiError(new TypeError("fetch failed")), {
+    message: "Unable to create your account right now. Please try again.",
+    fieldErrors: {},
+  });
+  assert.deepEqual(
+    getRegistrationApiError({ data: { message: "internal database details" } }),
+    {
+      message: "Unable to create your account right now. Please try again.",
+      fieldErrors: {},
+    },
+  );
 });
