@@ -75,7 +75,11 @@ function createTestApp(options) {
   return app;
 }
 
-function fakeUserModel({ existingUser = null, createError = null } = {}) {
+function fakeUserModel({
+  existingUser = null,
+  createError = null,
+  findError = null,
+} = {}) {
   const calls = {
     findOne: [],
     findById: [],
@@ -85,15 +89,17 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     create: [],
     created: [],
   };
+  let storedUser = existingUser;
   return {
     calls,
     findOne(query) {
       calls.findOne.push(query);
-      return fakeQuery(existingUser, calls);
+      if (findError) throw findError;
+      return fakeQuery(storedUser, calls);
     },
     findById(id) {
       calls.findById.push(id);
-      return fakeQuery(existingUser, calls);
+      return fakeQuery(storedUser, calls);
     },
     findOneAndUpdate(query, update, options) {
       calls.findOneAndUpdate.push({ query, update, options });
@@ -125,6 +131,7 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
         password: await bcrypt.hash(user.password, 4),
       };
       calls.created.push(createdUser);
+      storedUser = createdUser;
       return createdUser;
     },
   };
@@ -215,7 +222,34 @@ test("rejects malformed, missing, weak, and mismatched registration details", as
     const response = await request(app).post("/api/auth/register").send(body);
     assert.equal(response.status, 400);
     assert.equal(typeof response.body.error, "string");
+    assert.ok(response.body.fieldErrors);
   }
+});
+
+test("returns field-level errors for missing and invalid registration values", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app).post("/api/auth/register").send({
+    ...validRegistration,
+    firstName: "",
+    email: "not-an-email",
+    phoneNumber: "12345",
+    password: "weak",
+    confirmPassword: "different",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.fieldErrors.firstName, "This field is required.");
+  assert.equal(response.body.fieldErrors.email, "Enter a valid email address.");
+  assert.equal(
+    response.body.fieldErrors.phoneNumber,
+    "Enter a valid PH number starting with 09 or +63.",
+  );
+  assert.ok(response.body.fieldErrors.password);
+  assert.equal(response.body.fieldErrors.confirmPassword, "Passwords do not match.");
 });
 
 test("returns unavailable when the database is disconnected", async () => {
@@ -232,6 +266,23 @@ test("returns unavailable when the database is disconnected", async () => {
   assert.equal(response.status, 503);
   assert.equal(model.calls.findOne.length, 0);
   assert.equal(model.calls.create.length, 0);
+});
+
+test("maps database connection failures to a safe unavailable response", async () => {
+  const databaseError = new Error("mongodb://private-connection-details");
+  databaseError.name = "MongoServerSelectionError";
+  const app = createTestApp({
+    UserModel: fakeUserModel({ findError: databaseError }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error, "Registration is temporarily unavailable.");
+  assert.equal(JSON.stringify(response.body).includes("private-connection-details"), false);
 });
 
 test("creates a customer with normalized details and a minimal safe response", async () => {
@@ -270,6 +321,28 @@ test("creates a customer with normalized details and a minimal safe response", a
   assert.equal(JSON.stringify(response.body).includes("StrongPass1!"), false);
   assert.equal("password" in response.body.user, false);
   assert.equal("resetTokenHash" in response.body.user, false);
+  assert.equal(response.headers["set-cookie"], undefined);
+});
+
+test("authenticates a customer immediately after successful registration", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const registration = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+  const login = await request(app)
+    .post("/api/auth/login")
+    .send({ email: "ANA@EXAMPLE.COM", password: validRegistration.password });
+
+  assert.equal(registration.status, 201);
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.email, "ana@example.com");
+  assert.equal(login.body.user.role, "customer");
+  assert.equal("password" in login.body.user, false);
+  assert.match(login.headers["set-cookie"][0], /HttpOnly/);
 });
 
 test("returns conflict for an existing account", async () => {
@@ -289,8 +362,59 @@ test("returns conflict for an existing account", async () => {
   assert.equal(model.calls.findOne[0].$or[1].phoneNumber, "+639171234567");
 });
 
+test("identifies which registration fields are already in use", async () => {
+  const model = fakeUserModel({
+    existingUser: {
+      _id: "existing",
+      email: "ana@example.com",
+      phoneNumber: "+639171234567",
+    },
+  });
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 409);
+  assert.equal(
+    response.body.fieldErrors.email,
+    "An account with this email already exists.",
+  );
+  assert.equal(
+    response.body.fieldErrors.phoneNumber,
+    "This phone number is already registered.",
+  );
+  assert.equal(model.calls.create.length, 0);
+});
+
+test("rate limits repeated customer registration attempts", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+  const responses = [];
+
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    responses.push(
+      await request(app)
+        .post("/api/auth/register")
+        .send({}),
+    );
+  }
+
+  assert.ok(responses.slice(0, 10).every((response) => response.status === 400));
+  assert.equal(responses[10].status, 429);
+  assert.equal(responses[10].body.error, "Too many attempts. Please try again later.");
+});
+
 test("maps duplicate index races to conflict", async () => {
-  const model = fakeUserModel({ createError: { code: 11000 } });
+  const model = fakeUserModel({
+    createError: { code: 11000, keyPattern: { email: 1 } },
+  });
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
@@ -302,6 +426,44 @@ test("maps duplicate index races to conflict", async () => {
 
   assert.equal(response.status, 409);
   assert.equal(response.body.error, "An account with those details already exists.");
+  assert.equal(
+    response.body.fieldErrors.email,
+    "An account with this email already exists.",
+  );
+});
+
+test("maps Mongoose validation failures to safe field errors", async () => {
+  const validationError = new Error("private validation details");
+  validationError.name = "ValidationError";
+  validationError.errors = { email: new Error("invalid") };
+  const app = createTestApp({
+    UserModel: fakeUserModel({ createError: validationError }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "Please check your registration details.");
+  assert.equal(response.body.fieldErrors.email, "Enter a valid email address.");
+  assert.equal(JSON.stringify(response.body).includes("private validation details"), false);
+});
+
+test("does not expose unexpected registration persistence errors", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel({ createError: new Error("private database details") }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.error, "Unable to create the account right now.");
+  assert.equal(JSON.stringify(response.body).includes("private database details"), false);
 });
 
 test("validates login input before database access", async () => {
