@@ -4,10 +4,7 @@ export default defineNuxtRouteMiddleware(async () => {
     import.meta.client && !useNuxtApp().isHydrating;
   const user = await initialize({ force: shouldRevalidate });
 
-  if (!user) {
-    return navigateTo("/customer-login");
-  }
-  if (user.role !== "admin") {
-    return navigateTo("/");
+  if (user?.role !== "admin") {
+    return navigateTo("/admin-login", { replace: true });
   }
 });
