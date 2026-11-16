@@ -7,6 +7,11 @@ const {
   createChatbotMessageHandler,
   validateChatbotMessage,
 } = jiti("../server/api/chatbot/message.post.js");
+const {
+  CONTACT_ANSWER,
+  CONTACT_KEYWORDS,
+  CONTACT_QUESTION,
+} = jiti("../server/utils/faq-seed.js");
 
 const pricingFaq = {
   _id: "faq-pricing",
@@ -22,6 +27,14 @@ const setupFaq = {
   keywords: ["setup", "pond setup"],
   answer: "View setup prices in the Shop.",
   link: { label: "View Setups", href: "/shop" },
+  active: true,
+};
+
+const contactFaq = {
+  _id: "faq-contact",
+  question: CONTACT_QUESTION,
+  keywords: CONTACT_KEYWORDS,
+  answer: CONTACT_ANSWER,
   active: true,
 };
 
@@ -107,6 +120,20 @@ test("returns the stored link metadata for a matched FAQ", async () => {
     answer: setupFaq.answer,
     faqId: setupFaq._id,
     link: setupFaq.link,
+  });
+});
+
+test("returns stored contact and location details from an active FAQ", async () => {
+  const { handler } = createHandler([contactFaq]);
+  const response = await handler({
+    body: { message: "What is your contact number?" },
+  });
+
+  assert.deepEqual(response, {
+    success: true,
+    matched: true,
+    answer: CONTACT_ANSWER,
+    faqId: contactFaq._id,
   });
 });
 

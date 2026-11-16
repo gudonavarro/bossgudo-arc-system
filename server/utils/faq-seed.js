@@ -52,6 +52,43 @@ const SETUP_FAQ_ID = new mongoose.Types.ObjectId(
     .digest("hex")
     .slice(0, 24),
 );
+const CONTACT_QUESTION =
+  "Where is Boss Gudo A.R.C. Aqua Farm located?";
+const CONTACT_KEYWORDS = [
+  "location",
+  "farm location",
+  "address",
+  "where are you located",
+  "where is your farm",
+  "contact",
+  "contact number",
+  "phone number",
+  "how to contact",
+  "Waze",
+  "Google Maps",
+  "directions",
+  "EPZA",
+  "find",
+];
+const CONTACT_ANSWER = [
+  "BOSSGUDO A.R.C. AQUA FARM",
+  "",
+  "Address: 1111 Purok 12, Bacao 2, General Trias, Cavite.",
+  "",
+  "Waze/Google Maps: Search for BOSSGUDO A.R.C. AQUA FARM.",
+  "",
+  "Nearby Landmark: EPZA.",
+  "",
+  "Contact Number: 09561241825.",
+  "",
+  "Owner: Jedd Angelo Navarro.",
+].join("\n");
+const CONTACT_FAQ_ID = new mongoose.Types.ObjectId(
+  createHash("sha256")
+    .update("bossgudo:faq:business-contact-location")
+    .digest("hex")
+    .slice(0, 24),
+);
 
 export async function seedCrayfishPricingFaq(FAQModel) {
   const timestamp = new Date();
@@ -112,7 +149,41 @@ export async function seedPondSetupFaq(FAQModel) {
   return result.upsertedCount === 1;
 }
 
+export async function seedContactLocationFaq(FAQModel) {
+  const timestamp = new Date();
+  const result = await FAQModel.updateOne(
+    {
+      $or: [
+        { _id: CONTACT_FAQ_ID },
+        { question: CONTACT_QUESTION },
+      ],
+    },
+    {
+      $set: { active: true },
+      $setOnInsert: {
+        _id: CONTACT_FAQ_ID,
+        question: CONTACT_QUESTION,
+        keywords: CONTACT_KEYWORDS,
+        answer: CONTACT_ANSWER,
+        link: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    {
+      upsert: true,
+      runValidators: true,
+      timestamps: false,
+    },
+  );
+  return result.upsertedCount === 1;
+}
+
 export {
+  CONTACT_ANSWER,
+  CONTACT_FAQ_ID,
+  CONTACT_KEYWORDS,
+  CONTACT_QUESTION,
   PRICING_ANSWER,
   PRICING_FAQ_ID,
   PRICING_KEYWORDS,

@@ -4,6 +4,10 @@ const { createJiti } = require("jiti");
 
 const jiti = createJiti(__filename);
 const {
+  CONTACT_ANSWER,
+  CONTACT_FAQ_ID,
+  CONTACT_KEYWORDS,
+  CONTACT_QUESTION,
   PRICING_ANSWER,
   PRICING_FAQ_ID,
   PRICING_KEYWORDS,
@@ -14,6 +18,7 @@ const {
   SETUP_LINK,
   SETUP_QUESTION,
   seedCrayfishPricingFaq,
+  seedContactLocationFaq,
   seedPondSetupFaq,
 } = jiti("../server/utils/faq-seed.js");
 
@@ -114,6 +119,50 @@ test("seeds the setup FAQ once and keeps it active without replacing edits", asy
       keywords: SETUP_KEYWORDS,
       answer: SETUP_ANSWER,
       link: SETUP_LINK,
+      createdAt: calls[0].update.$setOnInsert.createdAt,
+      updatedAt: calls[0].update.$setOnInsert.updatedAt,
+    },
+  });
+  assert.equal(
+    calls[0].update.$setOnInsert.createdAt,
+    calls[0].update.$setOnInsert.updatedAt,
+  );
+  assert.deepEqual(calls[0].options, {
+    upsert: true,
+    runValidators: true,
+    timestamps: false,
+  });
+});
+
+test("seeds the contact FAQ once with the official business details", async () => {
+  const calls = [];
+  let inserted = false;
+  const model = {
+    async updateOne(filter, update, options) {
+      calls.push({ filter, update, options });
+      if (inserted) return { upsertedCount: 0 };
+      inserted = true;
+      return { upsertedCount: 1 };
+    },
+  };
+
+  assert.equal(await seedContactLocationFaq(model), true);
+  assert.equal(await seedContactLocationFaq(model), false);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].filter, {
+    $or: [
+      { _id: CONTACT_FAQ_ID },
+      { question: CONTACT_QUESTION },
+    ],
+  });
+  assert.deepEqual(calls[0].update, {
+    $set: { active: true },
+    $setOnInsert: {
+      _id: CONTACT_FAQ_ID,
+      question: CONTACT_QUESTION,
+      keywords: CONTACT_KEYWORDS,
+      answer: CONTACT_ANSWER,
+      link: null,
       createdAt: calls[0].update.$setOnInsert.createdAt,
       updatedAt: calls[0].update.$setOnInsert.updatedAt,
     },

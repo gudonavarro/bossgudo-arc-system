@@ -9,6 +9,11 @@ const {
   getChatbotResponse,
   normalizeChatMessage,
 } = jiti("../server/utils/chatbot.service.js");
+const {
+  CONTACT_ANSWER,
+  CONTACT_KEYWORDS,
+  CONTACT_QUESTION,
+} = jiti("../server/utils/faq-seed.js");
 
 const pricingFaq = {
   _id: "faq-pricing",
@@ -44,6 +49,14 @@ const setupFaq = {
   ],
   answer: "You can view our available pond setups in our Shop.",
   link: { label: "View Setups", href: "/shop" },
+  active: true,
+};
+
+const contactFaq = {
+  _id: "faq-contact",
+  question: CONTACT_QUESTION,
+  keywords: CONTACT_KEYWORDS,
+  answer: CONTACT_ANSWER,
   active: true,
 };
 
@@ -150,6 +163,24 @@ test("returns stored setup links for the supported setup-price questions", () =>
       faqId: setupFaq._id,
       link: setupFaq.link,
     });
+  }
+});
+
+test("matches the stored contact FAQ for location and contact questions", () => {
+  for (const message of [
+    "Where is your farm?",
+    "What is your address?",
+    "Where are you located?",
+    "How can I contact you?",
+    "What is your contact number?",
+    "Where can I find you?",
+    "Are you near EPZA?",
+  ]) {
+    assert.deepEqual(getChatbotResponse(message, [contactFaq]), {
+      matched: true,
+      answer: CONTACT_ANSWER,
+      faqId: contactFaq._id,
+    }, message);
   }
 });
 

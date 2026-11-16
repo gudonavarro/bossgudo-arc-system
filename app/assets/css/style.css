@@ -734,6 +734,7 @@ td {
   max-width: 88%;
   font-size: 0.875rem;
   line-height: 1.5;
+  white-space: pre-line;
   background: #e8f0e8;
   color: var(--ink);
   border: 1px solid #cce5df;
