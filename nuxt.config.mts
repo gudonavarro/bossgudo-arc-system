@@ -5,6 +5,11 @@ export default defineNuxtConfig({
   devServer: {
     port: 3001,
   },
+  vite: {
+    optimizeDeps: {
+      include: ["@vue/devtools-core"],
+    },
+  },
   typescript: {
     strict: true,
     typeCheck: false,
