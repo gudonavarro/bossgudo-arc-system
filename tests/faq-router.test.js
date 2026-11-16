@@ -211,6 +211,15 @@ test("validates FAQ ids and distinguishes missing records", async () => {
   assert.deepEqual(queryCalls, [{ operation: "findById", id: faqId }]);
 });
 
+test("returns a JSON 404 for unsupported FAQ paths", async () => {
+  const { app, token } = createFaqApp();
+  await request(app)
+    .get("/api/admin/faqs/unknown/path")
+    .set("Cookie", `bossgudo_session=${token}`)
+    .expect(404)
+    .expect({ error: "Not found." });
+});
+
 test("validates FAQ content and removes duplicate keywords", () => {
   assert.deepEqual(
     validateFaqInput({

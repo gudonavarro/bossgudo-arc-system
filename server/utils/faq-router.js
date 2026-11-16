@@ -208,6 +208,10 @@ function createFaqRouter() {
     }
   });
 
+  router.use((_request, response) => {
+    return response.status(404).json({ error: "Not found." });
+  });
+
   return router;
 }
 
