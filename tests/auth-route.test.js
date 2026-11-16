@@ -820,6 +820,34 @@ test("hides the test route in production and validates recipients", async () => 
   });
 });
 
+test("does not expose SMTP details when the test email fails", async () => {
+  const loggedErrors = [];
+  const testApp = createEmailTestApp({
+    sendTestEmail: async () => {
+      throw new Error("SMTP authentication details must remain private.");
+    },
+  });
+  const originalConsoleError = console.error;
+  console.error = (...values) => loggedErrors.push(values);
+
+  let response;
+  try {
+    response = await request(testApp.app)
+      .post("/api/auth/admin/email-test")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${testApp.token}`)
+      .send({ to: "recipient@example.com" });
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, {
+    error: "Unable to send test email.",
+  });
+  assert.deepEqual(loggedErrors, [["Email test failed:", "Error"]]);
+  assert.equal(JSON.stringify(response.body).includes("authentication details"), false);
+});
+
 test("protects the current-user route and rejects missing and invalid cookies", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),
