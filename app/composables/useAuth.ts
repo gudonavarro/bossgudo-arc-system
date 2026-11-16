@@ -1,13 +1,5 @@
-export type AuthRole = "customer" | "admin";
-
-export interface AuthUser {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: AuthRole;
-  phoneNumber?: string;
-}
+import { toAuthUser } from "~/utils/customer-auth";
+import type { AuthUser } from "~/utils/customer-auth";
 
 type AuthStatus =
   | "unknown"
@@ -25,19 +17,6 @@ interface LogoutResult {
 }
 
 const pendingInitializations = new WeakMap<object, Promise<AuthUser | null>>();
-
-function isAuthUser(user: unknown): user is AuthUser {
-  if (typeof user !== "object" || user === null) return false;
-
-  const candidate = user as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.firstName === "string" &&
-    typeof candidate.lastName === "string" &&
-    typeof candidate.email === "string" &&
-    (candidate.role === "customer" || candidate.role === "admin")
-  );
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (typeof error !== "object" || error === null) return fallback;
@@ -83,13 +62,14 @@ export function useAuth() {
       cache: "no-store",
     })
       .then(({ user: currentUser }) => {
-        if (!isAuthUser(currentUser)) {
+        const safeUser = toAuthUser(currentUser);
+        if (!safeUser) {
           setUser(null);
           return null;
         }
 
-        setUser(currentUser);
-        return currentUser;
+        setUser(safeUser);
+        return safeUser;
       })
       .catch(() => {
         user.value = null;
@@ -113,13 +93,14 @@ export function useAuth() {
       body: { email, password },
     });
 
-    if (!isAuthUser(result.user) || result.user.role !== "customer") {
+    const safeUser = toAuthUser(result.user);
+    if (!safeUser || safeUser.role !== "customer") {
       setUser(null);
       throw new Error("Unable to log in.");
     }
 
-    setUser(result.user);
-    return result.user;
+    setUser(safeUser);
+    return safeUser;
   }
 
   async function logout(): Promise<LogoutResult> {

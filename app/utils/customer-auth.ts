@@ -1,3 +1,40 @@
+export type AuthRole = "customer" | "admin";
+
+export interface AuthUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: AuthRole;
+  phoneNumber?: string;
+}
+
+export function toAuthUser(user: unknown): AuthUser | null {
+  if (typeof user !== "object" || user === null) return null;
+
+  const candidate = user as Record<string, unknown>;
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.firstName !== "string" ||
+    typeof candidate.lastName !== "string" ||
+    typeof candidate.email !== "string" ||
+    (candidate.role !== "customer" && candidate.role !== "admin")
+  ) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    email: candidate.email,
+    role: candidate.role,
+    ...(typeof candidate.phoneNumber === "string"
+      ? { phoneNumber: candidate.phoneNumber }
+      : {}),
+  };
+}
+
 export function normalizeLoginEmail(email: string): string {
   return email.trim().toLowerCase();
 }

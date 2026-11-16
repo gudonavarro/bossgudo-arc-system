@@ -53,6 +53,7 @@ async function submit() {
       responseError.message ||
       "Unable to log in.";
     password.value = "";
+    return;
   } finally {
     pending.value = false;
   }
@@ -93,10 +94,10 @@ async function submit() {
           <h2>Customer Login</h2>
         </div>
 
-        <form @submit.prevent="submit">
+        <form novalidate @submit.prevent="submit">
           <div class="field">
             <label for="email">Email address</label>
-            <input id="email" v-model="email" type="email" autocomplete="email" placeholder="name@example.com" required :disabled="pending">
+            <input id="email" v-model="email" type="email" autocomplete="email" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
           </div>
 
           <div class="field">
@@ -110,6 +111,7 @@ async function submit() {
                 placeholder="••••••••"
                 required
                 :disabled="pending"
+                @input="errorMessage = ''"
               >
               <button
                 class="password-toggle"

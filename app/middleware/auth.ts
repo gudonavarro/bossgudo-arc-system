@@ -1,7 +1,8 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   const { initialize } = useAuth();
-  const isHydrating = import.meta.client && useNuxtApp().isHydrating;
-  const user = await initialize({ force: !isHydrating });
+  const shouldRevalidate =
+    import.meta.client && !useNuxtApp().isHydrating;
+  const user = await initialize({ force: shouldRevalidate });
 
   if (!user) {
     return navigateTo(
