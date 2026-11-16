@@ -37,9 +37,12 @@ async function submit() {
       responseError.message ||
       "Unable to log in.";
     password.value = "";
+    return;
   } finally {
     pending.value = false;
   }
+
+  await navigateTo("/admin", { replace: true });
 }
 </script>
 
