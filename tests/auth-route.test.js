@@ -134,7 +134,7 @@ function createResetCodeTestApp({
   attempts = 0,
 } = {}) {
   const user = createLoginUser({
-    resetTokenHash: hashResetCode(code, testResetSecret),
+    resetTokenHash: hashResetCode(code, testResetSecret, "user-1"),
     resetTokenExpires: expiresAt,
     resetCodeAttempts: attempts,
   });
@@ -200,7 +200,22 @@ function fakeUserModel({
     },
     async updateOne(query, update) {
       calls.updateOne.push({ query, update });
-      if (existingUser?._id === query._id) {
+      const expiryQuery = query.resetTokenExpires;
+      const expiryMatches =
+        !expiryQuery ||
+        (expiryQuery.$lte &&
+          existingUser?.resetTokenExpires <= expiryQuery.$lte) ||
+        (expiryQuery.$gt &&
+          existingUser?.resetTokenExpires > expiryQuery.$gt) ||
+        (expiryQuery instanceof Date &&
+          existingUser?.resetTokenExpires?.getTime() === expiryQuery.getTime());
+      const matches =
+        existingUser &&
+        (!query._id || existingUser._id === query._id) &&
+        (!query.resetTokenHash ||
+          existingUser.resetTokenHash === query.resetTokenHash) &&
+        expiryMatches;
+      if (matches) {
         Object.assign(existingUser, update.$set || {});
         for (const key of Object.keys(update.$unset || {})) {
           delete existingUser[key];
@@ -1124,7 +1139,7 @@ test("sends a six-digit reset code but stores only its HMAC hash", async () => {
   assert.match(code, /^\d{6}$/);
   assert.equal(
     user.resetTokenHash,
-    hashResetCode(code, testResetSecret),
+    hashResetCode(code, testResetSecret, "user-1"),
   );
   assert.notEqual(user.resetTokenHash, code);
   assert.ok(user.resetTokenExpires > new Date());
@@ -1367,4 +1382,6 @@ test("rejects expired and malformed reset tokens", async () => {
   assert.equal(malformed.status, 400);
   assert.equal(tooLongPassword.status, 400);
   assert.equal(user.password, originalPassword);
+  assert.equal("resetTokenHash" in user, false);
+  assert.equal("resetTokenExpires" in user, false);
 });

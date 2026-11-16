@@ -12,11 +12,21 @@ function createResetCode() {
   return crypto.randomInt(100000, 1000000).toString();
 }
 
-function hashResetCode(code, secret) {
-  if (!RESET_CODE_PATTERN.test(code) || !isResetSecretConfigured(secret)) {
+function hashResetCode(code, secret, context) {
+  if (
+    !RESET_CODE_PATTERN.test(code) ||
+    !isResetSecretConfigured(secret) ||
+    typeof context !== "string" ||
+    !context
+  ) {
     throw new TypeError("Invalid password reset code configuration.");
   }
-  return crypto.createHmac("sha256", secret).update(code).digest("hex");
+  return crypto
+    .createHmac("sha256", secret)
+    .update(context)
+    .update("\0")
+    .update(code)
+    .digest("hex");
 }
 
 function hashResetToken(token) {

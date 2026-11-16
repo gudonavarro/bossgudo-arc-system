@@ -19,19 +19,26 @@ test("generates six-digit reset codes and HMACs them with a private secret", () 
     assert.match(createResetCode(), /^\d{6}$/);
   }
 
-  const hash = hashResetCode("012345", resetSecret);
+  const hash = hashResetCode("012345", resetSecret, "user-1");
   assert.match(hash, /^[a-f\d]{64}$/);
   assert.notEqual(hash, "012345");
-  assert.notEqual(hash, hashResetCode("012345", `${resetSecret}-rotated`));
+  assert.notEqual(hash, hashResetCode("012345", `${resetSecret}-rotated`, "user-1"));
+  assert.notEqual(hash, hashResetCode("012345", resetSecret, "user-2"));
   assert.equal(isResetSecretConfigured("short"), false);
   assert.equal(isResetSecretConfigured(resetSecret), true);
-  assert.throws(() => hashResetCode("12345", resetSecret), TypeError);
+  assert.throws(() => hashResetCode("12345", resetSecret, "user-1"), TypeError);
 });
 
 test("compares reset code hashes safely and hashes high-entropy authorization tokens", () => {
-  const codeHash = hashResetCode("123456", resetSecret);
+  const codeHash = hashResetCode("123456", resetSecret, "user-1");
   assert.equal(matchesResetCodeHash(codeHash, codeHash), true);
-  assert.equal(matchesResetCodeHash(codeHash, hashResetCode("654321", resetSecret)), false);
+  assert.equal(
+    matchesResetCodeHash(
+      codeHash,
+      hashResetCode("654321", resetSecret, "user-1"),
+    ),
+    false,
+  );
   assert.equal(matchesResetCodeHash("invalid", codeHash), false);
 
   const token = crypto.randomBytes(32).toString("base64url");

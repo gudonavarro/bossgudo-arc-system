@@ -35,8 +35,9 @@ Nuxt creates these routes from the page files in `app/pages`:
   page submits to the existing `POST /api/auth/login` endpoint.
 - `/register` also uses the `guest` middleware and submits to the existing
   `POST /api/auth/register` endpoint.
-- `/forgot-password` and `/reset-password` use the existing password recovery
-  API routes.
+- `/forgot-password` requests and verifies a six-digit reset code before
+  navigating to `/reset-password`. The reset form requires the short-lived
+  HTTP-only authorization cookie issued by the verification API.
 - `/mybookings` uses the `auth` middleware, which checks
   `GET /api/auth/session` and redirects signed-out users to
   `/customer-login`, preserving their requested destination.
@@ -87,22 +88,38 @@ delivery fails. It is unavailable when `NODE_ENV=production` and is not part
 of the password-recovery flow. A successful response means Gmail accepted the
 message for sending; check the recipient mailbox to confirm final delivery.
 
-## Password recovery email
+## Password recovery
 
-Password recovery requires a real SMTP account. Configure `SMTP_HOST`,
-`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, and
-`APP_BASE_URL` in the private `.env` file. Use a verified sender/domain and a
-production HTTPS `APP_BASE_URL`. Port 587 normally uses `SMTP_SECURE=false`
-(STARTTLS); implicit TLS commonly uses port 465 with `SMTP_SECURE=true`.
+Password recovery uses the same private Gmail SMTP settings and reusable
+email utility described above. It additionally requires `PASSWORD_RESET_SECRET`
+as a separate, random secret of at least 32 bytes; generate one with:
 
-The reusable Gmail email service above is separate and does not change the
-existing password-recovery mailer or its configuration.
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
 
-Any SMTP-compatible provider can be used, for example Amazon SES, Postmark,
-Resend SMTP, or a managed mailbox provider. No reset email is sent when these
-settings are absent or invalid; the API explicitly reports that recovery is
-unavailable. The reset token is single-use, expires after 30 minutes, and only
-its SHA-256 hash is stored in MongoDB.
+Keep the generated value private and set it in `.env` or the deployment's
+server-side environment. Do not expose it through `runtimeConfig.public`.
+
+The recovery API has three steps:
+
+1. `POST /api/auth/forgot-password` accepts `{"email":"..."}` and returns the
+   same generic HTTP 202 response for active and unknown accounts. An active
+   account receives a six-digit code by email.
+2. `POST /api/auth/verify-reset-code` accepts `{"email":"...","code":"123456"}`.
+   A valid code is single-use and sets a short-lived, HTTP-only
+   `bossgudo_password_reset` cookie scoped to the reset endpoint.
+3. `POST /api/auth/reset-password` accepts `password` and `confirmPassword`.
+   It requires the authorization cookie, replaces the password, clears reset
+   fields, expires the cookie, and revokes existing sessions.
+
+Codes expire after 10 minutes, are HMAC-hashed with `PASSWORD_RESET_SECRET`
+and account-specific context, and allow at most five failed guesses. Request
+and verification endpoints are also rate-limited per client. Requesting a new
+code replaces the previous code. Expired and consumed reset fields are cleared
+during recovery operations; no separate token collection or database
+connection is required. If no code arrives, check server-side configuration
+and logs without exposing SMTP or reset-secret values.
 
 ## Verification
 

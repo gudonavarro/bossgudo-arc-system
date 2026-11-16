@@ -602,6 +602,7 @@ function createAuthRouter({
 
     let user;
     let resetCodeHash;
+    let resetCodeExpiresAt;
     try {
       const { users } = getRequestCollections(request);
       user = await users.findOne(
@@ -610,15 +611,15 @@ function createAuthRouter({
       );
       if (user) {
         const code = createResetCode();
-        resetCodeHash = hashResetCode(code, resetSecret);
+        resetCodeHash = hashResetCode(code, resetSecret, String(user._id));
         const now = new Date();
-        const resetTokenExpires = new Date(now.getTime() + RESET_CODE_DURATION_MS);
+        resetCodeExpiresAt = new Date(now.getTime() + RESET_CODE_DURATION_MS);
         await users.updateOne(
           { _id: user._id, isActive: true },
           {
             $set: {
               resetTokenHash: resetCodeHash,
-              resetTokenExpires,
+              resetTokenExpires: resetCodeExpiresAt,
               resetCodeAttempts: 0,
               updatedAt: now,
             },
@@ -638,7 +639,11 @@ function createAuthRouter({
         try {
           const { users } = getRequestCollections(request);
           await users.updateOne(
-            { _id: user._id, resetTokenHash: resetCodeHash },
+            {
+              _id: user._id,
+              resetTokenHash: resetCodeHash,
+              resetTokenExpires: resetCodeExpiresAt,
+            },
             {
               $unset: {
                 resetTokenHash: "",
@@ -711,7 +716,11 @@ function createAuthRouter({
         ) {
           if (user && user.resetTokenExpires instanceof Date && user.resetTokenExpires <= now) {
             await users.updateOne(
-              { _id: user._id, resetTokenHash: user.resetTokenHash },
+              {
+                _id: user._id,
+                resetTokenHash: user.resetTokenHash,
+                resetTokenExpires: user.resetTokenExpires,
+              },
               {
                 $unset: {
                   resetTokenHash: "",
@@ -726,7 +735,11 @@ function createAuthRouter({
             .json({ error: INVALID_RESET_CODE_MESSAGE });
         }
 
-        const submittedHash = hashResetCode(code, resetSecret);
+        const submittedHash = hashResetCode(
+          code,
+          resetSecret,
+          String(user._id),
+        );
         if (!matchesResetCodeHash(user.resetTokenHash, submittedHash)) {
           await users.findOneAndUpdate(
             {
@@ -831,6 +844,19 @@ function createAuthRouter({
       );
 
       if (!user) {
+        await users.updateOne(
+          {
+            resetTokenHash: tokenHash,
+            resetTokenExpires: { $lte: now },
+          },
+          {
+            $unset: {
+              resetTokenHash: "",
+              resetTokenExpires: "",
+              resetCodeAttempts: "",
+            },
+          },
+        );
         response.clearCookie(RESET_COOKIE_NAME, {
           httpOnly: true,
           secure: isProduction(),
