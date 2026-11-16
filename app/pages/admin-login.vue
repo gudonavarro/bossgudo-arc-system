@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import {
+  normalizeLoginEmail,
+  validateLoginCredentials,
+} from "~/utils/customer-auth";
+
 defineOptions({ name: "AdminLogin" });
 useHead({ title: "Admin Login | BOSSGUDO A.R.C. AQUA FARM" });
 
@@ -8,6 +13,13 @@ const showPassword = ref(false);
 const errorMessage = ref("");
 
 function submit() {
+  const validationError = validateLoginCredentials(email.value, password.value);
+  if (validationError) {
+    errorMessage.value = validationError;
+    return;
+  }
+
+  email.value = normalizeLoginEmail(email.value);
   errorMessage.value = "Administrator sign-in is not connected yet. Your credentials were not sent.";
 }
 </script>
@@ -39,10 +51,10 @@ function submit() {
           <p class="muted">Admin sign-in is not connected. This page does not submit or verify credentials.</p>
         </div>
 
-        <form @submit.prevent="submit">
+        <form novalidate @submit.prevent="submit">
           <div class="field">
             <label for="admin-email">Email address</label>
-            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required>
+            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
           </div>
 
           <div class="field">
@@ -55,6 +67,7 @@ function submit() {
                 autocomplete="current-password"
                 placeholder="••••••••"
                 required
+                @input="errorMessage = ''"
               >
               <button
                 class="password-toggle"
