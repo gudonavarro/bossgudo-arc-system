@@ -15,7 +15,6 @@ export default defineNitroPlugin(async (nitroApp) => {
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     console.error("MongoDB connection failed:", errorName);
-    throw error;
   }
 
   nitroApp.hooks.hook("close", closeMongo);
