@@ -16,6 +16,7 @@ const {
   SESSION_COOKIE_NAME,
   createAuthenticationMiddleware,
 } = require("./authenticate");
+const { isValidEmailAddress, sendEmail } = require("./email-mailer");
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
 const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
@@ -381,6 +382,7 @@ function createAuthRouter({
   isDatabaseReady = (request) =>
     Boolean(request.authCollections || request.mongoDb),
   isProduction = () => process.env.NODE_ENV === "production",
+  sendTestEmail = sendEmail,
   passwordResetMailConfigured = isPasswordResetMailConfigured,
   sendResetEmail = sendPasswordResetEmail,
 } = {}) {
@@ -406,9 +408,21 @@ function createAuthRouter({
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
   });
+  const emailTestLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again later." },
+  });
   const authenticate = createAuthenticationMiddleware({
     getCollections: getRequestCollections,
     isDatabaseReady,
+  });
+  const authenticateAdmin = createAuthenticationMiddleware({
+    getCollections: getRequestCollections,
+    isDatabaseReady,
+    requiredRole: "admin",
   });
   const authenticateIfPresent = createAuthenticationMiddleware({
     getCollections: getRequestCollections,
@@ -499,6 +513,44 @@ function createAuthRouter({
 
   router.post("/login", loginLimiter, login("customer"));
   router.post("/admin/login", loginLimiter, login("admin"));
+
+  router.post(
+    "/admin/email-test",
+    (request, response, next) => {
+      if (isProduction()) {
+        return response.status(404).json({ error: "Not found." });
+      }
+      return next();
+    },
+    emailTestLimiter,
+    authenticateAdmin,
+    async (request, response) => {
+      const to = request.body?.to;
+      if (!isValidEmailAddress(to)) {
+        return response
+          .status(400)
+          .json({ error: "Enter a valid recipient email address." });
+      }
+
+      try {
+        await sendTestEmail(
+          {
+            to,
+            subject: "BOSSGUDO SMTP email test",
+            text: "This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.",
+            html: "<p>This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.</p>",
+          },
+          request.emailConfig,
+        );
+        return response.status(200).json({ message: "Test email sent." });
+      } catch (error) {
+        console.error("Email test failed:", getErrorName(error));
+        return response
+          .status(503)
+          .json({ error: "Unable to send test email." });
+      }
+    },
+  );
 
   router.get("/me", authenticate, (request, response) => {
     return response.status(200).json({ user: request.authUser });

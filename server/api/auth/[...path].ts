@@ -91,8 +91,16 @@ export default defineEventHandler(async (event) => {
     return { error: "Authentication is temporarily unavailable." };
   }
 
+  const runtimeConfig = useRuntimeConfig(event);
   const request = Object.assign(event.node.req, {
     authCollections,
+    emailConfig: {
+      smtpHost: runtimeConfig.smtpHost,
+      smtpPort: runtimeConfig.smtpPort,
+      smtpUser: runtimeConfig.smtpUser,
+      smtpPass: runtimeConfig.smtpPass,
+      smtpFrom: runtimeConfig.smtpFrom,
+    },
     app,
     ip: getRequestIP(event) ?? "unknown",
     get(name: string) {
