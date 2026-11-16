@@ -1,5 +1,7 @@
 import { defineNitroPlugin } from "nitropack/runtime";
-import { closeMongo, connectMongo } from "../utils/mongodb";
+import { getUserModel } from "../models/user";
+import { closeMongo } from "../utils/mongodb";
+import { connectMongoose } from "../utils/mongoose";
 
 export default defineNitroPlugin(async (nitroApp) => {
   const { mongodbUri, mongodbDatabase } = useRuntimeConfig();
@@ -8,7 +10,8 @@ export default defineNitroPlugin(async (nitroApp) => {
   }
 
   try {
-    await connectMongo({ mongodbUri, mongodbDatabase });
+    const connection = await connectMongoose({ mongodbUri, mongodbDatabase });
+    getUserModel(connection);
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     console.error("MongoDB connection failed:", errorName);

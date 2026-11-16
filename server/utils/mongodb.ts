@@ -1,6 +1,6 @@
 import { MongoClient, type Db } from "mongodb";
 
-interface MongoRuntimeConfig {
+export interface MongoRuntimeConfig {
   mongodbUri?: string;
   mongodbDatabase?: string;
 }
@@ -65,6 +65,16 @@ export async function getMongoDatabase(
   config: MongoRuntimeConfig,
 ): Promise<Db> {
   return connectMongo(config);
+}
+
+export async function getMongoClient(
+  config: MongoRuntimeConfig,
+): Promise<MongoClient> {
+  await connectMongo(config);
+  if (!client) {
+    throw new Error("MongoDB client is unavailable after connecting.");
+  }
+  return client;
 }
 
 export async function pingMongo(config: MongoRuntimeConfig): Promise<void> {

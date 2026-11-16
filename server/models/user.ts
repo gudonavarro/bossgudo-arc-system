@@ -1,5 +1,11 @@
 import bcrypt from "bcrypt";
-import { model, Schema, Types } from "mongoose";
+import {
+  Schema,
+  Types,
+  type Connection,
+  type HydratedDocument,
+  type Model,
+} from "mongoose";
 
 export type UserRole = "customer" | "admin";
 export type UserId = Types.ObjectId;
@@ -17,6 +23,8 @@ export interface User {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+export type UserDocument = HydratedDocument<User>;
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
@@ -51,4 +59,9 @@ userSchema.pre("save", async function () {
   this.password = await bcrypt.hash(this.password, 12);
 });
 
-export const UserModel = model<User>("User", userSchema);
+export function getUserModel(connection: Connection): Model<User> {
+  return (
+    (connection.models.User as Model<User> | undefined) ??
+    connection.model<User>("User", userSchema, "users")
+  );
+}
