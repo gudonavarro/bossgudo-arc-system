@@ -66,13 +66,52 @@ function createTestApp(options) {
       },
     },
   });
-  const { UserModel: _userModel, SessionModel: _sessionModel, ...routerOptions } =
-    options;
+  const {
+    UserModel: _userModel,
+    SessionModel: _sessionModel,
+    emailConfig,
+    ...routerOptions
+  } = options;
+  app.use((request, _response, next) => {
+    request.emailConfig = emailConfig;
+    next();
+  });
   app.use(
     "/api/auth",
     createAuthRouter({ ...routerOptions, getCollections }),
   );
   return app;
+}
+
+function createEmailTestApp({
+  role = "admin",
+  production = false,
+  sendTestEmail = async () => {},
+} = {}) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const session = {
+    _id: "session-1",
+    userId: "user-1",
+    tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+    expiresAt: new Date(Date.now() + 60_000),
+    createdAt: new Date(),
+  };
+  const emailConfig = {
+    smtpHost: "smtp.gmail.com",
+    smtpPort: 587,
+    smtpUser: "sender@example.com",
+    smtpPass: "test-password",
+    smtpFrom: "sender@example.com",
+  };
+  const app = createTestApp({
+    UserModel: fakeUserModel({ existingUser: createLoginUser({ role }) }),
+    SessionModel: fakeSessionModel({ session }),
+    emailConfig,
+    isDatabaseReady: () => true,
+    isProduction: () => production,
+    sendTestEmail,
+  });
+  return { app, token, emailConfig };
 }
 
 function fakeUserModel({
@@ -722,6 +761,63 @@ test("reusable administrator middleware rejects customer sessions", async () => 
   const adminResponse = await checkRole("admin");
   assert.equal(customerResponse.status, 403);
   assert.equal(adminResponse.status, 200);
+});
+
+test("sends a test email only for an authenticated administrator", async () => {
+  const sentEmails = [];
+  const { app, token, emailConfig } = createEmailTestApp({
+    sendTestEmail: async (message, config) => {
+      sentEmails.push({ message, config });
+    },
+  });
+  const adminResponse = await request(app)
+    .post("/api/auth/admin/email-test")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`)
+    .send({ to: "recipient@example.com" });
+
+  const unauthenticated = await request(createEmailTestApp().app)
+    .post("/api/auth/admin/email-test")
+    .send({ to: "recipient@example.com" });
+  const customerTest = createEmailTestApp({ role: "customer" });
+  const customerResponse = await request(customerTest.app)
+    .post("/api/auth/admin/email-test")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${customerTest.token}`)
+    .send({ to: "recipient@example.com" });
+
+  assert.equal(adminResponse.status, 200);
+  assert.deepEqual(adminResponse.body, { message: "Test email sent." });
+  assert.deepEqual(sentEmails, [
+    {
+      message: {
+        to: "recipient@example.com",
+        subject: "BOSSGUDO SMTP email test",
+        text: "This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.",
+        html: "<p>This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.</p>",
+      },
+      config: emailConfig,
+    },
+  ]);
+  assert.equal(unauthenticated.status, 401);
+  assert.equal(customerResponse.status, 403);
+});
+
+test("hides the test route in production and validates recipients", async () => {
+  const productionTest = createEmailTestApp({ production: true });
+  const productionResponse = await request(productionTest.app)
+    .post("/api/auth/admin/email-test")
+    .send({ to: "recipient@example.com" });
+  const invalidRecipient = createEmailTestApp();
+  const invalidResponse = await request(invalidRecipient.app)
+    .post("/api/auth/admin/email-test")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${invalidRecipient.token}`)
+    .send({ to: "invalid-address" });
+
+  assert.equal(productionResponse.status, 404);
+  assert.deepEqual(productionResponse.body, { error: "Not found." });
+  assert.equal(invalidResponse.status, 400);
+  assert.deepEqual(invalidResponse.body, {
+    error: "Enter a valid recipient email address.",
+  });
 });
 
 test("protects the current-user route and rejects missing and invalid cookies", async () => {
