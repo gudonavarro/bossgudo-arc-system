@@ -465,6 +465,7 @@ test("administrator login accepts only active administrator accounts", async () 
     UserModel: fakeUserModel({ existingUser: adminUser }),
     SessionModel: adminSessions,
     isDatabaseReady: () => true,
+    isProduction: () => true,
   });
   const customerApp = createTestApp({
     UserModel: fakeUserModel({ existingUser: createLoginUser() }),
@@ -482,7 +483,27 @@ test("administrator login accepts only active administrator accounts", async () 
   assert.equal(adminResponse.status, 200);
   assert.equal(adminResponse.body.user.role, "admin");
   assert.equal(adminSessions.calls.create.length, 1);
+  assert.deepEqual(adminResponse.body.user, {
+    id: "user-1",
+    firstName: "Ana",
+    lastName: "Cruz",
+    email: "ana@example.com",
+    role: "admin",
+  });
+  const [adminCookie = ""] = adminResponse.headers["set-cookie"] ?? [];
+  assert.match(adminCookie, /HttpOnly/);
+  assert.match(adminCookie, /Secure/);
+  assert.match(adminCookie, /SameSite=Lax/);
+  const rawToken = adminCookie
+    .split(";")[0]
+    .slice(`${SESSION_COOKIE_NAME}=`.length);
+  assert.equal(
+    adminSessions.calls.create[0].tokenHash,
+    crypto.createHash("sha256").update(rawToken).digest("hex"),
+  );
+  assert.notEqual(adminSessions.calls.create[0].tokenHash, rawToken);
   assert.equal(customerResponse.status, 401);
+  assert.equal(customerResponse.headers["set-cookie"], undefined);
   assert.deepEqual(customerResponse.body, {
     error: "Invalid email or password.",
   });
