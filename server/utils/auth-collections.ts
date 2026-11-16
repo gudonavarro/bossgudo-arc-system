@@ -21,7 +21,11 @@ function applyProjection<T>(
   const fields = Object.entries(projection)
     .filter(([, include]) => include === 1)
     .map(([field]) =>
-      field === "password" || field === "resetTokenHash" ? `+${field}` : field,
+      field === "password" ||
+      field === "resetTokenHash" ||
+      field === "resetCodeAttempts"
+        ? `+${field}`
+        : field,
     );
   return query.select(fields.join(" "));
 }

@@ -20,6 +20,8 @@ export interface User {
   isActive: boolean;
   resetTokenHash?: string;
   resetTokenExpires?: Date;
+  resetCodeAttempts?: number;
+  passwordChangedAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -52,6 +54,8 @@ const userSchema = new Schema<User>({
   isActive: { type: Boolean, default: true },
   resetTokenHash: { type: String, select: false },
   resetTokenExpires: { type: Date },
+  resetCodeAttempts: { type: Number, min: 0, max: 5, select: false },
+  passwordChangedAt: { type: Date },
 }, { timestamps: true });
 
 userSchema.index({ email: 1 }, { unique: true });
