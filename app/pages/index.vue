@@ -1,3 +1,7 @@
+<script setup lang="ts">
+const { isAuthenticated, isCustomer } = useAuth();
+</script>
+
 <template>
   <section class="hero">
     <header class="topbar home-navbar">
@@ -10,7 +14,9 @@
         <NuxtLink to="/about">About</NuxtLink>
         <NuxtLink to="/shop">Shop</NuxtLink>
         <NuxtLink to="/booking">Bookings</NuxtLink>
-        <NuxtLink to="/customer-login" class="primary">Login</NuxtLink>
+        <NuxtLink v-if="isCustomer" to="/mybookings">My Bookings</NuxtLink>
+        <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
+        <NuxtLink v-else to="/customer-login" class="primary">Login</NuxtLink>
       </nav>
     </header>
 
