@@ -24,6 +24,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
   const queryCalls = [];
   const createCalls = [];
   const updateCalls = [];
+  const deleteCalls = [];
   const faqModel = {
     find(filter) {
       queryCalls.push({ operation: "find", filter });
@@ -70,6 +71,13 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
         },
       };
     },
+    findByIdAndDelete(id) {
+      deleteCalls.push(id);
+      return {
+        lean: async () =>
+          faqRecords.find((faq) => faq._id.toString() === id) ?? null,
+      };
+    },
   };
   const app = express();
   app.use(express.json());
@@ -92,7 +100,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
     next();
   });
   app.use("/api/admin/faqs", createFaqRouter());
-  return { app, token, queryCalls, createCalls, updateCalls };
+  return { app, token, queryCalls, createCalls, updateCalls, deleteCalls };
 }
 
 function createFaq(overrides = {}) {
@@ -272,4 +280,26 @@ test("rejects empty FAQ updates and reports missing records", async () => {
     .expect(404)
     .expect({ error: "FAQ not found." });
   assert.equal(updateCalls.length, 1);
+});
+
+test("deletes existing FAQs and handles invalid or missing IDs", async () => {
+  const { app, token, deleteCalls } = createFaqApp();
+  await request(app)
+    .delete(`/api/admin/faqs/${faqId}`)
+    .set("Cookie", `bossgudo_session=${token}`)
+    .expect(200)
+    .expect({ message: "FAQ deleted." });
+  await request(app)
+    .delete("/api/admin/faqs/not-an-id")
+    .set("Cookie", `bossgudo_session=${token}`)
+    .expect(400)
+    .expect({ error: "Invalid FAQ id." });
+  assert.deepEqual(deleteCalls, [faqId]);
+
+  const emptyApp = createFaqApp({ faqRecords: [] });
+  await request(emptyApp.app)
+    .delete(`/api/admin/faqs/${faqId}`)
+    .set("Cookie", `bossgudo_session=${emptyApp.token}`)
+    .expect(404)
+    .expect({ error: "FAQ not found." });
 });

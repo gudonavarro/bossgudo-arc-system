@@ -188,6 +188,26 @@ function createFaqRouter() {
     }
   });
 
+  router.delete("/:id", async (request, response) => {
+    const { id } = request.params;
+    if (!OBJECT_ID_PATTERN.test(id)) {
+      return response.status(400).json({ error: "Invalid FAQ id." });
+    }
+
+    try {
+      const faq = await request.faqModel.findByIdAndDelete(id).lean();
+      if (!faq) {
+        return response.status(404).json({ error: "FAQ not found." });
+      }
+      return response.status(200).json({ message: "FAQ deleted." });
+    } catch (error) {
+      console.error("FAQ deletion request failed:", getErrorName(error));
+      return response.status(503).json({
+        error: "FAQ data is temporarily unavailable.",
+      });
+    }
+  });
+
   return router;
 }
 
