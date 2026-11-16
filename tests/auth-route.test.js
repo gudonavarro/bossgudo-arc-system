@@ -673,6 +673,34 @@ test("logs out by revoking the session and clearing the cookie", async () => {
   assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
 });
 
+test("clears the session cookie when logout has no valid session", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    SessionModel: fakeSessionModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const noCookie = await request(app).post("/api/auth/logout");
+  const expiredCookie = await request(app)
+    .post("/api/auth/logout")
+    .set(
+      "Cookie",
+      `${SESSION_COOKIE_NAME}=${crypto.randomBytes(32).toString("base64url")}`,
+    );
+
+  assert.equal(noCookie.status, 200);
+  assert.equal(expiredCookie.status, 200);
+  assert.equal(noCookie.body.message, "Logged out.");
+  assert.match(
+    noCookie.headers["set-cookie"][0],
+    new RegExp(`^${SESSION_COOKIE_NAME}=;`),
+  );
+  assert.match(
+    expiredCookie.headers["set-cookie"][0],
+    new RegExp(`^${SESSION_COOKIE_NAME}=;`),
+  );
+});
+
 test("does not claim email recovery when SMTP is not configured", async () => {
   const model = fakeUserModel({ existingUser: createLoginUser() });
   const app = createTestApp({

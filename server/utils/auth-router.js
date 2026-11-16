@@ -3,7 +3,11 @@ const bcrypt = require("bcrypt");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
 const { ObjectId } = require("mongodb");
-const { createSession } = require("./session");
+const {
+  clearSessionCookie,
+  createSession,
+  invalidateSession,
+} = require("./session");
 const {
   isPasswordResetMailConfigured,
   sendPasswordResetEmail,
@@ -217,6 +221,14 @@ function createAuthRouter({
     respondUnauthenticated: (_request, response) =>
       response.status(200).json({ user: null }),
   });
+  const authenticateForLogout = createAuthenticationMiddleware({
+    getCollections: getRequestCollections,
+    isDatabaseReady,
+    respondUnauthenticated: (_request, response) => {
+      clearSessionCookie(response, isProduction());
+      return response.status(200).json({ message: "Logged out." });
+    },
+  });
 
   router.use((_request, response, next) => {
     response.set("Cache-Control", "no-store");
@@ -301,16 +313,11 @@ function createAuthRouter({
     return response.status(200).json({ user: request.authUser });
   });
 
-  router.post("/logout", authenticate, async (request, response) => {
+  router.post("/logout", authenticateForLogout, async (request, response) => {
     try {
       const { sessions } = getRequestCollections(request);
-      await sessions.deleteOne({ _id: asObjectId(request.authSessionId) });
-      response.clearCookie(SESSION_COOKIE_NAME, {
-        httpOnly: true,
-        secure: isProduction(),
-        sameSite: "lax",
-        path: "/",
-      });
+      await invalidateSession(sessions, asObjectId(request.authSessionId));
+      clearSessionCookie(response, isProduction());
       return response.status(200).json({ message: "Logged out." });
     } catch (error) {
       console.error("Logout request failed:", getErrorName(error));

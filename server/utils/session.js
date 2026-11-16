@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 
+const SESSION_COOKIE_NAME = "bossgudo_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 async function createSession(sessions, userId, now = new Date()) {
@@ -18,4 +19,23 @@ async function createSession(sessions, userId, now = new Date()) {
   return { token, expiresAt };
 }
 
-module.exports = { SESSION_DURATION_MS, createSession };
+async function invalidateSession(sessions, sessionId) {
+  await sessions.deleteOne({ _id: sessionId });
+}
+
+function clearSessionCookie(response, isProduction) {
+  response.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+  });
+}
+
+module.exports = {
+  SESSION_COOKIE_NAME,
+  SESSION_DURATION_MS,
+  clearSessionCookie,
+  createSession,
+  invalidateSession,
+};

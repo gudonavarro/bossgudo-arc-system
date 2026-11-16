@@ -1,7 +1,6 @@
 const crypto = require("node:crypto");
 const { ObjectId } = require("mongodb");
-
-const SESSION_COOKIE_NAME = "bossgudo_session";
+const { SESSION_COOKIE_NAME } = require("./session");
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 function readSessionToken(request) {
