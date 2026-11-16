@@ -14,6 +14,7 @@ test("defines FAQ fields, defaults, references, and timestamps", async () => {
     question: " How much crayfish? ",
     keywords: [" crayfish ", "craylings"],
     answer: " Crayfish prices are available here. ",
+    link: { label: " View Setups ", href: " /shop " },
     createdBy,
     updatedBy: createdBy,
   });
@@ -25,6 +26,8 @@ test("defines FAQ fields, defaults, references, and timestamps", async () => {
   assert.equal(faq.question, "How much crayfish?");
   assert.deepEqual(faq.keywords, ["crayfish", "craylings"]);
   assert.equal(faq.answer, "Crayfish prices are available here.");
+  assert.equal(faq.link.label, "View Setups");
+  assert.equal(faq.link.href, "/shop");
   assert.equal(faq.active, true);
   assert.equal(faq.createdBy.toString(), createdBy.toString());
   assert.equal(faq.updatedBy.toString(), createdBy.toString());

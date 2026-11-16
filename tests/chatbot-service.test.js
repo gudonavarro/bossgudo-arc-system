@@ -29,6 +29,24 @@ const pricingFaq = {
   active: true,
 };
 
+const setupFaq = {
+  _id: "faq-setup",
+  question: "How much setup?",
+  keywords: [
+    "setup",
+    "pond setup",
+    "setup price",
+    "setup cost",
+    "how much setup",
+    "PVC setup",
+    "slotted angle bar setup",
+    "pond package",
+  ],
+  answer: "You can view our available pond setups in our Shop.",
+  link: { label: "View Setups", href: "/shop" },
+  active: true,
+};
+
 test("normalizes case, punctuation, and repeated whitespace", () => {
   assert.equal(
     normalizeChatMessage("  HOW much... crayfish?!  "),
@@ -117,6 +135,22 @@ test("returns only the stored answer and FAQ id, or the specified fallback", () 
     matched: false,
     answer: FALLBACK_ANSWER,
   });
+});
+
+test("returns stored setup links for the supported setup-price questions", () => {
+  for (const message of [
+    "How much setup?",
+    "How much is the pond setup?",
+    "What are your setup prices?",
+    "How much does setup cost?",
+  ]) {
+    assert.deepEqual(getChatbotResponse(message, [setupFaq]), {
+      matched: true,
+      answer: setupFaq.answer,
+      faqId: setupFaq._id,
+      link: setupFaq.link,
+    });
+  }
 });
 
 test("excludes inactive FAQs and applies stable score tie-breaking", () => {

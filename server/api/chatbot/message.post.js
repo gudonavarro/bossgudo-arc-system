@@ -43,7 +43,7 @@ export function createChatbotMessageHandler({
       const connection = await connect(getRuntimeConfig(event));
       activeFaqs = await getModel(connection)
         .find({ active: true })
-        .select("question keywords answer")
+        .select("question keywords answer link")
         .lean();
     } catch (error) {
       const errorName = error instanceof Error ? error.name : "UnknownError";

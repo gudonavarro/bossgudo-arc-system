@@ -16,6 +16,15 @@ const pricingFaq = {
   active: true,
 };
 
+const setupFaq = {
+  _id: "faq-setup",
+  question: "How much setup?",
+  keywords: ["setup", "pond setup"],
+  answer: "View setup prices in the Shop.",
+  link: { label: "View Setups", href: "/shop" },
+  active: true,
+};
+
 function createHandler(faqs, overrides = {}) {
   const queryCalls = [];
   const handler = createChatbotMessageHandler({
@@ -27,7 +36,7 @@ function createHandler(faqs, overrides = {}) {
         queryCalls.push(filter);
         return {
           select(fields) {
-            assert.equal(fields, "question keywords answer");
+            assert.equal(fields, "question keywords answer link");
             return { lean: async () => faqs };
           },
         };
@@ -83,6 +92,21 @@ test("loads only active FAQs and returns the stored answer and id", async () => 
     matched: true,
     answer: pricingFaq.answer,
     faqId: pricingFaq._id,
+  });
+});
+
+test("returns the stored link metadata for a matched FAQ", async () => {
+  const { handler } = createHandler([setupFaq]);
+  const response = await handler({
+    body: { message: "How much is the pond setup?" },
+  });
+
+  assert.deepEqual(response, {
+    success: true,
+    matched: true,
+    answer: setupFaq.answer,
+    faqId: setupFaq._id,
+    link: setupFaq.link,
   });
 });
 

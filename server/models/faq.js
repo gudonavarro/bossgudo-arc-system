@@ -1,5 +1,13 @@
 import mongoose from "mongoose";
 
+const faqLinkSchema = new mongoose.Schema(
+  {
+    label: { type: String, required: true, trim: true, maxlength: 80 },
+    href: { type: String, required: true, trim: true, maxlength: 500 },
+  },
+  { _id: false },
+);
+
 const faqSchema = new mongoose.Schema({
   question: { type: String, required: true, trim: true },
   keywords: {
@@ -12,6 +20,7 @@ const faqSchema = new mongoose.Schema({
     },
   },
   answer: { type: String, required: true, trim: true },
+  link: { type: faqLinkSchema, default: null },
   active: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

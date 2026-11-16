@@ -196,11 +196,22 @@ export function getChatbotResponse(message, faqs) {
   if (!matchedFaq || typeof matchedFaq.answer !== "string") {
     return { matched: false, answer: FALLBACK_ANSWER };
   }
-  return {
+  const response = {
     matched: true,
     answer: matchedFaq.answer,
     faqId: getFaqId(matchedFaq),
   };
+  if (
+    matchedFaq.link &&
+    typeof matchedFaq.link.label === "string" &&
+    typeof matchedFaq.link.href === "string"
+  ) {
+    response.link = {
+      label: matchedFaq.link.label,
+      href: matchedFaq.link.href,
+    };
+  }
+  return response;
 }
 
 export { FALLBACK_ANSWER, MINIMUM_MATCH_SCORE };
