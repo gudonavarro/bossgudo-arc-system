@@ -2,7 +2,12 @@ import express from "express";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { createAuthenticationMiddleware } = require("./authenticate.js");
+const path = require("node:path");
+const serverUtilsPath = (fileName) =>
+  path.resolve(process.cwd(), "server", "utils", fileName);
+const { createAuthenticationMiddleware } = require(
+  serverUtilsPath("authenticate.js"),
+);
 const FAQ_FIELDS =
   "question keywords answer active createdBy updatedBy createdAt updatedAt";
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;

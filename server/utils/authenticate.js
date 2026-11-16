@@ -1,7 +1,10 @@
 const crypto = require("node:crypto");
 const { ObjectId } = require("mongodb");
-const { SESSION_COOKIE_NAME } = require("./session");
-const { readCookie } = require("./cookies");
+const path = require("node:path");
+const serverUtilsPath = (fileName) =>
+  path.resolve(process.cwd(), "server", "utils", fileName);
+const { SESSION_COOKIE_NAME } = require(serverUtilsPath("session.js"));
+const { readCookie } = require(serverUtilsPath("cookies.js"));
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 function readSessionToken(request) {
