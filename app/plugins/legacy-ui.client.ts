@@ -4,6 +4,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   const router = useRouter();
   const route = useRoute();
   const auth = useAuth();
+  let appIsMounted = false;
   const publicPages = new Set([
     "/customer-login",
     "/admin-login",
@@ -38,6 +39,8 @@ export default defineNuxtPlugin((nuxtApp) => {
   }
 
   router.afterEach(async (route) => {
+    if (!appIsMounted) return;
+
     let start = 0;
     let end = route.path.length;
 
@@ -55,6 +58,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   });
 
   nuxtApp.hook("app:mounted", () => {
+    appIsMounted = true;
     ensureLegacyUi(route.path);
   });
 });
