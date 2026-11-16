@@ -90,6 +90,8 @@ idempotent and only inserts the initial record when it is absent; rerunning it
 does not replace administrator edits.
 The pond setup pricing FAQ and its internal Shop link can be seeded with
 `npm run seed:setup-faq`; rerunning the command does not create duplicates.
+The farm contact and location FAQ can be seeded with `npm run seed:contact-faq`;
+rerunning it does not create a duplicate record.
 
 The `auth` and `admin` middleware provide frontend navigation behavior only;
 they are not a security boundary. Server-side endpoints and resources must
