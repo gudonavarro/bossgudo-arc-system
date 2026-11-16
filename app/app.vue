@@ -47,7 +47,12 @@ useHead(() => ({
         {{ item.label }}
       </NuxtLink>
       <NuxtLink v-if="isCustomer" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
-      <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
+      <NuxtLink
+        v-if="isAuthenticated"
+        :to="{ path: '/logout', query: { returnTo: route.fullPath } }"
+      >
+        Log Out
+      </NuxtLink>
       <NuxtLink v-else-if="!isAuthenticated" to="/customer-login" class="primary">Login</NuxtLink>
     </nav>
   </header>
