@@ -77,6 +77,28 @@ test("returns the prescribed fallback without exposing FAQ data", async () => {
   });
 });
 
+test("uses updated active FAQ data on each request", async () => {
+  const faq = { ...pricingFaq, answer: "Original answer." };
+  const { handler, queryCalls } = createHandler([faq]);
+
+  const original = await handler({
+    body: { message: "How much crayfish?" },
+  });
+  faq.answer = "Updated administrator answer.";
+  const updated = await handler({
+    body: { message: "How much crayfish?" },
+  });
+  faq.active = false;
+  const inactive = await handler({
+    body: { message: "How much crayfish?" },
+  });
+
+  assert.equal(original.answer, "Original answer.");
+  assert.equal(updated.answer, "Updated administrator answer.");
+  assert.equal(inactive.matched, false);
+  assert.equal(queryCalls.length, 3);
+});
+
 test("reports FAQ database failures as temporary unavailability", async () => {
   const { handler } = createHandler([], {
     connect: async () => {
