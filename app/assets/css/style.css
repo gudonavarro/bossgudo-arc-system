@@ -1410,6 +1410,27 @@ tbody tr:hover {
   text-align: center;
 }
 
+.toast-success {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #1b6d45;
+}
+
+.toast-success::before {
+  content: "✓";
+  display: grid;
+  flex: 0 0 18px;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
 .footer strong {
   color: var(--green);
   font-size: 0.9375rem;
