@@ -2,7 +2,10 @@ import { defineEventHandler, setResponseStatus } from "h3";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import type { Db } from "mongodb";
+import { getUserModel } from "../../models/user";
+import { createAuthCollections } from "../../utils/auth-collections";
 import { getMongoDatabase } from "../../utils/mongodb";
+import { connectMongoose } from "../../utils/mongoose";
 
 const require = createRequire(import.meta.url);
 const { createAuthRouter } = require(resolve(process.cwd(), "server/utils/auth-router.js")) as {
@@ -34,8 +37,13 @@ const jsonParser = express.json({ limit: "10kb" });
 
 export default defineEventHandler(async (event) => {
   let mongoDb: Db;
+  let userModel;
   try {
-    mongoDb = await getMongoDatabase(useRuntimeConfig(event));
+    const config = useRuntimeConfig(event);
+    [mongoDb, userModel] = await Promise.all([
+      getMongoDatabase(config),
+      connectMongoose(config).then(getUserModel),
+    ]);
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     console.error("Authentication database unavailable:", errorName);
@@ -43,7 +51,10 @@ export default defineEventHandler(async (event) => {
     return { error: "Authentication is temporarily unavailable." };
   }
 
-  const request = Object.assign(event.node.req, { mongoDb });
+  const request = Object.assign(event.node.req, {
+    mongoDb,
+    authCollections: createAuthCollections(mongoDb, userModel),
+  });
   const response = event.node.res;
   const nodeResponse = response as typeof response & {
     set?: (field: string, value: string) => typeof response;

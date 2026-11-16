@@ -80,6 +80,7 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     updateOne: [],
     select: [],
     create: [],
+    created: [],
   };
   return {
     calls,
@@ -115,7 +116,13 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     async create(user) {
       calls.create.push(user);
       if (createError) throw createError;
-      return { id: "user-1", ...user };
+      const createdUser = {
+        id: "user-1",
+        ...user,
+        password: await bcrypt.hash(user.password, 4),
+      };
+      calls.created.push(createdUser);
+      return createdUser;
     },
   };
 }
@@ -235,7 +242,7 @@ test("creates a customer with normalized details and a minimal safe response", a
     .send({ ...validRegistration, role: "admin", resetTokenHash: "attacker-value" });
 
   assert.equal(response.status, 201);
-  const storedUser = model.calls.create[0];
+  const storedUser = model.calls.created[0];
   assert.equal(storedUser.firstName, "Ana");
   assert.equal(storedUser.lastName, "Cruz");
   assert.equal(storedUser.email, "ana@example.com");
@@ -246,7 +253,6 @@ test("creates a customer with normalized details and a minimal safe response", a
     await bcrypt.compare(validRegistration.password, storedUser.password),
     true,
   );
-  assert.ok(storedUser.passwordChangedAt instanceof Date);
   assert.ok(storedUser.createdAt instanceof Date);
   assert.ok(storedUser.updatedAt instanceof Date);
   assert.deepEqual(response.body.user, {

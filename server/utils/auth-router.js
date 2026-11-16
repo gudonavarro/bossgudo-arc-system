@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcrypt");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
 const { ObjectId } = require("mongodb");
@@ -158,6 +158,9 @@ function compareAgainstDummyHash(password) {
 }
 
 function getCollections(request) {
+  if (request.authCollections) {
+    return request.authCollections;
+  }
   const database = request.mongoDb;
   if (!database) {
     throw new Error("Database is unavailable.");
@@ -467,10 +470,9 @@ function createAuthRouter({
         lastName: value.lastName,
         email: value.email,
         phoneNumber: value.phoneNumber,
-        password: await bcrypt.hash(value.password, 12),
+        password: value.password,
         role: "customer",
         isActive: true,
-        passwordChangedAt: now,
         createdAt: now,
         updatedAt: now,
       };
