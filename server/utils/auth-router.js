@@ -68,28 +68,18 @@ function isDatabaseUnavailableError(error) {
   ].includes(getErrorName(error));
 }
 
-function validateRegistration(body) {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { error: "Provide registration details.", fieldErrors: {} };
-  }
-
-  const { firstName, lastName, email, phoneNumber, password, confirmPassword } =
-    body;
-  const fieldValues = {
-    firstName,
-    lastName,
-    email,
-    phoneNumber,
-    password,
-    confirmPassword,
-  };
+function getRequiredRegistrationFieldErrors(fieldValues) {
   const fieldErrors = {};
   for (const [field, value] of Object.entries(fieldValues)) {
     if (typeof value !== "string" || !value.trim()) {
       fieldErrors[field] = "This field is required.";
     }
   }
-  const normalized = {
+  return fieldErrors;
+}
+
+function normalizeRegistrationFields({ firstName, lastName, email, phoneNumber }) {
+  return {
     firstName: typeof firstName === "string" ? firstName.trim() : "",
     lastName: typeof lastName === "string" ? lastName.trim() : "",
     email: typeof email === "string" ? email.trim().toLowerCase() : "",
@@ -98,13 +88,18 @@ function validateRegistration(body) {
         ? normalizePhoneNumber(phoneNumber.trim())
         : "",
   };
+}
 
+function validateRegistrationNames(normalized, fieldErrors) {
   if (!fieldErrors.firstName && normalized.firstName.length > 80) {
     fieldErrors.firstName = "Enter a first name of at most 80 characters.";
   }
   if (!fieldErrors.lastName && normalized.lastName.length > 80) {
     fieldErrors.lastName = "Enter a last name of at most 80 characters.";
   }
+}
+
+function validateRegistrationContact(normalized, fieldErrors) {
   if (
     !fieldErrors.email &&
     (normalized.email.length > 254 || !EMAIL_PATTERN.test(normalized.email))
@@ -114,6 +109,9 @@ function validateRegistration(body) {
   if (!fieldErrors.phoneNumber && !PHONE_PATTERN.test(normalized.phoneNumber)) {
     fieldErrors.phoneNumber = "Enter a valid PH number starting with 09 or +63.";
   }
+}
+
+function validateRegistrationPasswords(password, confirmPassword, fieldErrors) {
   const passwordError =
     typeof password === "string" && password
       ? getPasswordValidationError(password)
@@ -129,6 +127,33 @@ function validateRegistration(body) {
   ) {
     fieldErrors.confirmPassword = "Passwords do not match.";
   }
+}
+
+function validateRegistration(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Provide registration details.", fieldErrors: {} };
+  }
+
+  const { firstName, lastName, email, phoneNumber, password, confirmPassword } =
+    body;
+  const fieldErrors = getRequiredRegistrationFieldErrors({
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+    password,
+    confirmPassword,
+  });
+  const normalized = normalizeRegistrationFields({
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+  });
+  validateRegistrationNames(normalized, fieldErrors);
+  validateRegistrationContact(normalized, fieldErrors);
+  validateRegistrationPasswords(password, confirmPassword, fieldErrors);
+
   if (Object.keys(fieldErrors).length > 0) {
     return {
       error: Object.values(fieldErrors)[0],
@@ -217,6 +242,138 @@ function asObjectId(value) {
   return typeof value === "string" && /^[a-f\d]{24}$/i.test(value)
     ? new ObjectId(value)
     : value;
+}
+
+function getDuplicateRegistrationFieldErrors(user, registration) {
+  const fieldErrors = {};
+  if (user.email === registration.email) {
+    fieldErrors.email = "An account with this email already exists.";
+  }
+  if (user.phoneNumber === registration.phoneNumber) {
+    fieldErrors.phoneNumber = "This phone number is already registered.";
+  }
+  return fieldErrors;
+}
+
+function getDuplicateKeyFieldErrors(error) {
+  const fieldErrors = {};
+  if (error.keyPattern?.email) {
+    fieldErrors.email = "An account with this email already exists.";
+  }
+  if (error.keyPattern?.phoneNumber) {
+    fieldErrors.phoneNumber = "This phone number is already registered.";
+  }
+  return fieldErrors;
+}
+
+function getMongooseRegistrationFieldErrors(error) {
+  const fieldMessages = {
+    firstName: "Enter a valid first name.",
+    lastName: "Enter a valid last name.",
+    email: "Enter a valid email address.",
+    phoneNumber: "Enter a valid PH phone number.",
+    password: "Enter a valid password.",
+  };
+  const fieldErrors = {};
+  for (const [field, message] of Object.entries(fieldMessages)) {
+    if (error.errors?.[field]) {
+      fieldErrors[field] = message;
+    }
+  }
+  return fieldErrors;
+}
+
+function sendRegistrationConflict(response, fieldErrors) {
+  return response.status(409).json({
+    error: "An account with those details already exists.",
+    fieldErrors,
+  });
+}
+
+function handleRegistrationError(error, response) {
+  if (error?.code === 11000) {
+    return sendRegistrationConflict(response, getDuplicateKeyFieldErrors(error));
+  }
+  if (error?.name === "ValidationError") {
+    return response.status(400).json({
+      error: "Please check your registration details.",
+      fieldErrors: getMongooseRegistrationFieldErrors(error),
+    });
+  }
+  if (isDatabaseUnavailableError(error)) {
+    console.error("Registration database unavailable:", getErrorName(error));
+    return response
+      .status(503)
+      .json({ error: "Registration is temporarily unavailable." });
+  }
+
+  console.error("Registration request failed:", getErrorName(error));
+  return response
+    .status(500)
+    .json({ error: "Unable to create the account right now." });
+}
+
+function createRegistrationHandler({ getCollections, isDatabaseReady }) {
+  return async (request, response) => {
+    const validation = validateRegistration(request.body);
+    if (validation.error) {
+      return response.status(400).json({
+        error: validation.error,
+        fieldErrors: validation.fieldErrors,
+      });
+    }
+
+    if (!isDatabaseReady(request)) {
+      return response
+        .status(503)
+        .json({ error: "Registration is temporarily unavailable." });
+    }
+
+    const { value } = validation;
+    try {
+      const { users } = getCollections(request);
+      const existingUser = await users.findOne(
+        {
+          $or: [{ email: value.email }, { phoneNumber: value.phoneNumber }],
+        },
+        { projection: { _id: 1, email: 1, phoneNumber: 1 } },
+      );
+      if (existingUser) {
+        return sendRegistrationConflict(
+          response,
+          getDuplicateRegistrationFieldErrors(existingUser, value),
+        );
+      }
+
+      const now = new Date();
+      const user = {
+        firstName: value.firstName,
+        lastName: value.lastName,
+        email: value.email,
+        phoneNumber: value.phoneNumber,
+        password: value.password,
+        role: "customer",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const result = await users.insertOne(user);
+
+      return response.status(201).json({
+        message: "Account created.",
+        user: {
+          id: String(result.insertedId),
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      return handleRegistrationError(error, response);
+    }
+  };
 }
 
 function createAuthRouter({
@@ -481,114 +638,14 @@ function createAuthRouter({
     }
   });
 
-  router.post("/register", registrationLimiter, async (request, response) => {
-    const validation = validateRegistration(request.body);
-    if (validation.error) {
-      return response.status(400).json({
-        error: validation.error,
-        fieldErrors: validation.fieldErrors,
-      });
-    }
-
-    if (!isDatabaseReady(request)) {
-      return response
-        .status(503)
-        .json({ error: "Registration is temporarily unavailable." });
-    }
-
-    const { value } = validation;
-    try {
-      const { users } = getRequestCollections(request);
-      const existingUser = await users.findOne(
-        {
-          $or: [{ email: value.email }, { phoneNumber: value.phoneNumber }],
-        },
-        { projection: { _id: 1, email: 1, phoneNumber: 1 } },
-      );
-      if (existingUser) {
-        const fieldErrors = {};
-        if (existingUser.email === value.email) {
-          fieldErrors.email = "An account with this email already exists.";
-        }
-        if (existingUser.phoneNumber === value.phoneNumber) {
-          fieldErrors.phoneNumber = "This phone number is already registered.";
-        }
-        return response.status(409).json({
-          error: "An account with those details already exists.",
-          fieldErrors,
-        });
-      }
-
-      const now = new Date();
-      const user = {
-        firstName: value.firstName,
-        lastName: value.lastName,
-        email: value.email,
-        phoneNumber: value.phoneNumber,
-        password: value.password,
-        role: "customer",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const result = await users.insertOne(user);
-
-      return response.status(201).json({
-        message: "Account created.",
-        user: {
-          id: String(result.insertedId),
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
-          role: user.role,
-        },
-      });
-    } catch (error) {
-      if (error?.code === 11000) {
-        const fieldErrors = {};
-        if (error.keyPattern?.email) {
-          fieldErrors.email = "An account with this email already exists.";
-        }
-        if (error.keyPattern?.phoneNumber) {
-          fieldErrors.phoneNumber = "This phone number is already registered.";
-        }
-        return response.status(409).json({
-          error: "An account with those details already exists.",
-          fieldErrors,
-        });
-      }
-      if (error?.name === "ValidationError") {
-        const fieldMessages = {
-          firstName: "Enter a valid first name.",
-          lastName: "Enter a valid last name.",
-          email: "Enter a valid email address.",
-          phoneNumber: "Enter a valid PH phone number.",
-          password: "Enter a valid password.",
-        };
-        const fieldErrors = {};
-        for (const [field, message] of Object.entries(fieldMessages)) {
-          if (error.errors?.[field]) {
-            fieldErrors[field] = message;
-          }
-        }
-        return response.status(400).json({
-          error: "Please check your registration details.",
-          fieldErrors,
-        });
-      }
-      if (isDatabaseUnavailableError(error)) {
-        console.error("Registration database unavailable:", getErrorName(error));
-        return response
-          .status(503)
-          .json({ error: "Registration is temporarily unavailable." });
-      }
-      console.error("Registration request failed:", getErrorName(error));
-      return response
-        .status(500)
-        .json({ error: "Unable to create the account right now." });
-    }
-  });
+  router.post(
+    "/register",
+    registrationLimiter,
+    createRegistrationHandler({
+      getCollections: getRequestCollections,
+      isDatabaseReady,
+    }),
+  );
 
   return router;
 }
