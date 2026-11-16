@@ -743,6 +743,13 @@ td {
   background: var(--green);
   color: var(--white);
 }
+.bubble .chat-link {
+  display: inline-block;
+  margin-top: 7px;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
 .chat-input {
   display: flex;
   padding: 10px;

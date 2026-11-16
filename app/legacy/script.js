@@ -3152,10 +3152,31 @@ if (chatClose && chatBox) {
     chatLaunch?.setAttribute("aria-expanded", "false");
   };
 }
-function appendChatBubble(container, message, isUser = false) {
+function appendChatBubble(container, message, isUser = false, link = null) {
   const bubble = document.createElement("div");
   bubble.className = isUser ? "bubble user" : "bubble";
   bubble.textContent = message;
+  if (!isUser && link) {
+    const safeLink =
+      typeof link.label === "string" &&
+      Boolean(link.label.trim()) &&
+      typeof link.href === "string" &&
+      link.href.startsWith("/") &&
+      !link.href.startsWith("//") &&
+      !link.href.includes("\\") &&
+      !/[\u0000-\u0020]/.test(link.href) &&
+      new URL(link.href, window.location.origin).origin ===
+        window.location.origin;
+    if (safeLink) {
+      const linkElement = document.createElement("a");
+      linkElement.className = "chat-link";
+      linkElement.href = link.href;
+      linkElement.textContent = link.label;
+      bubble.append(document.createElement("br"), linkElement);
+    } else {
+      console.error("ARC Assistant returned an invalid link.");
+    }
+  }
   container.append(bubble);
 }
 if (chatForm) {
@@ -3186,7 +3207,7 @@ if (chatForm) {
       ) {
         throw new Error("Chatbot request failed.");
       }
-      appendChatBubble(body, result.answer);
+      appendChatBubble(body, result.answer, false, result.link);
     } catch (error) {
       const errorName = error instanceof Error ? error.name : "UnknownError";
       console.error("ARC Assistant request failed:", errorName);
