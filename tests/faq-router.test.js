@@ -16,6 +16,7 @@ function createFaqApp({
   role = "admin",
   faqRecords = [createFaq()],
   findError = null,
+  createError = null,
 } = {}) {
   const token = crypto.randomBytes(32).toString("base64url");
   const session = {
@@ -59,6 +60,7 @@ function createFaqApp({
     },
     async create(fields) {
       createCalls.push(fields);
+      if (createError) throw createError;
       return createFaq(fields);
     },
     findByIdAndUpdate(id, update, options) {
@@ -279,6 +281,30 @@ test("rejects invalid FAQ creation without touching the model", async () => {
     .send({ question: "Question", keywords: [], answer: "Answer" })
     .expect(400);
   assert.deepEqual(createCalls, []);
+});
+
+test("reports FAQ persistence failures without exposing database details", async () => {
+  const { app, token } = createFaqApp({
+    createError: new Error("private database connection detail"),
+  });
+  const originalError = console.error;
+  const loggedErrors = [];
+  console.error = (...args) => loggedErrors.push(args);
+  try {
+    await request(app)
+      .post("/api/admin/faqs")
+      .set("Cookie", `bossgudo_session=${token}`)
+      .send({
+        question: "Question",
+        keywords: ["keyword"],
+        answer: "Answer",
+      })
+      .expect(503)
+      .expect({ error: "FAQ data is temporarily unavailable." });
+  } finally {
+    console.error = originalError;
+  }
+  assert.deepEqual(loggedErrors, [["FAQ creation request failed:", "Error"]]);
 });
 
 test("updates FAQ content and activation with server-controlled audit fields", async () => {
