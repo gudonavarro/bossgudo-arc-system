@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { readCookie } = require("./cookies");
 
 const RESET_CODE_PATTERN = /^\d{6}$/;
 const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -52,26 +53,7 @@ function matchesResetCodeHash(storedHash, submittedHash) {
 }
 
 function readResetToken(request) {
-  const cookieHeader = request?.headers?.cookie;
-  if (typeof cookieHeader !== "string") {
-    return null;
-  }
-
-  const prefix = `${RESET_COOKIE_NAME}=`;
-  const cookie = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(prefix));
-  if (!cookie) {
-    return null;
-  }
-
-  let token;
-  try {
-    token = decodeURIComponent(cookie.slice(prefix.length));
-  } catch {
-    return null;
-  }
+  const token = readCookie(request, RESET_COOKIE_NAME);
   return RESET_TOKEN_PATTERN.test(token) ? token : null;
 }
 
