@@ -693,28 +693,36 @@ test("rejects sessions created before the user's password was changed", async ()
   assert.equal(response.status, 401);
 });
 
-test("logs out by revoking the session and clearing the cookie", async () => {
-  const token = crypto.randomBytes(32).toString("base64url");
-  const session = {
-    _id: "session-1",
-    userId: "user-1",
-    expiresAt: new Date(Date.now() + 60_000),
-  };
-  const sessions = fakeSessionModel({ session });
-  const app = createTestApp({
-    UserModel: fakeUserModel({ existingUser: createLoginUser() }),
-    SessionModel: sessions,
-    isDatabaseReady: () => true,
-  });
+test("logs out customers and administrators by revoking only the current session", async () => {
+  for (const role of ["customer", "admin"]) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const sessionId = `session-${role}`;
+    const session = {
+      _id: sessionId,
+      userId: "user-1",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const sessions = fakeSessionModel({ session });
+    const app = createTestApp({
+      UserModel: fakeUserModel({
+        existingUser: createLoginUser({ role }),
+      }),
+      SessionModel: sessions,
+      isDatabaseReady: () => true,
+    });
 
-  const response = await request(app)
-    .post("/api/auth/logout")
-    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+    const response = await request(app)
+      .post("/api/auth/logout")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(sessions.calls.deleteOne, [{ _id: "session-1" }]);
-  assert.match(response.headers["set-cookie"][0], new RegExp(`^${SESSION_COOKIE_NAME}=;`));
-  assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
+    assert.equal(response.status, 200);
+    assert.deepEqual(sessions.calls.deleteOne, [{ _id: sessionId }]);
+    assert.match(
+      response.headers["set-cookie"][0],
+      new RegExp(`^${SESSION_COOKIE_NAME}=;`),
+    );
+    assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
+  }
 });
 
 test("clears the session cookie when logout has no valid session", async () => {
