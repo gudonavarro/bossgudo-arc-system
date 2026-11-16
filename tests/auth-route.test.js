@@ -1112,9 +1112,14 @@ test("does not request reset codes without a private reset secret", async () => 
   const response = await request(app)
     .post("/api/auth/forgot-password")
     .send({ email: "ana@example.com" });
+  const verificationResponse = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "123456" });
 
   assert.equal(response.status, 503);
   assert.match(response.body.error, /temporarily unavailable/i);
+  assert.equal(verificationResponse.status, 503);
+  assert.match(verificationResponse.body.error, /temporarily unavailable/i);
   assert.equal(model.calls.findOne.length, 0);
 });
 

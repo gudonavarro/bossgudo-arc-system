@@ -244,6 +244,14 @@ function getCollections(request) {
   };
 }
 
+function getPasswordResetSecret(request, isDatabaseReady) {
+  if (!isDatabaseReady(request)) {
+    return null;
+  }
+  const secret = request.emailConfig?.passwordResetSecret;
+  return isResetSecretConfigured(secret) ? secret : null;
+}
+
 function asObjectId(value) {
   return typeof value === "string" && /^[a-f\d]{24}$/i.test(value)
     ? new ObjectId(value)
@@ -588,13 +596,8 @@ function createAuthRouter({
     if (!isValidEmailAddress(email)) {
       return response.status(400).json({ error: "Enter a valid email address." });
     }
-    if (!isDatabaseReady(request)) {
-      return response
-        .status(503)
-        .json({ error: "Password recovery is temporarily unavailable." });
-    }
-    const resetSecret = request.emailConfig?.passwordResetSecret;
-    if (!isResetSecretConfigured(resetSecret)) {
+    const resetSecret = getPasswordResetSecret(request, isDatabaseReady);
+    if (resetSecret === null) {
       return response
         .status(503)
         .json({ error: "Password recovery is temporarily unavailable." });
@@ -676,18 +679,17 @@ function createAuthRouter({
     resetCodeVerificationLimiter,
     async (request, response) => {
       const { email, code } = request.body ?? {};
-      if (!isValidEmailAddress(email) || typeof code !== "string" || !RESET_CODE_PATTERN.test(code)) {
+      if (
+        !isValidEmailAddress(email) ||
+        typeof code !== "string" ||
+        !RESET_CODE_PATTERN.test(code)
+      ) {
         return response
           .status(400)
           .json({ error: "Enter a valid email address and 6-digit code." });
       }
-      if (!isDatabaseReady(request)) {
-        return response
-          .status(503)
-          .json({ error: "Password recovery is temporarily unavailable." });
-      }
-      const resetSecret = request.emailConfig?.passwordResetSecret;
-      if (!isResetSecretConfigured(resetSecret)) {
+      const resetSecret = getPasswordResetSecret(request, isDatabaseReady);
+      if (resetSecret === null) {
         return response
           .status(503)
           .json({ error: "Password recovery is temporarily unavailable." });
