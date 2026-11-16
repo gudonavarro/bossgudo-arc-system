@@ -2,15 +2,36 @@
 const email = ref("");
 const feedback = ref("");
 const feedbackStatus = ref<"success" | "error">("error");
+const submitting = ref(false);
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error !== null && typeof error === "object" && "data" in error) {
+    const data = error.data;
+    if (
+      data !== null &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof data.error === "string"
+    ) {
+      return data.error;
+    }
+  }
+  return fallback;
+}
+
 async function submit() {
+  if (submitting.value) return;
   feedback.value = "";
+  submitting.value = true;
   try {
     const result = await $fetch<{ message: string }>("/api/auth/forgot-password", { method: "POST", body: { email: email.value } });
     feedback.value = result.message;
     feedbackStatus.value = "success";
   } catch (error) {
-    feedback.value = error instanceof Error ? error.message : "Unable to send reset instructions.";
+    feedback.value = getErrorMessage(error, "Unable to send a verification code.");
     feedbackStatus.value = "error";
+  } finally {
+    submitting.value = false;
   }
 }
 </script>
@@ -43,10 +64,12 @@ async function submit() {
     <section class="recovery-panel" aria-label="Forgot password form">
       <section class="panel auth-card recovery-card">
         <h1 class="page-title">Forgot Password</h1>
-        <p class="recovery-subtitle">Enter your account email to receive reset instructions.</p>
+        <p class="recovery-subtitle">Enter your account email to receive a password reset verification code.</p>
         <form @submit.prevent="submit">
           <div class="field"><label for="email">EMAIL ADDRESS</label><input id="email" v-model="email" type="email" required></div>
-          <button class="primary recovery-submit" type="submit">Send Reset Link</button>
+          <button class="primary recovery-submit" type="submit" :disabled="submitting" :aria-busy="submitting">
+            {{ submitting ? "Sending..." : "Send Verification Code" }}
+          </button>
           <output v-if="feedback" class="form-feedback show" :class="{ success: feedbackStatus === 'success' }" aria-live="polite">{{ feedback }}</output>
         </form>
         <p class="auth-card-footer recovery-login-link">
