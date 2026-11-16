@@ -1,25 +1,12 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from "~/utils/api-error";
+
 const email = ref("");
 const code = ref("");
 const step = ref<"request" | "verify">("request");
 const feedback = ref("");
 const feedbackStatus = ref<"success" | "error">("error");
 const submitting = ref(false);
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error !== null && typeof error === "object" && "data" in error) {
-    const data = error.data;
-    if (
-      data !== null &&
-      typeof data === "object" &&
-      "error" in data &&
-      typeof data.error === "string"
-    ) {
-      return data.error;
-    }
-  }
-  return fallback;
-}
 
 async function requestCode() {
   if (submitting.value) return;
@@ -31,7 +18,10 @@ async function requestCode() {
     feedbackStatus.value = "success";
     step.value = "verify";
   } catch (error) {
-    feedback.value = getErrorMessage(error, "Unable to send a verification code.");
+    feedback.value = getApiErrorMessage(
+      error,
+      "Unable to send a verification code.",
+    );
     feedbackStatus.value = "error";
   } finally {
     submitting.value = false;
@@ -49,7 +39,10 @@ async function verifyCode() {
     });
     await navigateTo("/reset-password");
   } catch (error) {
-    feedback.value = getErrorMessage(error, "The code is invalid or expired.");
+    feedback.value = getApiErrorMessage(
+      error,
+      "The code is invalid or expired.",
+    );
     feedbackStatus.value = "error";
   } finally {
     submitting.value = false;

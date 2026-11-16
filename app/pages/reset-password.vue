@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from "~/utils/api-error";
+
 const password = ref("");
 const confirmPassword = ref("");
 const showPassword = ref(false);
@@ -7,21 +9,6 @@ const feedback = ref("");
 const feedbackStatus = ref<"success" | "error">("error");
 const submitting = ref(false);
 const completed = ref(false);
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error !== null && typeof error === "object" && "data" in error) {
-    const data = error.data;
-    if (
-      data !== null &&
-      typeof data === "object" &&
-      "error" in data &&
-      typeof data.error === "string"
-    ) {
-      return data.error;
-    }
-  }
-  return fallback;
-}
 
 async function submit() {
   if (submitting.value || completed.value) return;
@@ -38,7 +25,10 @@ async function submit() {
     password.value = "";
     confirmPassword.value = "";
   } catch (error) {
-    feedback.value = getErrorMessage(error, "Unable to reset your password.");
+    feedback.value = getApiErrorMessage(
+      error,
+      "Unable to reset your password.",
+    );
     feedbackStatus.value = "error";
   } finally {
     submitting.value = false;
