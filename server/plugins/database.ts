@@ -5,7 +5,7 @@ import { connectMongoose } from "../utils/mongoose";
 
 export default defineNitroPlugin(async (nitroApp) => {
   const { mongodbUri, mongodbDatabase } = useRuntimeConfig();
-  if (!mongodbUri && !mongodbDatabase) {
+  if (!mongodbUri) {
     return;
   }
 

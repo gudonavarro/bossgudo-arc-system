@@ -11,7 +11,8 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     mongodbUri: process.env.MONGODB_URI || "",
-    mongodbDatabase: process.env.MONGODB_DATABASE || "",
+    mongodbDatabase:
+      process.env.MONGODB_DATABASE || "gudonavarro_db_user",
   },
   app: {
     head: {

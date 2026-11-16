@@ -5,8 +5,9 @@ AI-assisted customer inquiry, service booking, and customer management system fo
 ## Run the application
 
 Install dependencies with `npm install`, copy `.env.example` to `.env`, and set
-`MONGODB_URI` to your Atlas connection string and `MONGODB_DATABASE` to the
-database name. Keep `.env` private. Run `npm run dev` to start the Nuxt
+`MONGODB_URI` to your Atlas connection string. `MONGODB_DATABASE` defaults to
+`gudonavarro_db_user`; set it explicitly only when deploying to a different
+database. Keep `.env` private. Run `npm run dev` to start the Nuxt
 application and Nitro API on the same origin. For a production build, run
 `npm run build` and then `npm start`. In production, terminate TLS at the server
 or trusted reverse proxy and set `NODE_ENV=production` so session cookies are
