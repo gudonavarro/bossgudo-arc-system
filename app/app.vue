@@ -94,7 +94,7 @@ useHead(() => ({
       <div class="bubble">Hi! I can help with questions about packages, pond setup, training, and bookings. What would you like to know?</div>
     </div>
     <form class="chat-input" id="chatForm">
-      <input id="chatText" placeholder="Ask about packages..." aria-label="Ask a question" required>
+      <input id="chatText" placeholder="Ask about packages..." aria-label="Ask a question" maxlength="1000" required>
       <button class="primary" type="submit">Send</button>
     </form>
   </div>

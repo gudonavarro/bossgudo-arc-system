@@ -3086,16 +3086,55 @@ if (chatClose && chatBox) {
     chatLaunch?.setAttribute("aria-expanded", "false");
   };
 }
+function appendChatBubble(container, message, isUser = false) {
+  const bubble = document.createElement("div");
+  bubble.className = isUser ? "bubble user" : "bubble";
+  bubble.textContent = message;
+  container.append(bubble);
+}
 if (chatForm) {
-  chatForm.onsubmit = (e) => {
+  chatForm.onsubmit = async (e) => {
     e.preventDefault();
     const input = document.getElementById("chatText"),
       body = document.getElementById("chatBody"),
+      submitButton = chatForm.querySelector('button[type="submit"]'),
       q = input?.value.trim();
     if (!input || !body || !q) return;
-    body.innerHTML += `<div class="bubble user">${safe(q)}</div><div class="bubble">${safe(botAnswer(q))}</div>`;
+    appendChatBubble(body, q, true);
     input.value = "";
-    body.scrollTop = body.scrollHeight;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Sending...";
+    }
+    try {
+      const response = await fetch("/api/chatbot/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: q }),
+      });
+      const result = await response.json();
+      if (
+        !response.ok ||
+        result?.success !== true ||
+        typeof result.answer !== "string"
+      ) {
+        throw new Error("Chatbot request failed.");
+      }
+      appendChatBubble(body, result.answer);
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      console.error("ARC Assistant request failed:", errorName);
+      appendChatBubble(
+        body,
+        "The assistant is temporarily unavailable. Please try again or contact the farm directly.",
+      );
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Send";
+      }
+      body.scrollTop = body.scrollHeight;
+    }
   };
 }
 
