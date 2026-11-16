@@ -34,17 +34,35 @@ export async function connectMongo({
       await mongoClient.connect();
       const db = mongoClient.db(mongodbDatabase);
       await Promise.all([
-        db.collection("users").createIndex({ email: 1 }, { unique: true }),
-        db.collection("users").createIndex({ phoneNumber: 1 }, { unique: true }),
+        db.collection("users").createIndex(
+          { email: 1 },
+          { unique: true },
+          undefined,
+        ),
+        db.collection("users").createIndex(
+          { phoneNumber: 1 },
+          { unique: true },
+          undefined,
+        ),
         db.collection("users").createIndex(
           { resetTokenHash: 1 },
           { unique: true, sparse: true },
+          undefined,
         ),
-        db.collection("sessions").createIndex({ tokenHash: 1 }, { unique: true }),
-        db.collection("sessions").createIndex({ userId: 1 }),
+        db.collection("sessions").createIndex(
+          { tokenHash: 1 },
+          { unique: true },
+          undefined,
+        ),
+        db.collection("sessions").createIndex(
+          { userId: 1 },
+          undefined,
+          undefined,
+        ),
         db.collection("sessions").createIndex(
           { expiresAt: 1 },
           { expireAfterSeconds: 0 },
+          undefined,
         ),
       ]);
       return db;
