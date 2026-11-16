@@ -11,9 +11,12 @@ const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
 const errorMessage = ref("");
+const pending = ref(false);
 const { loginAdmin } = useAuth();
 
 async function submit() {
+  if (pending.value) return;
+
   const validationError = validateLoginCredentials(email.value, password.value);
   if (validationError) {
     errorMessage.value = validationError;
@@ -21,6 +24,7 @@ async function submit() {
   }
 
   email.value = normalizeLoginEmail(email.value);
+  pending.value = true;
   errorMessage.value = "";
   try {
     await loginAdmin(email.value, password.value);
@@ -33,6 +37,8 @@ async function submit() {
       responseError.message ||
       "Unable to log in.";
     password.value = "";
+  } finally {
+    pending.value = false;
   }
 }
 </script>
@@ -66,7 +72,7 @@ async function submit() {
         <form novalidate @submit.prevent="submit">
           <div class="field">
             <label for="admin-email">Email address</label>
-            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
+            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
           </div>
 
           <div class="field">
@@ -79,11 +85,13 @@ async function submit() {
                 autocomplete="current-password"
                 placeholder="••••••••"
                 required
+                :disabled="pending"
                 @input="errorMessage = ''"
               >
               <button
                 class="password-toggle"
                 type="button"
+                :disabled="pending"
                 :aria-label="showPassword ? 'Hide password' : 'Show password'"
                 @click="showPassword = !showPassword"
               >
@@ -92,7 +100,9 @@ async function submit() {
             </div>
           </div>
 
-          <button class="primary login-submit" type="submit">Log In</button>
+          <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
+            {{ pending ? "Signing in..." : "Log In" }}
+          </button>
           <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>
         </form>
 
