@@ -70,6 +70,23 @@ enforce authorization independently. The application currently includes
 server-side auth and MongoDB integrations for its existing customer flows; the
 admin-login placeholder does not add or change those integrations.
 
+## Server-side Gmail email service
+
+The reusable server-side email utility sends plain-text, HTML, or multipart
+messages through Gmail SMTP. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+`SMTP_PASS`, and `SMTP_FROM` in the private `.env` file. Gmail uses
+`smtp.gmail.com` on port `587` with STARTTLS; use a Google app password rather
+than your regular account password. These values are kept in Nuxt's private
+runtime configuration and are not exposed to browser code.
+
+In a non-production environment, a signed-in administrator can verify SMTP
+submission with `POST /api/auth/admin/email-test` and a JSON body such as
+`{"to":"recipient@example.com"}`. The route sends a fixed test message, allows
+at most three requests per 15 minutes, and returns a generic error if SMTP
+delivery fails. It is unavailable when `NODE_ENV=production` and is not part
+of the password-recovery flow. A successful response means Gmail accepted the
+message for sending; check the recipient mailbox to confirm final delivery.
+
 ## Password recovery email
 
 Password recovery requires a real SMTP account. Configure `SMTP_HOST`,
@@ -77,6 +94,9 @@ Password recovery requires a real SMTP account. Configure `SMTP_HOST`,
 `APP_BASE_URL` in the private `.env` file. Use a verified sender/domain and a
 production HTTPS `APP_BASE_URL`. Port 587 normally uses `SMTP_SECURE=false`
 (STARTTLS); implicit TLS commonly uses port 465 with `SMTP_SECURE=true`.
+
+The reusable Gmail email service above is separate and does not change the
+existing password-recovery mailer or its configuration.
 
 Any SMTP-compatible provider can be used, for example Amazon SES, Postmark,
 Resend SMTP, or a managed mailbox provider. No reset email is sent when these
