@@ -486,6 +486,19 @@ test("administrator login accepts only active administrator accounts", async () 
   assert.deepEqual(customerResponse.body, {
     error: "Invalid email or password.",
   });
+
+  const inactiveAdminApp = createTestApp({
+    UserModel: fakeUserModel({
+      existingUser: createLoginUser({ role: "admin", isActive: false }),
+    }),
+    SessionModel: fakeSessionModel(),
+    isDatabaseReady: () => true,
+  });
+  const inactiveAdminResponse = await request(inactiveAdminApp)
+    .post("/api/auth/admin/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+  assert.equal(inactiveAdminResponse.status, 401);
+  assert.equal(inactiveAdminResponse.headers["set-cookie"], undefined);
 });
 
 test("reusable administrator middleware rejects customer sessions", async () => {

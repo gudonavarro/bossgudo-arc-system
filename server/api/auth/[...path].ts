@@ -85,8 +85,13 @@ export default defineEventHandler(async (event) => {
     }
     response.setHeader("Set-Cookie", parts.join("; "));
   };
-  nodeResponse.clearCookie = (name: string) => {
-    response.setHeader("Set-Cookie", `${name}=; Path=/; Max-Age=0; HttpOnly`);
+  nodeResponse.clearCookie = (name: string, options: CookieOptions = {}) => {
+    const parts = [`${name}=`, "Path=/"];
+    if (options.httpOnly) parts.push("HttpOnly");
+    if (options.secure) parts.push("Secure");
+    if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
+    parts.push("Max-Age=0", "Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    response.setHeader("Set-Cookie", parts.join("; "));
   };
 
   request.url = (request.url ?? "/").replace(/^\/api\/auth/, "") || "/";
