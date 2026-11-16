@@ -5,6 +5,7 @@ const express = require("express");
 const request = require("supertest");
 const test = require("node:test");
 const { createAuthRouter } = require("../server/utils/auth-router");
+const { hashResetCode } = require("../server/utils/password-reset");
 const {
   SESSION_COOKIE_NAME,
   createRoleAuthenticationMiddleware,
@@ -18,6 +19,7 @@ const validRegistration = {
   password: "StrongPass1!",
   confirmPassword: "StrongPass1!",
 };
+const testResetSecret = "test-reset-secret-with-at-least-32-bytes";
 
 function createTestApp(options) {
   const app = express();
@@ -69,9 +71,17 @@ function createTestApp(options) {
   const {
     UserModel: _userModel,
     SessionModel: _sessionModel,
-    emailConfig,
+    emailConfig: configuredEmailConfig,
     ...routerOptions
   } = options;
+  const emailConfig = configuredEmailConfig ?? {
+    smtpHost: "smtp.gmail.com",
+    smtpPort: 587,
+    smtpUser: "sender@example.com",
+    smtpPass: "test-password",
+    smtpFrom: "sender@example.com",
+    passwordResetSecret: testResetSecret,
+  };
   app.use((request, _response, next) => {
     request.emailConfig = emailConfig;
     next();
@@ -1039,12 +1049,12 @@ test("clears the session cookie when logout has no valid session", async () => {
   );
 });
 
-test("does not claim email recovery when SMTP is not configured", async () => {
+test("does not request reset codes without a private reset secret", async () => {
   const model = fakeUserModel({ existingUser: createLoginUser() });
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => false,
+    emailConfig: { passwordResetSecret: "" },
   });
 
   const response = await request(app)
@@ -1052,19 +1062,18 @@ test("does not claim email recovery when SMTP is not configured", async () => {
     .send({ email: "ana@example.com" });
 
   assert.equal(response.status, 503);
-  assert.match(response.body.error, /no email was sent/i);
+  assert.match(response.body.error, /temporarily unavailable/i);
   assert.equal(model.calls.findOne.length, 0);
 });
 
-test("sends a one-time reset token but stores only its hash", async () => {
+test("sends a six-digit reset code but stores only its HMAC hash", async () => {
   const user = createLoginUser();
   const model = fakeUserModel({ existingUser: user });
   const sentEmails = [];
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => true,
-    sendResetEmail: async (message) => sentEmails.push(message),
+    sendPasswordResetCode: async (message) => sentEmails.push(message),
   });
 
   const response = await request(app)
@@ -1074,13 +1083,18 @@ test("sends a one-time reset token but stores only its hash", async () => {
   assert.equal(response.status, 202);
   assert.equal(sentEmails.length, 1);
   assert.equal(sentEmails[0].to, "ana@example.com");
+  const [, code] = sentEmails[0].text.match(/code is (\d{6})/);
+  assert.match(code, /^\d{6}$/);
   assert.equal(
     user.resetTokenHash,
-    crypto.createHash("sha256").update(sentEmails[0].token).digest("hex"),
+    hashResetCode(code, testResetSecret),
   );
-  assert.notEqual(user.resetTokenHash, sentEmails[0].token);
+  assert.notEqual(user.resetTokenHash, code);
   assert.ok(user.resetTokenExpires > new Date());
-  assert.equal(JSON.stringify(response.body).includes(sentEmails[0].token), false);
+  assert.ok(user.resetTokenExpires.getTime() <= Date.now() + 10 * 60 * 1000);
+  assert.equal(user.resetCodeAttempts, 0);
+  assert.match(sentEmails[0].html, new RegExp(code));
+  assert.equal(JSON.stringify(response.body).includes(code), false);
 });
 
 test("returns the same recovery response for an unknown account", async () => {
@@ -1088,8 +1102,7 @@ test("returns the same recovery response for an unknown account", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => true,
-    sendResetEmail: async (message) => sentEmails.push(message),
+    sendPasswordResetCode: async (message) => sentEmails.push(message),
   });
 
   const response = await request(app)
@@ -1098,20 +1111,18 @@ test("returns the same recovery response for an unknown account", async () => {
 
   assert.equal(response.status, 202);
   assert.deepEqual(response.body, {
-    message:
-      "If an active account matches that email, password reset instructions will be sent.",
+    message: "If an active account matches that email, a verification code will be sent.",
   });
   assert.equal(sentEmails.length, 0);
 });
 
-test("clears a reset token when email delivery fails", async () => {
+test("clears a reset code when email delivery fails without revealing the account", async () => {
   const user = createLoginUser();
   const model = fakeUserModel({ existingUser: user });
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => true,
-    sendResetEmail: async () => {
+    sendPasswordResetCode: async () => {
       throw new Error("SMTP unavailable");
     },
   });
@@ -1120,10 +1131,14 @@ test("clears a reset token when email delivery fails", async () => {
     .post("/api/auth/forgot-password")
     .send({ email: "ana@example.com" });
 
-  assert.equal(response.status, 503);
+  assert.equal(response.status, 202);
+  assert.deepEqual(response.body, {
+    message: "If an active account matches that email, a verification code will be sent.",
+  });
   assert.equal(model.calls.updateOne.length, 2);
   assert.equal("resetTokenHash" in user, false);
   assert.equal("resetTokenExpires" in user, false);
+  assert.equal("resetCodeAttempts" in user, false);
 });
 
 test("resets a password once and revokes existing sessions", async () => {

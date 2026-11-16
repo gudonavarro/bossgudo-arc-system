@@ -100,6 +100,7 @@ export default defineEventHandler(async (event) => {
       smtpUser: runtimeConfig.smtpUser,
       smtpPass: runtimeConfig.smtpPass,
       smtpFrom: runtimeConfig.smtpFrom,
+      passwordResetSecret: runtimeConfig.passwordResetSecret,
     },
     app,
     ip: getRequestIP(event) ?? "unknown",

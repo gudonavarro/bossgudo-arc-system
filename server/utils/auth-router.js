@@ -9,22 +9,27 @@ const {
   invalidateSession,
 } = require("./session");
 const {
-  isPasswordResetMailConfigured,
-  sendPasswordResetEmail,
-} = require("./password-reset-mailer");
-const {
   SESSION_COOKIE_NAME,
   createAuthenticationMiddleware,
 } = require("./authenticate");
 const { isValidEmailAddress, sendEmail } = require("./email-mailer");
+const {
+  createResetCode,
+  createResetCodeEmail,
+  hashResetCode,
+  isResetSecretConfigured,
+} = require("./password-reset");
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
 const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_BYTES = 72;
 const DUMMY_BCRYPT_ROUNDS = 12;
-const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
+const RESET_CODE_DURATION_MS = 10 * 60 * 1000;
+const RESET_CODE_MAX_ATTEMPTS = 5;
 const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const PASSWORD_RESET_REQUEST_MESSAGE =
+  "If an active account matches that email, a verification code will be sent.";
 const PASSWORD_ERROR =
   "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
 
@@ -383,8 +388,7 @@ function createAuthRouter({
     Boolean(request.authCollections || request.mongoDb),
   isProduction = () => process.env.NODE_ENV === "production",
   sendTestEmail = sendEmail,
-  passwordResetMailConfigured = isPasswordResetMailConfigured,
-  sendResetEmail = sendPasswordResetEmail,
+  sendPasswordResetCode = sendEmail,
 } = {}) {
   const router = express.Router();
   const loginLimiter = rateLimit({
@@ -574,22 +578,23 @@ function createAuthRouter({
 
   router.post("/forgot-password", recoveryLimiter, async (request, response) => {
     const email = request.body?.email;
-    if (typeof email !== "string" || email.trim().length > 254 || !EMAIL_PATTERN.test(email.trim())) {
+    if (!isValidEmailAddress(email)) {
       return response.status(400).json({ error: "Enter a valid email address." });
-    }
-    if (!passwordResetMailConfigured()) {
-      return response
-        .status(503)
-        .json({ error: "Password recovery email is not configured; no email was sent." });
     }
     if (!isDatabaseReady(request)) {
       return response
         .status(503)
         .json({ error: "Password recovery is temporarily unavailable." });
     }
+    const resetSecret = request.emailConfig?.passwordResetSecret;
+    if (!isResetSecretConfigured(resetSecret)) {
+      return response
+        .status(503)
+        .json({ error: "Password recovery is temporarily unavailable." });
+    }
 
     let user;
-    let resetTokenHash;
+    let resetCodeHash;
     try {
       const { users } = getRequestCollections(request);
       user = await users.findOne(
@@ -597,47 +602,60 @@ function createAuthRouter({
         { projection: { _id: 1, email: 1 } },
       );
       if (user) {
-        const token = crypto.randomBytes(32).toString("base64url");
-        resetTokenHash = crypto
-          .createHash("sha256")
-          .update(token)
-          .digest("hex");
+        const code = createResetCode();
+        resetCodeHash = hashResetCode(code, resetSecret);
+        const now = new Date();
+        const resetTokenExpires = new Date(now.getTime() + RESET_CODE_DURATION_MS);
         await users.updateOne(
           { _id: user._id, isActive: true },
           {
             $set: {
-              resetTokenHash,
-              resetTokenExpires: new Date(Date.now() + RESET_TOKEN_DURATION_MS),
-              updatedAt: new Date(),
+              resetTokenHash: resetCodeHash,
+              resetTokenExpires,
+              resetCodeAttempts: 0,
+              updatedAt: now,
             },
           },
         );
-        await sendResetEmail({ to: user.email, token });
+        await sendPasswordResetCode(
+          { to: user.email, ...createResetCodeEmail(code) },
+          request.emailConfig,
+        );
       }
 
       return response.status(202).json({
-        message:
-          "If an active account matches that email, password reset instructions will be sent.",
+        message: PASSWORD_RESET_REQUEST_MESSAGE,
       });
     } catch (error) {
-      if (user && resetTokenHash) {
+      if (user && resetCodeHash) {
         try {
           const { users } = getRequestCollections(request);
           await users.updateOne(
-            { _id: user._id, resetTokenHash },
-            { $unset: { resetTokenHash: "", resetTokenExpires: "" } },
+            { _id: user._id, resetTokenHash: resetCodeHash },
+            {
+              $unset: {
+                resetTokenHash: "",
+                resetTokenExpires: "",
+                resetCodeAttempts: "",
+              },
+            },
           );
         } catch (cleanupError) {
           console.error(
-            "Password reset token cleanup failed:",
+            "Password reset code cleanup failed:",
             getErrorName(cleanupError),
           );
         }
       }
-      console.error("Password reset request failed:", getErrorName(error));
-      return response
-        .status(503)
-        .json({ error: "Unable to send password recovery instructions right now." });
+      console.error("Password reset code request failed:", getErrorName(error));
+      if (isDatabaseUnavailableError(error)) {
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+      return response.status(202).json({
+        message: PASSWORD_RESET_REQUEST_MESSAGE,
+      });
     }
   });
 
