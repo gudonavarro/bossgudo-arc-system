@@ -18,6 +18,7 @@ export default defineNuxtConfig({
     smtpUser: process.env.SMTP_USER || "",
     smtpPass: process.env.SMTP_PASS || "",
     smtpFrom: process.env.SMTP_FROM || "",
+    passwordResetSecret: process.env.PASSWORD_RESET_SECRET || "",
   },
   app: {
     head: {
