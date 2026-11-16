@@ -6,6 +6,11 @@ const request = require("supertest");
 const test = require("node:test");
 const { createAuthRouter } = require("../server/utils/auth-router");
 const {
+  hashResetCode,
+  hashResetToken,
+  RESET_COOKIE_NAME,
+} = require("../server/utils/password-reset");
+const {
   SESSION_COOKIE_NAME,
   createRoleAuthenticationMiddleware,
 } = require("../server/utils/authenticate");
@@ -18,6 +23,7 @@ const validRegistration = {
   password: "StrongPass1!",
   confirmPassword: "StrongPass1!",
 };
+const testResetSecret = "test-reset-secret-with-at-least-32-bytes";
 
 function createTestApp(options) {
   const app = express();
@@ -66,13 +72,82 @@ function createTestApp(options) {
       },
     },
   });
-  const { UserModel: _userModel, SessionModel: _sessionModel, ...routerOptions } =
-    options;
+  const {
+    UserModel: _userModel,
+    SessionModel: _sessionModel,
+    emailConfig: configuredEmailConfig,
+    ...routerOptions
+  } = options;
+  const emailConfig = configuredEmailConfig ?? {
+    smtpHost: "smtp.gmail.com",
+    smtpPort: 587,
+    smtpUser: "sender@example.com",
+    smtpPass: "test-password",
+    smtpFrom: "sender@example.com",
+    passwordResetSecret: testResetSecret,
+  };
+  app.use((request, _response, next) => {
+    request.emailConfig = emailConfig;
+    next();
+  });
   app.use(
     "/api/auth",
     createAuthRouter({ ...routerOptions, getCollections }),
   );
   return app;
+}
+
+function createEmailTestApp({
+  role = "admin",
+  production = false,
+  sendTestEmail = async () => {},
+} = {}) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const session = {
+    _id: "session-1",
+    userId: "user-1",
+    tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+    expiresAt: new Date(Date.now() + 60_000),
+    createdAt: new Date(),
+  };
+  const emailConfig = {
+    smtpHost: "smtp.gmail.com",
+    smtpPort: 587,
+    smtpUser: "sender@example.com",
+    smtpPass: "test-password",
+    smtpFrom: "sender@example.com",
+  };
+  const app = createTestApp({
+    UserModel: fakeUserModel({ existingUser: createLoginUser({ role }) }),
+    SessionModel: fakeSessionModel({ session }),
+    emailConfig,
+    isDatabaseReady: () => true,
+    isProduction: () => production,
+    sendTestEmail,
+  });
+  return { app, token, emailConfig };
+}
+
+function createResetCodeTestApp({
+  code = "012345",
+  expiresAt = new Date(Date.now() + 10 * 60 * 1000),
+  attempts = 0,
+} = {}) {
+  const user = createLoginUser({
+    resetTokenHash: hashResetCode(code, testResetSecret, "user-1"),
+    resetTokenExpires: expiresAt,
+    resetCodeAttempts: attempts,
+  });
+  const model = fakeUserModel({ existingUser: user });
+  return {
+    app: createTestApp({
+      UserModel: model,
+      isDatabaseReady: () => true,
+    }),
+    model,
+    user,
+    code,
+  };
 }
 
 function fakeUserModel({
@@ -103,18 +178,44 @@ function fakeUserModel({
     },
     findOneAndUpdate(query, update, options) {
       calls.findOneAndUpdate.push({ query, update, options });
+      const expiryIsValid =
+        !query.resetTokenExpires?.$gt ||
+        existingUser?.resetTokenExpires > query.resetTokenExpires.$gt;
+      const attemptsAreValid =
+        !query.resetCodeAttempts?.$lt ||
+        (typeof existingUser?.resetCodeAttempts === "number" &&
+          existingUser.resetCodeAttempts < query.resetCodeAttempts.$lt);
       const matches =
         existingUser?.resetTokenHash === query.resetTokenHash &&
-        existingUser.resetTokenExpires > query.resetTokenExpires.$gt;
+        expiryIsValid &&
+        attemptsAreValid;
       if (matches) {
-        Object.assign(existingUser, update.$set);
-        for (const key of Object.keys(update.$unset)) delete existingUser[key];
+        Object.assign(existingUser, update.$set || {});
+        for (const [key, increment] of Object.entries(update.$inc || {})) {
+          existingUser[key] = (existingUser[key] || 0) + increment;
+        }
+        for (const key of Object.keys(update.$unset || {})) delete existingUser[key];
       }
       return fakeQuery(matches ? existingUser : null, calls);
     },
     async updateOne(query, update) {
       calls.updateOne.push({ query, update });
-      if (existingUser?._id === query._id) {
+      const expiryQuery = query.resetTokenExpires;
+      const expiryMatches =
+        !expiryQuery ||
+        (expiryQuery.$lte &&
+          existingUser?.resetTokenExpires <= expiryQuery.$lte) ||
+        (expiryQuery.$gt &&
+          existingUser?.resetTokenExpires > expiryQuery.$gt) ||
+        (expiryQuery instanceof Date &&
+          existingUser?.resetTokenExpires?.getTime() === expiryQuery.getTime());
+      const matches =
+        existingUser &&
+        (!query._id || existingUser._id === query._id) &&
+        (!query.resetTokenHash ||
+          existingUser.resetTokenHash === query.resetTokenHash) &&
+        expiryMatches;
+      if (matches) {
         Object.assign(existingUser, update.$set || {});
         for (const key of Object.keys(update.$unset || {})) {
           delete existingUser[key];
@@ -724,6 +825,91 @@ test("reusable administrator middleware rejects customer sessions", async () => 
   assert.equal(adminResponse.status, 200);
 });
 
+test("sends a test email only for an authenticated administrator", async () => {
+  const sentEmails = [];
+  const { app, token, emailConfig } = createEmailTestApp({
+    sendTestEmail: async (message, config) => {
+      sentEmails.push({ message, config });
+    },
+  });
+  const adminResponse = await request(app)
+    .post("/api/auth/admin/email-test")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`)
+    .send({ to: "recipient@example.com" });
+
+  const unauthenticated = await request(createEmailTestApp().app)
+    .post("/api/auth/admin/email-test")
+    .send({ to: "recipient@example.com" });
+  const customerTest = createEmailTestApp({ role: "customer" });
+  const customerResponse = await request(customerTest.app)
+    .post("/api/auth/admin/email-test")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${customerTest.token}`)
+    .send({ to: "recipient@example.com" });
+
+  assert.equal(adminResponse.status, 200);
+  assert.deepEqual(adminResponse.body, { message: "Test email sent." });
+  assert.deepEqual(sentEmails, [
+    {
+      message: {
+        to: "recipient@example.com",
+        subject: "BOSSGUDO SMTP email test",
+        text: "This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.",
+        html: "<p>This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.</p>",
+      },
+      config: emailConfig,
+    },
+  ]);
+  assert.equal(unauthenticated.status, 401);
+  assert.equal(customerResponse.status, 403);
+});
+
+test("hides the test route in production and validates recipients", async () => {
+  const productionTest = createEmailTestApp({ production: true });
+  const productionResponse = await request(productionTest.app)
+    .post("/api/auth/admin/email-test")
+    .send({ to: "recipient@example.com" });
+  const invalidRecipient = createEmailTestApp();
+  const invalidResponse = await request(invalidRecipient.app)
+    .post("/api/auth/admin/email-test")
+    .set("Cookie", `${SESSION_COOKIE_NAME}=${invalidRecipient.token}`)
+    .send({ to: "invalid-address" });
+
+  assert.equal(productionResponse.status, 404);
+  assert.deepEqual(productionResponse.body, { error: "Not found." });
+  assert.equal(invalidResponse.status, 400);
+  assert.deepEqual(invalidResponse.body, {
+    error: "Enter a valid recipient email address.",
+  });
+});
+
+test("does not expose SMTP details when the test email fails", async () => {
+  const loggedErrors = [];
+  const testApp = createEmailTestApp({
+    sendTestEmail: async () => {
+      throw new Error("SMTP authentication details must remain private.");
+    },
+  });
+  const originalConsoleError = console.error;
+  console.error = (...values) => loggedErrors.push(values);
+
+  let response;
+  try {
+    response = await request(testApp.app)
+      .post("/api/auth/admin/email-test")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${testApp.token}`)
+      .send({ to: "recipient@example.com" });
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, {
+    error: "Unable to send test email.",
+  });
+  assert.deepEqual(loggedErrors, [["Email test failed:", "Error"]]);
+  assert.equal(JSON.stringify(response.body).includes("authentication details"), false);
+});
+
 test("protects the current-user route and rejects missing and invalid cookies", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),
@@ -915,32 +1101,36 @@ test("clears the session cookie when logout has no valid session", async () => {
   );
 });
 
-test("does not claim email recovery when SMTP is not configured", async () => {
+test("does not request reset codes without a private reset secret", async () => {
   const model = fakeUserModel({ existingUser: createLoginUser() });
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => false,
+    emailConfig: { passwordResetSecret: "" },
   });
 
   const response = await request(app)
     .post("/api/auth/forgot-password")
     .send({ email: "ana@example.com" });
+  const verificationResponse = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "123456" });
 
   assert.equal(response.status, 503);
-  assert.match(response.body.error, /no email was sent/i);
+  assert.match(response.body.error, /temporarily unavailable/i);
+  assert.equal(verificationResponse.status, 503);
+  assert.match(verificationResponse.body.error, /temporarily unavailable/i);
   assert.equal(model.calls.findOne.length, 0);
 });
 
-test("sends a one-time reset token but stores only its hash", async () => {
+test("sends a six-digit reset code but stores only its HMAC hash", async () => {
   const user = createLoginUser();
   const model = fakeUserModel({ existingUser: user });
   const sentEmails = [];
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => true,
-    sendResetEmail: async (message) => sentEmails.push(message),
+    sendPasswordResetCode: async (message) => sentEmails.push(message),
   });
 
   const response = await request(app)
@@ -950,13 +1140,18 @@ test("sends a one-time reset token but stores only its hash", async () => {
   assert.equal(response.status, 202);
   assert.equal(sentEmails.length, 1);
   assert.equal(sentEmails[0].to, "ana@example.com");
+  const [, code] = sentEmails[0].text.match(/code is (\d{6})/);
+  assert.match(code, /^\d{6}$/);
   assert.equal(
     user.resetTokenHash,
-    crypto.createHash("sha256").update(sentEmails[0].token).digest("hex"),
+    hashResetCode(code, testResetSecret, "user-1"),
   );
-  assert.notEqual(user.resetTokenHash, sentEmails[0].token);
+  assert.notEqual(user.resetTokenHash, code);
   assert.ok(user.resetTokenExpires > new Date());
-  assert.equal(JSON.stringify(response.body).includes(sentEmails[0].token), false);
+  assert.ok(user.resetTokenExpires.getTime() <= Date.now() + 10 * 60 * 1000);
+  assert.equal(user.resetCodeAttempts, 0);
+  assert.match(sentEmails[0].html, new RegExp(code));
+  assert.equal(JSON.stringify(response.body).includes(code), false);
 });
 
 test("returns the same recovery response for an unknown account", async () => {
@@ -964,8 +1159,7 @@ test("returns the same recovery response for an unknown account", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => true,
-    sendResetEmail: async (message) => sentEmails.push(message),
+    sendPasswordResetCode: async (message) => sentEmails.push(message),
   });
 
   const response = await request(app)
@@ -974,20 +1168,18 @@ test("returns the same recovery response for an unknown account", async () => {
 
   assert.equal(response.status, 202);
   assert.deepEqual(response.body, {
-    message:
-      "If an active account matches that email, password reset instructions will be sent.",
+    message: "If an active account matches that email, a verification code will be sent.",
   });
   assert.equal(sentEmails.length, 0);
 });
 
-test("clears a reset token when email delivery fails", async () => {
+test("clears a reset code when email delivery fails without revealing the account", async () => {
   const user = createLoginUser();
   const model = fakeUserModel({ existingUser: user });
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
-    passwordResetMailConfigured: () => true,
-    sendResetEmail: async () => {
+    sendPasswordResetCode: async () => {
       throw new Error("SMTP unavailable");
     },
   });
@@ -996,15 +1188,125 @@ test("clears a reset token when email delivery fails", async () => {
     .post("/api/auth/forgot-password")
     .send({ email: "ana@example.com" });
 
-  assert.equal(response.status, 503);
+  assert.equal(response.status, 202);
+  assert.deepEqual(response.body, {
+    message: "If an active account matches that email, a verification code will be sent.",
+  });
   assert.equal(model.calls.updateOne.length, 2);
   assert.equal("resetTokenHash" in user, false);
   assert.equal("resetTokenExpires" in user, false);
+  assert.equal("resetCodeAttempts" in user, false);
+});
+
+test("verifies a reset code once and returns a scoped authorization cookie", async () => {
+  const { app, user, code } = createResetCodeTestApp({ attempts: 2 });
+  const response = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: " ANA@EXAMPLE.COM ", code });
+  const reusedCodeResponse = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code });
+  const setCookie = response.headers["set-cookie"][0];
+  const resetToken = setCookie
+    .split(";")[0]
+    .slice("bossgudo_password_reset=".length);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { message: "Verification successful." });
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.match(setCookie, /Path=\/api\/auth\/reset-password/i);
+  assert.match(resetToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(
+    user.resetTokenHash,
+    crypto.createHash("sha256").update(resetToken).digest("hex"),
+  );
+  assert.equal("resetCodeAttempts" in user, false);
+  assert.equal(JSON.stringify(response.body).includes(code), false);
+  assert.equal(reusedCodeResponse.status, 400);
+});
+
+test("limits reset-code guesses and cleans up expired codes", async () => {
+  const { app, user, model } = createResetCodeTestApp({ code: "123456" });
+  const failures = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    failures.push(
+      await request(app)
+        .post("/api/auth/verify-reset-code")
+        .send({ email: "ana@example.com", code: "000000" }),
+    );
+  }
+  const expired = createResetCodeTestApp({
+    expiresAt: new Date(Date.now() - 1),
+  });
+  const expiredResponse = await request(expired.app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "012345" });
+
+  assert.ok(failures.every((response) => response.status === 400));
+  assert.equal(user.resetCodeAttempts, 5);
+  assert.equal(model.calls.findOneAndUpdate.length, 5);
+  assert.equal(expiredResponse.status, 400);
+  assert.equal("resetTokenHash" in expired.user, false);
+  assert.equal("resetTokenExpires" in expired.user, false);
+});
+
+test("does not distinguish unknown accounts from invalid reset codes", async () => {
+  const unknownApp = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+  const known = createResetCodeTestApp({ code: "123456" });
+  const unknownResponse = await request(unknownApp)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "unknown@example.com", code: "123456" });
+  const invalidResponse = await request(known.app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "000000" });
+
+  assert.equal(unknownResponse.status, invalidResponse.status);
+  assert.deepEqual(unknownResponse.body, invalidResponse.body);
+});
+
+test("validates recovery inputs before database access", async () => {
+  const model = fakeUserModel();
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => false,
+  });
+  const invalidEmail = await request(app)
+    .post("/api/auth/forgot-password")
+    .send({ email: "not-an-email" });
+  const invalidCode = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "12345" });
+
+  assert.equal(invalidEmail.status, 400);
+  assert.equal(invalidCode.status, 400);
+  assert.equal(model.calls.findOne.length, 0);
+});
+
+test("rate limits reset-code requests by client", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+  const responses = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    responses.push(
+      await request(app)
+        .post("/api/auth/forgot-password")
+        .send({ email: "unknown@example.com" }),
+    );
+  }
+
+  assert.ok(responses.slice(0, 5).every((response) => response.status === 202));
+  assert.equal(responses[5].status, 429);
 });
 
 test("resets a password once and revokes existing sessions", async () => {
   const token = crypto.randomBytes(32).toString("base64url");
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const tokenHash = hashResetToken(token);
   const user = createLoginUser({
     resetTokenHash: tokenHash,
     resetTokenExpires: new Date(Date.now() + 60_000),
@@ -1019,15 +1321,15 @@ test("resets a password once and revokes existing sessions", async () => {
 
   const response = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${token}`)
     .send({
-      token,
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
   const reusedTokenResponse = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${token}`)
     .send({
-      token,
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
@@ -1038,15 +1340,18 @@ test("resets a password once and revokes existing sessions", async () => {
   assert.equal(await bcrypt.compare("NewStrongPass1!", user.password), true);
   assert.equal("resetTokenHash" in user, false);
   assert.equal("resetTokenExpires" in user, false);
+  assert.equal("resetCodeAttempts" in user, false);
   assert.deepEqual(sessions.calls.deleteMany, [{ userId: "user-1" }]);
   assert.equal(model.calls.findOneAndUpdate[0].query.resetTokenHash, tokenHash);
   assert.ok(user.passwordChangedAt instanceof Date);
+  assert.match(response.headers["set-cookie"][0], /Path=\/api\/auth\/reset-password/i);
+  assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
 });
 
 test("rejects expired and malformed reset tokens", async () => {
   const expiredToken = crypto.randomBytes(32).toString("base64url");
   const user = createLoginUser({
-    resetTokenHash: crypto.createHash("sha256").update(expiredToken).digest("hex"),
+    resetTokenHash: hashResetToken(expiredToken),
     resetTokenExpires: new Date(Date.now() - 60_000),
   });
   const originalPassword = user.password;
@@ -1058,22 +1363,22 @@ test("rejects expired and malformed reset tokens", async () => {
 
   const expired = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${expiredToken}`)
     .send({
-      token: expiredToken,
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
   const malformed = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=not-a-token`)
     .send({
-      token: "not-a-token",
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
   const tooLongPassword = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${expiredToken}`)
     .send({
-      token: expiredToken,
       password: `NewStrongPass1!${"x".repeat(70)}`,
       confirmPassword: `NewStrongPass1!${"x".repeat(70)}`,
     });
@@ -1082,4 +1387,6 @@ test("rejects expired and malformed reset tokens", async () => {
   assert.equal(malformed.status, 400);
   assert.equal(tooLongPassword.status, 400);
   assert.equal(user.password, originalPassword);
+  assert.equal("resetTokenHash" in user, false);
+  assert.equal("resetTokenExpires" in user, false);
 });

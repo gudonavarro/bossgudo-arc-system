@@ -1,26 +1,12 @@
 const crypto = require("node:crypto");
 const { ObjectId } = require("mongodb");
 const { SESSION_COOKIE_NAME } = require("./session");
+const { readCookie } = require("./cookies");
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 function readSessionToken(request) {
-  const cookieHeader = request?.headers?.cookie;
-  if (typeof cookieHeader !== "string") return null;
-
-  const cookiePrefix = `${SESSION_COOKIE_NAME}=`;
-  const cookie = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(cookiePrefix));
-  if (!cookie) return null;
-
-  let token;
-  try {
-    token = decodeURIComponent(cookie.slice(cookiePrefix.length));
-  } catch {
-    return null;
-  }
-  return SESSION_TOKEN_PATTERN.test(token) ? token : null;
+  const token = readCookie(request, SESSION_COOKIE_NAME);
+  return token && SESSION_TOKEN_PATTERN.test(token) ? token : null;
 }
 
 function hashSessionToken(token) {

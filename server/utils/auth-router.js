@@ -9,21 +9,32 @@ const {
   invalidateSession,
 } = require("./session");
 const {
-  isPasswordResetMailConfigured,
-  sendPasswordResetEmail,
-} = require("./password-reset-mailer");
-const {
   SESSION_COOKIE_NAME,
   createAuthenticationMiddleware,
 } = require("./authenticate");
+const { isValidEmailAddress, sendEmail } = require("./email-mailer");
+const {
+  createResetCode,
+  createResetCodeEmail,
+  hashResetCode,
+  hashResetToken,
+  isResetSecretConfigured,
+  matchesResetCodeHash,
+  readResetToken,
+  RESET_COOKIE_NAME,
+} = require("./password-reset");
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
 const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_BYTES = 72;
 const DUMMY_BCRYPT_ROUNDS = 12;
-const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
-const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const RESET_CODE_DURATION_MS = 10 * 60 * 1000;
+const RESET_CODE_MAX_ATTEMPTS = 5;
+const RESET_CODE_PATTERN = /^\d{6}$/;
+const PASSWORD_RESET_REQUEST_MESSAGE =
+  "If an active account matches that email, a verification code will be sent.";
+const INVALID_RESET_CODE_MESSAGE = "Invalid or expired verification code.";
 const PASSWORD_ERROR =
   "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
 
@@ -195,16 +206,11 @@ function validateLogin(body) {
 
 function validatePasswordReset(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { error: "Provide a reset token and new password." };
+    return { error: "Provide a new password and confirmation." };
   }
-  const { token, password, confirmPassword } = body;
-  if (
-    typeof token !== "string" ||
-    !RESET_TOKEN_PATTERN.test(token) ||
-    typeof password !== "string" ||
-    typeof confirmPassword !== "string"
-  ) {
-    return { error: "Provide a valid reset token and password." };
+  const { password, confirmPassword } = body;
+  if (typeof password !== "string" || typeof confirmPassword !== "string") {
+    return { error: "Provide a new password and confirmation." };
   }
   const passwordError = getPasswordValidationError(password);
   if (passwordError) {
@@ -213,7 +219,7 @@ function validatePasswordReset(body) {
   if (password !== confirmPassword) {
     return { error: "Passwords do not match." };
   }
-  return { value: { token, password } };
+  return { value: { password } };
 }
 
 function compareAgainstDummyHash(password) {
@@ -236,6 +242,14 @@ function getCollections(request) {
     sessions: database.collection("sessions"),
     users: database.collection("users"),
   };
+}
+
+function getPasswordResetSecret(request, isDatabaseReady) {
+  if (!isDatabaseReady(request)) {
+    return null;
+  }
+  const secret = request.emailConfig?.passwordResetSecret;
+  return isResetSecretConfigured(secret) ? secret : null;
 }
 
 function asObjectId(value) {
@@ -381,8 +395,8 @@ function createAuthRouter({
   isDatabaseReady = (request) =>
     Boolean(request.authCollections || request.mongoDb),
   isProduction = () => process.env.NODE_ENV === "production",
-  passwordResetMailConfigured = isPasswordResetMailConfigured,
-  sendResetEmail = sendPasswordResetEmail,
+  sendTestEmail = sendEmail,
+  sendPasswordResetCode = sendEmail,
 } = {}) {
   const router = express.Router();
   const loginLimiter = rateLimit({
@@ -406,9 +420,28 @@ function createAuthRouter({
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
   });
+  const resetCodeVerificationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again later." },
+  });
+  const emailTestLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 3,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again later." },
+  });
   const authenticate = createAuthenticationMiddleware({
     getCollections: getRequestCollections,
     isDatabaseReady,
+  });
+  const authenticateAdmin = createAuthenticationMiddleware({
+    getCollections: getRequestCollections,
+    isDatabaseReady,
+    requiredRole: "admin",
   });
   const authenticateIfPresent = createAuthenticationMiddleware({
     getCollections: getRequestCollections,
@@ -500,6 +533,44 @@ function createAuthRouter({
   router.post("/login", loginLimiter, login("customer"));
   router.post("/admin/login", loginLimiter, login("admin"));
 
+  router.post(
+    "/admin/email-test",
+    (request, response, next) => {
+      if (isProduction()) {
+        return response.status(404).json({ error: "Not found." });
+      }
+      return next();
+    },
+    emailTestLimiter,
+    authenticateAdmin,
+    async (request, response) => {
+      const to = request.body?.to;
+      if (!isValidEmailAddress(to)) {
+        return response
+          .status(400)
+          .json({ error: "Enter a valid recipient email address." });
+      }
+
+      try {
+        await sendTestEmail(
+          {
+            to,
+            subject: "BOSSGUDO SMTP email test",
+            text: "This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.",
+            html: "<p>This is a test email from the BOSSGUDO A.R.C. Aqua Farm server.</p>",
+          },
+          request.emailConfig,
+        );
+        return response.status(200).json({ message: "Test email sent." });
+      } catch (error) {
+        console.error("Email test failed:", getErrorName(error));
+        return response
+          .status(503)
+          .json({ error: "Unable to send test email." });
+      }
+    },
+  );
+
   router.get("/me", authenticate, (request, response) => {
     return response.status(200).json({ user: request.authUser });
   });
@@ -522,22 +593,19 @@ function createAuthRouter({
 
   router.post("/forgot-password", recoveryLimiter, async (request, response) => {
     const email = request.body?.email;
-    if (typeof email !== "string" || email.trim().length > 254 || !EMAIL_PATTERN.test(email.trim())) {
+    if (!isValidEmailAddress(email)) {
       return response.status(400).json({ error: "Enter a valid email address." });
     }
-    if (!passwordResetMailConfigured()) {
-      return response
-        .status(503)
-        .json({ error: "Password recovery email is not configured; no email was sent." });
-    }
-    if (!isDatabaseReady(request)) {
+    const resetSecret = getPasswordResetSecret(request, isDatabaseReady);
+    if (resetSecret === null) {
       return response
         .status(503)
         .json({ error: "Password recovery is temporarily unavailable." });
     }
 
     let user;
-    let resetTokenHash;
+    let resetCodeHash;
+    let resetCodeExpiresAt;
     try {
       const { users } = getRequestCollections(request);
       user = await users.findOne(
@@ -545,54 +613,204 @@ function createAuthRouter({
         { projection: { _id: 1, email: 1 } },
       );
       if (user) {
-        const token = crypto.randomBytes(32).toString("base64url");
-        resetTokenHash = crypto
-          .createHash("sha256")
-          .update(token)
-          .digest("hex");
+        const code = createResetCode();
+        resetCodeHash = hashResetCode(code, resetSecret, String(user._id));
+        const now = new Date();
+        resetCodeExpiresAt = new Date(now.getTime() + RESET_CODE_DURATION_MS);
         await users.updateOne(
           { _id: user._id, isActive: true },
           {
             $set: {
-              resetTokenHash,
-              resetTokenExpires: new Date(Date.now() + RESET_TOKEN_DURATION_MS),
-              updatedAt: new Date(),
+              resetTokenHash: resetCodeHash,
+              resetTokenExpires: resetCodeExpiresAt,
+              resetCodeAttempts: 0,
+              updatedAt: now,
             },
           },
         );
-        await sendResetEmail({ to: user.email, token });
+        await sendPasswordResetCode(
+          { to: user.email, ...createResetCodeEmail(code) },
+          request.emailConfig,
+        );
       }
 
       return response.status(202).json({
-        message:
-          "If an active account matches that email, password reset instructions will be sent.",
+        message: PASSWORD_RESET_REQUEST_MESSAGE,
       });
     } catch (error) {
-      if (user && resetTokenHash) {
+      if (user && resetCodeHash) {
         try {
           const { users } = getRequestCollections(request);
           await users.updateOne(
-            { _id: user._id, resetTokenHash },
-            { $unset: { resetTokenHash: "", resetTokenExpires: "" } },
+            {
+              _id: user._id,
+              resetTokenHash: resetCodeHash,
+              resetTokenExpires: resetCodeExpiresAt,
+            },
+            {
+              $unset: {
+                resetTokenHash: "",
+                resetTokenExpires: "",
+                resetCodeAttempts: "",
+              },
+            },
           );
         } catch (cleanupError) {
           console.error(
-            "Password reset token cleanup failed:",
+            "Password reset code cleanup failed:",
             getErrorName(cleanupError),
           );
         }
       }
-      console.error("Password reset request failed:", getErrorName(error));
-      return response
-        .status(503)
-        .json({ error: "Unable to send password recovery instructions right now." });
+      console.error("Password reset code request failed:", getErrorName(error));
+      if (isDatabaseUnavailableError(error)) {
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+      return response.status(202).json({
+        message: PASSWORD_RESET_REQUEST_MESSAGE,
+      });
     }
   });
+
+  router.post(
+    "/verify-reset-code",
+    resetCodeVerificationLimiter,
+    async (request, response) => {
+      const { email, code } = request.body ?? {};
+      if (
+        !isValidEmailAddress(email) ||
+        typeof code !== "string" ||
+        !RESET_CODE_PATTERN.test(code)
+      ) {
+        return response
+          .status(400)
+          .json({ error: "Enter a valid email address and 6-digit code." });
+      }
+      const resetSecret = getPasswordResetSecret(request, isDatabaseReady);
+      if (resetSecret === null) {
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+
+      try {
+        const { users } = getRequestCollections(request);
+        const now = new Date();
+        const user = await users.findOne(
+          { email: email.trim().toLowerCase(), isActive: true },
+          {
+            projection: {
+              _id: 1,
+              resetTokenHash: 1,
+              resetTokenExpires: 1,
+              resetCodeAttempts: 1,
+            },
+          },
+        );
+        if (
+          !user ||
+          !(user.resetTokenExpires instanceof Date) ||
+          user.resetTokenExpires <= now ||
+          typeof user.resetCodeAttempts !== "number" ||
+          user.resetCodeAttempts >= RESET_CODE_MAX_ATTEMPTS
+        ) {
+          if (user && user.resetTokenExpires instanceof Date && user.resetTokenExpires <= now) {
+            await users.updateOne(
+              {
+                _id: user._id,
+                resetTokenHash: user.resetTokenHash,
+                resetTokenExpires: user.resetTokenExpires,
+              },
+              {
+                $unset: {
+                  resetTokenHash: "",
+                  resetTokenExpires: "",
+                  resetCodeAttempts: "",
+                },
+              },
+            );
+          }
+          return response
+            .status(400)
+            .json({ error: INVALID_RESET_CODE_MESSAGE });
+        }
+
+        const submittedHash = hashResetCode(
+          code,
+          resetSecret,
+          String(user._id),
+        );
+        if (!matchesResetCodeHash(user.resetTokenHash, submittedHash)) {
+          await users.findOneAndUpdate(
+            {
+              _id: user._id,
+              resetTokenHash: user.resetTokenHash,
+              resetTokenExpires: { $gt: now },
+              resetCodeAttempts: { $lt: RESET_CODE_MAX_ATTEMPTS },
+            },
+            { $inc: { resetCodeAttempts: 1 } },
+            { projection: { _id: 1 }, returnDocument: "after" },
+          );
+          return response
+            .status(400)
+            .json({ error: INVALID_RESET_CODE_MESSAGE });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString("base64url");
+        const resetAuthorization = await users.findOneAndUpdate(
+          {
+            _id: user._id,
+            resetTokenHash: user.resetTokenHash,
+            resetTokenExpires: { $gt: now },
+            resetCodeAttempts: { $lt: RESET_CODE_MAX_ATTEMPTS },
+          },
+          {
+            $set: {
+              resetTokenHash: hashResetToken(resetToken),
+              updatedAt: now,
+            },
+            $unset: { resetCodeAttempts: "" },
+          },
+          {
+            projection: { _id: 1, resetTokenExpires: 1 },
+            returnDocument: "after",
+          },
+        );
+        if (!resetAuthorization) {
+          return response
+            .status(400)
+            .json({ error: INVALID_RESET_CODE_MESSAGE });
+        }
+
+        response.cookie(RESET_COOKIE_NAME, resetToken, {
+          httpOnly: true,
+          secure: isProduction(),
+          sameSite: "lax",
+          path: "/api/auth/reset-password",
+          maxAge: resetAuthorization.resetTokenExpires.getTime() - now.getTime(),
+        });
+        return response.status(200).json({ message: "Verification successful." });
+      } catch (error) {
+        console.error("Password reset code verification failed:", getErrorName(error));
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+    },
+  );
 
   router.post("/reset-password", recoveryLimiter, async (request, response) => {
     const validation = validatePasswordReset(request.body);
     if (validation.error) {
       return response.status(400).json({ error: validation.error });
+    }
+    const resetToken = readResetToken(request);
+    if (!resetToken) {
+      return response
+        .status(400)
+        .json({ error: "Reset authorization is invalid or expired." });
     }
     if (!isDatabaseReady(request)) {
       return response
@@ -601,8 +819,8 @@ function createAuthRouter({
     }
 
     try {
-      const { token, password } = validation.value;
-      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const { password } = validation.value;
+      const tokenHash = hashResetToken(resetToken);
       const passwordHash = await bcrypt.hash(password, 12);
       const { users, sessions } = getRequestCollections(request);
       const now = new Date();
@@ -618,17 +836,46 @@ function createAuthRouter({
             passwordChangedAt: now,
             updatedAt: now,
           },
-          $unset: { resetTokenHash: "", resetTokenExpires: "" },
+          $unset: {
+            resetTokenHash: "",
+            resetTokenExpires: "",
+            resetCodeAttempts: "",
+          },
         },
         { projection: { _id: 1 }, returnDocument: "after" },
       );
 
       if (!user) {
+        await users.updateOne(
+          {
+            resetTokenHash: tokenHash,
+            resetTokenExpires: { $lte: now },
+          },
+          {
+            $unset: {
+              resetTokenHash: "",
+              resetTokenExpires: "",
+              resetCodeAttempts: "",
+            },
+          },
+        );
+        response.clearCookie(RESET_COOKIE_NAME, {
+          httpOnly: true,
+          secure: isProduction(),
+          sameSite: "lax",
+          path: "/api/auth/reset-password",
+        });
         return response
           .status(400)
-          .json({ error: "This password reset link is invalid or expired." });
+          .json({ error: "Reset authorization is invalid or expired." });
       }
       await sessions.deleteMany({ userId: user._id });
+      response.clearCookie(RESET_COOKIE_NAME, {
+        httpOnly: true,
+        secure: isProduction(),
+        sameSite: "lax",
+        path: "/api/auth/reset-password",
+      });
       return response.status(200).json({ message: "Password reset successfully." });
     } catch (error) {
       console.error("Password reset completion failed:", getErrorName(error));

@@ -13,6 +13,12 @@ export default defineNuxtConfig({
     mongodbUri: process.env.MONGODB_URI || "",
     mongodbDatabase:
       process.env.MONGODB_DATABASE || "gudonavarro_db_user",
+    smtpHost: process.env.SMTP_HOST || "smtp.gmail.com",
+    smtpPort: Number(process.env.SMTP_PORT || 587),
+    smtpUser: process.env.SMTP_USER || "",
+    smtpPass: process.env.SMTP_PASS || "",
+    smtpFrom: process.env.SMTP_FROM || "",
+    passwordResetSecret: process.env.PASSWORD_RESET_SECRET || "",
   },
   app: {
     head: {

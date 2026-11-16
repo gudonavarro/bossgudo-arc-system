@@ -38,6 +38,7 @@ interface CookieOptions {
   secure?: boolean;
   sameSite?: CookieSameSite;
   maxAge?: number;
+  path?: string;
 }
 
 const router = createAuthRouter();
@@ -54,7 +55,10 @@ app.use((_request, response, next) => {
     value: string,
     options: CookieOptions = {},
   ) => {
-    const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/"];
+    const parts = [
+      `${name}=${encodeURIComponent(value)}`,
+      `Path=${options.path ?? "/"}`,
+    ];
     if (options.httpOnly) parts.push("HttpOnly");
     if (options.secure) parts.push("Secure");
     if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
@@ -64,7 +68,7 @@ app.use((_request, response, next) => {
     nodeResponse.setHeader("Set-Cookie", parts.join("; "));
   };
   nodeResponse.clearCookie = (name: string, options: CookieOptions = {}) => {
-    const parts = [`${name}=`, "Path=/"];
+    const parts = [`${name}=`, `Path=${options.path ?? "/"}`];
     if (options.httpOnly) parts.push("HttpOnly");
     if (options.secure) parts.push("Secure");
     if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
@@ -91,8 +95,17 @@ export default defineEventHandler(async (event) => {
     return { error: "Authentication is temporarily unavailable." };
   }
 
+  const runtimeConfig = useRuntimeConfig(event);
   const request = Object.assign(event.node.req, {
     authCollections,
+    emailConfig: {
+      smtpHost: runtimeConfig.smtpHost,
+      smtpPort: runtimeConfig.smtpPort,
+      smtpUser: runtimeConfig.smtpUser,
+      smtpPass: runtimeConfig.smtpPass,
+      smtpFrom: runtimeConfig.smtpFrom,
+      passwordResetSecret: runtimeConfig.passwordResetSecret,
+    },
     app,
     ip: getRequestIP(event) ?? "unknown",
     get(name: string) {
