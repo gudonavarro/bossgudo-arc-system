@@ -12,7 +12,11 @@ const { createFaqRouter, validateFaqInput } = jiti(
 const adminId = "111111111111111111111111";
 const faqId = "aaaaaaaaaaaaaaaaaaaaaaaa";
 
-function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
+function createFaqApp({
+  role = "admin",
+  faqRecords = [createFaq()],
+  findError = null,
+} = {}) {
   const token = crypto.randomBytes(32).toString("base64url");
   const session = {
     _id: "session-1",
@@ -28,6 +32,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
   const faqModel = {
     find(filter) {
       queryCalls.push({ operation: "find", filter });
+      if (findError) throw findError;
       return {
         select(fields) {
           assert.match(fields, /question/);
@@ -142,6 +147,25 @@ test("lists FAQs for an administrator without caching the response", async () =>
   assert.deepEqual(response.body, { faqs: [createFaq()] });
   assert.deepEqual(queryCalls, [{ operation: "find", filter: {} }]);
   assert.equal(response.headers["cache-control"], "no-store");
+});
+
+test("reports FAQ database failures without exposing driver details", async () => {
+  const { app, token } = createFaqApp({
+    findError: new Error("private database connection detail"),
+  });
+  const originalError = console.error;
+  const loggedErrors = [];
+  console.error = (...args) => loggedErrors.push(args);
+  try {
+    await request(app)
+      .get("/api/admin/faqs")
+      .set("Cookie", `bossgudo_session=${token}`)
+      .expect(503)
+      .expect({ error: "FAQ data is temporarily unavailable." });
+  } finally {
+    console.error = originalError;
+  }
+  assert.deepEqual(loggedErrors, [["FAQ list request failed:", "Error"]]);
 });
 
 test("validates FAQ ids and distinguishes missing records", async () => {
