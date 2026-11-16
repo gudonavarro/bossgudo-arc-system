@@ -28,6 +28,7 @@
     "nuxt": "^4.2.0"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^26.6.6",
     "supertest": "^7.1.4",
     "typescript": "^5.9.3",
