@@ -1,5 +1,5 @@
-import type { Db } from "mongodb";
 import type { Model } from "mongoose";
+import type { Session } from "../models/session";
 import type { User } from "../models/user";
 
 interface ProjectionOptions {
@@ -27,8 +27,8 @@ function applyProjection<T>(
 }
 
 export function createAuthCollections(
-  database: Db,
   userModel: Model<User>,
+  sessionModel: Model<Session>,
 ) {
   return {
     users: {
@@ -53,6 +53,20 @@ export function createAuthCollections(
         return applyProjection(query, options.projection).lean();
       },
     },
-    sessions: database.collection("sessions"),
+    sessions: {
+      findOne(filter: Record<string, unknown>) {
+        return sessionModel.findOne(filter).lean();
+      },
+      async insertOne(document: Partial<Session>) {
+        const session = await sessionModel.create(document);
+        return { insertedId: session._id };
+      },
+      deleteOne(filter: Record<string, unknown>) {
+        return sessionModel.deleteOne(filter);
+      },
+      deleteMany(filter: Record<string, unknown>) {
+        return sessionModel.deleteMany(filter);
+      },
+    },
   };
 }

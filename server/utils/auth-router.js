@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
 const { ObjectId } = require("mongodb");
+const { createSession } = require("./session");
 const {
   isPasswordResetMailConfigured,
   sendPasswordResetEmail,
@@ -17,7 +18,6 @@ const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_BYTES = 72;
 const DUMMY_BCRYPT_ROUNDS = 12;
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
 const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PASSWORD_ERROR =
@@ -179,7 +179,8 @@ function asObjectId(value) {
 
 function createAuthRouter({
   getCollections: getRequestCollections = getCollections,
-  isDatabaseReady = (request) => Boolean(request.mongoDb),
+  isDatabaseReady = (request) =>
+    Boolean(request.authCollections || request.mongoDb),
   isProduction = () => process.env.NODE_ENV === "production",
   passwordResetMailConfigured = isPasswordResetMailConfigured,
   sendResetEmail = sendPasswordResetEmail,
@@ -258,22 +259,17 @@ function createAuthRouter({
         return response.status(401).json({ error: "Invalid email or password." });
       }
 
-      const token = crypto.randomBytes(32).toString("base64url");
-      const now = new Date();
-      await sessions.insertOne({
-        userId: user._id || user.id,
-        tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
-        expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
-        createdAt: now,
-        updatedAt: now,
-      });
+      const { token, expiresAt } = await createSession(
+        sessions,
+        user._id || user.id,
+      );
 
       response.cookie(SESSION_COOKIE_NAME, token, {
         httpOnly: true,
         secure: isProduction(),
         sameSite: "lax",
         path: "/",
-        maxAge: SESSION_DURATION_MS,
+        maxAge: expiresAt.getTime() - Date.now(),
       });
 
       return response.status(200).json({
