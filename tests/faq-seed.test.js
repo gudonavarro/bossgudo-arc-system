@@ -8,7 +8,13 @@ const {
   PRICING_FAQ_ID,
   PRICING_KEYWORDS,
   PRICING_QUESTION,
+  SETUP_ANSWER,
+  SETUP_FAQ_ID,
+  SETUP_KEYWORDS,
+  SETUP_LINK,
+  SETUP_QUESTION,
   seedCrayfishPricingFaq,
+  seedPondSetupFaq,
 } = jiti("../server/utils/faq-seed.js");
 
 test("seeds the initial pricing FAQ only when it is absent", async () => {
@@ -77,4 +83,48 @@ test("stores the specified initial crayfish pricing answer", () => {
       "- Kilo Order (4–5 inches, mixed gender): ₱2,500 (Minimum: 10 females)",
     ].join("\n"),
   );
+});
+
+test("seeds the setup FAQ once and keeps it active without replacing edits", async () => {
+  const calls = [];
+  let inserted = false;
+  const model = {
+    async updateOne(filter, update, options) {
+      calls.push({ filter, update, options });
+      if (inserted) return { upsertedCount: 0 };
+      inserted = true;
+      return { upsertedCount: 1 };
+    },
+  };
+
+  assert.equal(await seedPondSetupFaq(model), true);
+  assert.equal(await seedPondSetupFaq(model), false);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].filter, {
+    $or: [
+      { _id: SETUP_FAQ_ID },
+      { question: SETUP_QUESTION },
+    ],
+  });
+  assert.deepEqual(calls[0].update, {
+    $set: { active: true },
+    $setOnInsert: {
+      _id: SETUP_FAQ_ID,
+      question: SETUP_QUESTION,
+      keywords: SETUP_KEYWORDS,
+      answer: SETUP_ANSWER,
+      link: SETUP_LINK,
+      createdAt: calls[0].update.$setOnInsert.createdAt,
+      updatedAt: calls[0].update.$setOnInsert.updatedAt,
+    },
+  });
+  assert.equal(
+    calls[0].update.$setOnInsert.createdAt,
+    calls[0].update.$setOnInsert.updatedAt,
+  );
+  assert.deepEqual(calls[0].options, {
+    upsert: true,
+    runValidators: true,
+    timestamps: false,
+  });
 });

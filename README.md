@@ -88,6 +88,8 @@ not the request body. The initial crayfish pricing FAQ can be seeded by running
 `npm run seed:faq` with the MongoDB settings described above. The seed is
 idempotent and only inserts the initial record when it is absent; rerunning it
 does not replace administrator edits.
+The pond setup pricing FAQ and its internal Shop link can be seeded with
+`npm run seed:setup-faq`; rerunning the command does not create duplicates.
 
 The `auth` and `admin` middleware provide frontend navigation behavior only;
 they are not a security boundary. Server-side endpoints and resources must

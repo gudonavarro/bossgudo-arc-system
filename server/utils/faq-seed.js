@@ -32,6 +32,26 @@ const PRICING_FAQ_ID = new mongoose.Types.ObjectId(
     .digest("hex")
     .slice(0, 24),
 );
+const SETUP_QUESTION = "How much setup?";
+const SETUP_KEYWORDS = [
+  "setup",
+  "pond setup",
+  "setup price",
+  "setup cost",
+  "how much setup",
+  "PVC setup",
+  "slotted angle bar setup",
+  "pond package",
+];
+const SETUP_ANSWER =
+  "You can view our available pond setups, package options, prices, and inclusions in our Shop. Click the View Setups link below to explore our available options.";
+const SETUP_LINK = { label: "View Setups", href: "/shop" };
+const SETUP_FAQ_ID = new mongoose.Types.ObjectId(
+  createHash("sha256")
+    .update("bossgudo:faq:pond-setup-pricing")
+    .digest("hex")
+    .slice(0, 24),
+);
 
 export async function seedCrayfishPricingFaq(FAQModel) {
   const timestamp = new Date();
@@ -62,9 +82,44 @@ export async function seedCrayfishPricingFaq(FAQModel) {
   return result.upsertedCount === 1;
 }
 
+export async function seedPondSetupFaq(FAQModel) {
+  const timestamp = new Date();
+  const result = await FAQModel.updateOne(
+    {
+      $or: [
+        { _id: SETUP_FAQ_ID },
+        { question: SETUP_QUESTION },
+      ],
+    },
+    {
+      $set: { active: true },
+      $setOnInsert: {
+        _id: SETUP_FAQ_ID,
+        question: SETUP_QUESTION,
+        keywords: SETUP_KEYWORDS,
+        answer: SETUP_ANSWER,
+        link: SETUP_LINK,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    {
+      upsert: true,
+      runValidators: true,
+      timestamps: false,
+    },
+  );
+  return result.upsertedCount === 1;
+}
+
 export {
   PRICING_ANSWER,
   PRICING_FAQ_ID,
   PRICING_KEYWORDS,
   PRICING_QUESTION,
+  SETUP_ANSWER,
+  SETUP_FAQ_ID,
+  SETUP_KEYWORDS,
+  SETUP_LINK,
+  SETUP_QUESTION,
 };

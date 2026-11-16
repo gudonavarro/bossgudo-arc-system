@@ -11,6 +11,7 @@
     "typecheck": "nuxt typecheck",
     "check": "nuxt typecheck",
     "seed:faq": "jiti scripts/seed-crayfish-pricing.js",
+    "seed:setup-faq": "jiti scripts/seed-setup-faq.js",
     "test": "node --test"
   },
   "engines": {
