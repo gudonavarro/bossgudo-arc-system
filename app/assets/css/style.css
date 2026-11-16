@@ -2614,6 +2614,23 @@ body[data-page="reset-password"] main {
   text-underline-offset: 3px;
 }
 
+.recovery-text-button {
+  display: block;
+  margin: 14px auto 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1b4332;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recovery-text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .recovery-panel .recovery-card {
   width: min(100%, 448px);
   max-width: 448px;
