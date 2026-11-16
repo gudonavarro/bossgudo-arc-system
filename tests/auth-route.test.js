@@ -454,6 +454,36 @@ test("rejects administrator accounts from customer login", async () => {
   assert.equal(response.headers["set-cookie"], undefined);
 });
 
+test("administrator login accepts only active administrator accounts", async () => {
+  const adminUser = createLoginUser({ role: "admin" });
+  const adminSessions = fakeSessionModel();
+  const adminApp = createTestApp({
+    UserModel: fakeUserModel({ existingUser: adminUser }),
+    SessionModel: adminSessions,
+    isDatabaseReady: () => true,
+  });
+  const customerApp = createTestApp({
+    UserModel: fakeUserModel({ existingUser: createLoginUser() }),
+    SessionModel: fakeSessionModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const adminResponse = await request(adminApp)
+    .post("/api/auth/admin/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+  const customerResponse = await request(customerApp)
+    .post("/api/auth/admin/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+
+  assert.equal(adminResponse.status, 200);
+  assert.equal(adminResponse.body.user.role, "admin");
+  assert.equal(adminSessions.calls.create.length, 1);
+  assert.equal(customerResponse.status, 401);
+  assert.deepEqual(customerResponse.body, {
+    error: "Invalid email or password.",
+  });
+});
+
 test("protects the current-user route and rejects missing and invalid cookies", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),

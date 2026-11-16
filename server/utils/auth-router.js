@@ -222,7 +222,7 @@ function createAuthRouter({
     next();
   });
 
-  router.post("/login", loginLimiter, async (request, response) => {
+  const login = (requiredRole) => async (request, response) => {
     const validation = validateLogin(request.body);
     if (validation.error) {
       return response.status(400).json({ error: validation.error });
@@ -254,7 +254,7 @@ function createAuthRouter({
         ? await bcrypt.compare(validation.value.password, user.password)
         : await compareAgainstDummyHash(validation.value.password);
 
-      if (!user || !passwordMatches || !user.isActive || user.role !== "customer") {
+      if (!user || !passwordMatches || !user.isActive || user.role !== requiredRole) {
         return response.status(401).json({ error: "Invalid email or password." });
       }
 
@@ -292,7 +292,10 @@ function createAuthRouter({
         .status(500)
         .json({ error: "Unable to log in right now." });
     }
-  });
+  };
+
+  router.post("/login", loginLimiter, login("customer"));
+  router.post("/admin/login", loginLimiter, login("admin"));
 
   router.get("/me", authenticate, (request, response) => {
     return response.status(200).json({ user: request.authUser });
