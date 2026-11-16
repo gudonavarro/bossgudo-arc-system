@@ -57,6 +57,17 @@ function getErrorName(error) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
+function isDatabaseUnavailableError(error) {
+  return [
+    "MongoNetworkError",
+    "MongoNetworkTimeoutError",
+    "MongoNotConnectedError",
+    "MongoServerSelectionError",
+    "MongoTopologyClosedError",
+    "MongooseServerSelectionError",
+  ].includes(getErrorName(error));
+}
+
 function validateRegistration(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { error: "Provide registration details.", fieldErrors: {} };
@@ -546,6 +557,31 @@ function createAuthRouter({
           error: "An account with those details already exists.",
           fieldErrors,
         });
+      }
+      if (error?.name === "ValidationError") {
+        const fieldMessages = {
+          firstName: "Enter a valid first name.",
+          lastName: "Enter a valid last name.",
+          email: "Enter a valid email address.",
+          phoneNumber: "Enter a valid PH phone number.",
+          password: "Enter a valid password.",
+        };
+        const fieldErrors = {};
+        for (const [field, message] of Object.entries(fieldMessages)) {
+          if (error.errors?.[field]) {
+            fieldErrors[field] = message;
+          }
+        }
+        return response.status(400).json({
+          error: "Please check your registration details.",
+          fieldErrors,
+        });
+      }
+      if (isDatabaseUnavailableError(error)) {
+        console.error("Registration database unavailable:", getErrorName(error));
+        return response
+          .status(503)
+          .json({ error: "Registration is temporarily unavailable." });
       }
       console.error("Registration request failed:", getErrorName(error));
       return response

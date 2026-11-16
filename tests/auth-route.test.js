@@ -75,7 +75,11 @@ function createTestApp(options) {
   return app;
 }
 
-function fakeUserModel({ existingUser = null, createError = null } = {}) {
+function fakeUserModel({
+  existingUser = null,
+  createError = null,
+  findError = null,
+} = {}) {
   const calls = {
     findOne: [],
     findById: [],
@@ -89,6 +93,7 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     calls,
     findOne(query) {
       calls.findOne.push(query);
+      if (findError) throw findError;
       return fakeQuery(existingUser, calls);
     },
     findById(id) {
@@ -261,6 +266,23 @@ test("returns unavailable when the database is disconnected", async () => {
   assert.equal(model.calls.create.length, 0);
 });
 
+test("maps database connection failures to a safe unavailable response", async () => {
+  const databaseError = new Error("mongodb://private-connection-details");
+  databaseError.name = "MongoServerSelectionError";
+  const app = createTestApp({
+    UserModel: fakeUserModel({ findError: databaseError }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error, "Registration is temporarily unavailable.");
+  assert.equal(JSON.stringify(response.body).includes("private-connection-details"), false);
+});
+
 test("creates a customer with normalized details and a minimal safe response", async () => {
   const model = fakeUserModel();
   const app = createTestApp({
@@ -335,6 +357,40 @@ test("maps duplicate index races to conflict", async () => {
     response.body.fieldErrors.email,
     "An account with this email already exists.",
   );
+});
+
+test("maps Mongoose validation failures to safe field errors", async () => {
+  const validationError = new Error("private validation details");
+  validationError.name = "ValidationError";
+  validationError.errors = { email: new Error("invalid") };
+  const app = createTestApp({
+    UserModel: fakeUserModel({ createError: validationError }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "Please check your registration details.");
+  assert.equal(response.body.fieldErrors.email, "Enter a valid email address.");
+  assert.equal(JSON.stringify(response.body).includes("private validation details"), false);
+});
+
+test("does not expose unexpected registration persistence errors", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel({ createError: new Error("private database details") }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 500);
+  assert.equal(response.body.error, "Unable to create the account right now.");
+  assert.equal(JSON.stringify(response.body).includes("private database details"), false);
 });
 
 test("validates login input before database access", async () => {
