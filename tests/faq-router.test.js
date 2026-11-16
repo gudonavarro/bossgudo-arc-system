@@ -220,6 +220,9 @@ test("validates FAQ content and removes duplicate keywords", () => {
     value: { active: false },
   });
   assert.ok(validateFaqInput({ updatedBy: adminId }, { partial: true }).error);
+  assert.ok(
+    validateFaqInput({ active: "false" }, { partial: true }).error,
+  );
   for (const value of [
     null,
     {},
@@ -319,6 +322,11 @@ test("rejects empty FAQ updates and reports missing records", async () => {
     .patch(`/api/admin/faqs/${faqId}`)
     .set("Cookie", `bossgudo_session=${token}`)
     .send({ updatedBy: adminId })
+    .expect(400);
+  await request(app)
+    .patch(`/api/admin/faqs/${faqId}`)
+    .set("Cookie", `bossgudo_session=${token}`)
+    .send({ active: "false" })
     .expect(400);
   await request(app)
     .patch(`/api/admin/faqs/${faqId}`)
