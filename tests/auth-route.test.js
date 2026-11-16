@@ -1248,6 +1248,42 @@ test("does not distinguish unknown accounts from invalid reset codes", async () 
   assert.deepEqual(unknownResponse.body, invalidResponse.body);
 });
 
+test("validates recovery inputs before database access", async () => {
+  const model = fakeUserModel();
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => false,
+  });
+  const invalidEmail = await request(app)
+    .post("/api/auth/forgot-password")
+    .send({ email: "not-an-email" });
+  const invalidCode = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "12345" });
+
+  assert.equal(invalidEmail.status, 400);
+  assert.equal(invalidCode.status, 400);
+  assert.equal(model.calls.findOne.length, 0);
+});
+
+test("rate limits reset-code requests by client", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+  const responses = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    responses.push(
+      await request(app)
+        .post("/api/auth/forgot-password")
+        .send({ email: "unknown@example.com" }),
+    );
+  }
+
+  assert.ok(responses.slice(0, 5).every((response) => response.status === 202));
+  assert.equal(responses[5].status, 429);
+});
+
 test("resets a password once and revokes existing sessions", async () => {
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = hashResetToken(token);
