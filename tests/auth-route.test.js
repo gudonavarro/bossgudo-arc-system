@@ -437,6 +437,23 @@ test("rejects inactive users with the same unauthorized response", async () => {
   assert.deepEqual(response.body, { error: "Invalid email or password." });
 });
 
+test("rejects administrator accounts from customer login", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel({
+      existingUser: createLoginUser({ role: "admin" }),
+    }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(response.body, { error: "Invalid email or password." });
+  assert.equal(response.headers["set-cookie"], undefined);
+});
+
 test("protects the current-user route and rejects missing and invalid cookies", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),

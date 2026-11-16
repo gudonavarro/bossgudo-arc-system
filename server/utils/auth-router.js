@@ -254,7 +254,7 @@ function createAuthRouter({
         ? await bcrypt.compare(validation.value.password, user.password)
         : await compareAgainstDummyHash(validation.value.password);
 
-      if (!user || !passwordMatches || !user.isActive) {
+      if (!user || !passwordMatches || !user.isActive || user.role !== "customer") {
         return response.status(401).json({ error: "Invalid email or password." });
       }
 
