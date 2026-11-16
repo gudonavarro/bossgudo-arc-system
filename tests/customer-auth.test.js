@@ -72,3 +72,24 @@ test("keeps only safe user fields in frontend authentication state", () => {
   );
   assert.equal(toAuthUser({ id: "admin", role: "owner" }), null);
 });
+
+test("accepts a safe administrator profile without sensitive fields", () => {
+  assert.deepEqual(
+    toAuthUser({
+      id: "admin-1",
+      firstName: "Admin",
+      lastName: "User",
+      email: "admin@example.com",
+      role: "admin",
+      password: "password-hash",
+      resetTokenHash: "reset-hash",
+    }),
+    {
+      id: "admin-1",
+      firstName: "Admin",
+      lastName: "User",
+      email: "admin@example.com",
+      role: "admin",
+    },
+  );
+});
