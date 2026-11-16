@@ -149,6 +149,24 @@ test("lists FAQs for an administrator without caching the response", async () =>
   assert.equal(response.headers["cache-control"], "no-store");
 });
 
+test("keeps inactive FAQs visible to administrators", async () => {
+  const activeFaq = createFaq();
+  const inactiveFaq = createFaq({
+    _id: "bbbbbbbbbbbbbbbbbbbbbbbb",
+    question: "Inactive question",
+    active: false,
+  });
+  const { app, token } = createFaqApp({
+    faqRecords: [activeFaq, inactiveFaq],
+  });
+  const response = await request(app)
+    .get("/api/admin/faqs")
+    .set("Cookie", `bossgudo_session=${token}`)
+    .expect(200);
+
+  assert.deepEqual(response.body.faqs, [activeFaq, inactiveFaq]);
+});
+
 test("reports FAQ database failures without exposing driver details", async () => {
   const { app, token } = createFaqApp({
     findError: new Error("private database connection detail"),
