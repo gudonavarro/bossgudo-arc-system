@@ -52,6 +52,27 @@ test("validates the request body and enforces the message length limit", () => {
   );
 });
 
+test("rejects invalid messages before connecting to MongoDB", async () => {
+  let connectionCalls = 0;
+  const { handler, queryCalls } = createHandler([], {
+    connect: async () => {
+      connectionCalls += 1;
+      return "connection";
+    },
+  });
+
+  await assert.rejects(
+    handler({ body: { message: "  " } }),
+    (error) => error.statusCode === 400,
+  );
+  await assert.rejects(
+    handler({ body: { message: "x".repeat(1001) } }),
+    (error) => error.statusCode === 400,
+  );
+  assert.equal(connectionCalls, 0);
+  assert.deepEqual(queryCalls, []);
+});
+
 test("loads only active FAQs and returns the stored answer and id", async () => {
   const { handler, queryCalls } = createHandler([pricingFaq]);
   const response = await handler({ body: { message: "How much crayfish?" } });
