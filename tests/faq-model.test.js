@@ -45,6 +45,14 @@ test("requires a question, non-empty keywords, and an answer", async () => {
     }).validate(),
     mongoose.Error.ValidationError,
   );
+  await assert.rejects(
+    new FAQModel({
+      question: "Question",
+      keywords: ["   "],
+      answer: "Answer",
+    }).validate(),
+    mongoose.Error.ValidationError,
+  );
 });
 
 test("validates audit fields as User ObjectIds", async () => {

@@ -6,8 +6,9 @@ const faqSchema = new mongoose.Schema({
     type: [{ type: String, trim: true }],
     required: true,
     validate: {
-      validator: (keywords) => keywords.length > 0,
-      message: "At least one keyword is required.",
+      validator: (keywords) =>
+        keywords.length > 0 && keywords.every((keyword) => keyword.length > 0),
+      message: "At least one non-empty keyword is required.",
     },
   },
   answer: { type: String, required: true, trim: true },
