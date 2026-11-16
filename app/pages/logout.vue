@@ -41,9 +41,9 @@ onMounted(() => cancelButton.value?.focus());
 </script>
 
 <template>
-  <div class="modal-backdrop">
+  <div class="modal-backdrop logout-confirmation-backdrop">
     <section
-      class="modal"
+      class="modal logout-confirmation"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="logout-title"
@@ -64,7 +64,7 @@ onMounted(() => cancelButton.value?.focus());
       <footer class="modal-foot">
         <button
           ref="cancelButton"
-          class="secondary"
+          class="secondary small logout-action"
           type="button"
           :disabled="isLoggingOut"
           @click="cancelLogout"
@@ -73,7 +73,7 @@ onMounted(() => cancelButton.value?.focus());
         </button>
         <button
           ref="confirmButton"
-          class="primary"
+          class="primary small logout-action"
           type="button"
           :disabled="isLoggingOut"
           @click="confirmLogout"
