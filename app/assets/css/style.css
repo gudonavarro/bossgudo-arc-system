@@ -734,6 +734,7 @@ td {
   max-width: 88%;
   font-size: 0.875rem;
   line-height: 1.5;
+  white-space: pre-line;
   background: #e8f0e8;
   color: var(--ink);
   border: 1px solid #cce5df;
@@ -742,6 +743,13 @@ td {
   margin-left: auto;
   background: var(--green);
   color: var(--white);
+}
+.bubble .chat-link {
+  display: inline-block;
+  margin-top: 7px;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
 }
 .chat-input {
   display: flex;

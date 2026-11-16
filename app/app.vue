@@ -91,10 +91,10 @@ useHead(() => ({
       <button class="small" id="chatClose" type="button" aria-label="Close assistant">✕</button>
     </div>
     <div class="chat-body" id="chatBody">
-      <div class="bubble">Hi! I can help with questions about packages, pond setup, training, and bookings. What would you like to know?</div>
+      <div class="bubble">Hi! Ask me about crayfish prices and other topics covered by the farm FAQs.</div>
     </div>
     <form class="chat-input" id="chatForm">
-      <input id="chatText" placeholder="Ask about packages..." aria-label="Ask a question" required>
+      <input id="chatText" placeholder="Ask about crayfish prices..." aria-label="Ask a question" maxlength="1000" required>
       <button class="primary" type="submit">Send</button>
     </form>
   </div>

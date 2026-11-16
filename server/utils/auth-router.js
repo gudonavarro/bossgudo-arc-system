@@ -3,16 +3,21 @@ const bcrypt = require("bcrypt");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
 const { ObjectId } = require("mongodb");
+const path = require("node:path");
+const serverUtilsPath = (fileName) =>
+  path.resolve(process.cwd(), "server", "utils", fileName);
 const {
   clearSessionCookie,
   createSession,
   invalidateSession,
-} = require("./session");
+} = require(serverUtilsPath("session.js"));
 const {
   SESSION_COOKIE_NAME,
   createAuthenticationMiddleware,
-} = require("./authenticate");
-const { isValidEmailAddress, sendEmail } = require("./email-mailer");
+} = require(serverUtilsPath("authenticate.js"));
+const { isValidEmailAddress, sendEmail } = require(
+  serverUtilsPath("email-mailer.js"),
+);
 const {
   createResetCode,
   createResetCodeEmail,
@@ -22,7 +27,7 @@ const {
   matchesResetCodeHash,
   readResetToken,
   RESET_COOKIE_NAME,
-} = require("./password-reset");
+} = require(serverUtilsPath("password-reset.js"));
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
 const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;

@@ -1,5 +1,8 @@
 const crypto = require("node:crypto");
-const { readCookie } = require("./cookies");
+const path = require("node:path");
+const serverUtilsPath = (fileName) =>
+  path.resolve(process.cwd(), "server", "utils", fileName);
+const { readCookie } = require(serverUtilsPath("cookies.js"));
 
 const RESET_CODE_PATTERN = /^\d{6}$/;
 const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;

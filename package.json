@@ -10,6 +10,9 @@
     "build": "nuxt build",
     "typecheck": "nuxt typecheck",
     "check": "nuxt typecheck",
+    "seed:faq": "jiti scripts/seed-crayfish-pricing.js",
+    "seed:setup-faq": "jiti scripts/seed-setup-faq.js",
+    "seed:contact-faq": "jiti scripts/seed-contact-faq.js",
     "test": "node --test"
   },
   "engines": {
@@ -22,6 +25,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
+    "jiti": "^2.7.0",
     "mongodb": "~7.8",
     "mongoose": "^9.12.1",
     "nodemailer": "^10.3.1",
@@ -30,7 +34,6 @@
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^26.6.6",
-    "jiti": "^2.7.0",
     "supertest": "^7.1.4",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.3.14"
