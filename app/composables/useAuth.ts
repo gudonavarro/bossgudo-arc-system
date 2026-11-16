@@ -1,5 +1,5 @@
 import { toAuthUser } from "~/utils/customer-auth";
-import type { AuthUser } from "~/utils/customer-auth";
+import type { AuthRole, AuthUser } from "~/utils/customer-auth";
 
 type AuthStatus =
   | "unknown"
@@ -86,21 +86,35 @@ export function useAuth() {
     return request;
   }
 
-  async function login(email: string, password: string) {
-    const result = await $fetch<AuthResponse>("/api/auth/login", {
+  async function loginWithRole(
+    email: string,
+    password: string,
+    role: AuthRole,
+  ) {
+    const endpoint =
+      role === "admin" ? "/api/auth/admin/login" : "/api/auth/login";
+    const result = await $fetch<AuthResponse>(endpoint, {
       method: "POST",
       credentials: "include",
       body: { email, password },
     });
 
     const safeUser = toAuthUser(result.user);
-    if (safeUser?.role !== "customer") {
+    if (safeUser?.role !== role) {
       setUser(null);
       throw new Error("Unable to log in.");
     }
 
     setUser(safeUser);
     return safeUser;
+  }
+
+  function login(email: string, password: string) {
+    return loginWithRole(email, password, "customer");
+  }
+
+  function loginAdmin(email: string, password: string) {
+    return loginWithRole(email, password, "admin");
   }
 
   async function logout(): Promise<LogoutResult> {
@@ -135,6 +149,7 @@ export function useAuth() {
     isLoggingOut,
     initialize,
     login,
+    loginAdmin,
     logout,
   };
 }
