@@ -11,59 +11,70 @@ function getErrorName(error) {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
-function validateFaqInput(body) {
+function validateFaqInput(body, { partial = false } = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { error: "Provide FAQ details." };
   }
 
-  const question =
-    typeof body.question === "string" ? body.question.trim() : "";
-  const answer = typeof body.answer === "string" ? body.answer.trim() : "";
-  if (!question || question.length > 300) {
-    return { error: "Question is required and must be at most 300 characters." };
-  }
-  if (!answer || answer.length > 5000) {
-    return { error: "Answer is required and must be at most 5000 characters." };
-  }
-  if (
-    !Array.isArray(body.keywords) ||
-    body.keywords.length === 0 ||
-    body.keywords.length > 30
-  ) {
-    return { error: "Provide between 1 and 30 keywords." };
-  }
-
-  const keywords = [];
-  const seenKeywords = new Set();
-  for (const rawKeyword of body.keywords) {
-    if (typeof rawKeyword !== "string") {
-      return { error: "Each keyword must be text." };
-    }
-    const keyword = rawKeyword.trim();
-    if (!keyword || keyword.length > 80) {
+  const value = {};
+  if (!partial || body.question !== undefined) {
+    const question =
+      typeof body.question === "string" ? body.question.trim() : "";
+    if (!question || question.length > 300) {
       return {
-        error: "Each keyword is required and must be at most 80 characters.",
+        error: "Question is required and must be at most 300 characters.",
       };
     }
-    const normalizedKeyword = keyword.toLowerCase();
-    if (!seenKeywords.has(normalizedKeyword)) {
-      seenKeywords.add(normalizedKeyword);
-      keywords.push(keyword);
+    value.question = question;
+  }
+  if (!partial || body.answer !== undefined) {
+    const answer = typeof body.answer === "string" ? body.answer.trim() : "";
+    if (!answer || answer.length > 5000) {
+      return { error: "Answer is required and must be at most 5000 characters." };
     }
+    value.answer = answer;
+  }
+  if (!partial || body.keywords !== undefined) {
+    if (
+      !Array.isArray(body.keywords) ||
+      body.keywords.length === 0 ||
+      body.keywords.length > 30
+    ) {
+      return { error: "Provide between 1 and 30 keywords." };
+    }
+
+    const keywords = [];
+    const seenKeywords = new Set();
+    for (const rawKeyword of body.keywords) {
+      if (typeof rawKeyword !== "string") {
+        return { error: "Each keyword must be text." };
+      }
+      const keyword = rawKeyword.trim();
+      if (!keyword || keyword.length > 80) {
+        return {
+          error: "Each keyword is required and must be at most 80 characters.",
+        };
+      }
+      const normalizedKeyword = keyword.toLowerCase();
+      if (!seenKeywords.has(normalizedKeyword)) {
+        seenKeywords.add(normalizedKeyword);
+        keywords.push(keyword);
+      }
+    }
+    value.keywords = keywords;
   }
 
   if (body.active !== undefined && typeof body.active !== "boolean") {
     return { error: "Active must be a boolean." };
   }
+  if (body.active !== undefined) {
+    value.active = body.active;
+  }
+  if (partial && Object.keys(value).length === 0) {
+    return { error: "Provide at least one FAQ field to update." };
+  }
 
-  return {
-    value: {
-      question,
-      keywords,
-      answer,
-      ...(body.active === undefined ? {} : { active: body.active }),
-    },
-  };
+  return { value };
 }
 
 function createFaqRouter() {
@@ -135,6 +146,42 @@ function createFaqRouter() {
         return response.status(400).json({ error: "Invalid FAQ details." });
       }
       console.error("FAQ creation request failed:", getErrorName(error));
+      return response.status(503).json({
+        error: "FAQ data is temporarily unavailable.",
+      });
+    }
+  });
+
+  router.patch("/:id", async (request, response) => {
+    const { id } = request.params;
+    if (!OBJECT_ID_PATTERN.test(id)) {
+      return response.status(400).json({ error: "Invalid FAQ id." });
+    }
+    const validation = validateFaqInput(request.body, { partial: true });
+    if (validation.error) {
+      return response.status(400).json({ error: validation.error });
+    }
+
+    try {
+      const faq = await request.faqModel.findByIdAndUpdate(
+        id,
+        {
+          $set: {
+            ...validation.value,
+            updatedBy: request.authUser.id,
+          },
+        },
+        { new: true, runValidators: true },
+      ).select(FAQ_FIELDS).lean();
+      if (!faq) {
+        return response.status(404).json({ error: "FAQ not found." });
+      }
+      return response.status(200).json({ faq });
+    } catch (error) {
+      if (getErrorName(error) === "ValidationError") {
+        return response.status(400).json({ error: "Invalid FAQ details." });
+      }
+      console.error("FAQ update request failed:", getErrorName(error));
       return response.status(503).json({
         error: "FAQ data is temporarily unavailable.",
       });

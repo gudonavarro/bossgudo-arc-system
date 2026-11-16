@@ -23,6 +23,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
   };
   const queryCalls = [];
   const createCalls = [];
+  const updateCalls = [];
   const faqModel = {
     find(filter) {
       queryCalls.push({ operation: "find", filter });
@@ -54,6 +55,21 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
       createCalls.push(fields);
       return createFaq(fields);
     },
+    findByIdAndUpdate(id, update, options) {
+      updateCalls.push({ id, update, options });
+      const existing = faqRecords.find((faq) => faq._id.toString() === id);
+      return {
+        select(fields) {
+          assert.match(fields, /updatedBy/);
+          return {
+            lean: async () =>
+              existing
+                ? { ...existing, ...update.$set }
+                : null,
+          };
+        },
+      };
+    },
   };
   const app = express();
   app.use(express.json());
@@ -76,7 +92,7 @@ function createFaqApp({ role = "admin", faqRecords = [createFaq()] } = {}) {
     next();
   });
   app.use("/api/admin/faqs", createFaqRouter());
-  return { app, token, queryCalls, createCalls };
+  return { app, token, queryCalls, createCalls, updateCalls };
 }
 
 function createFaq(overrides = {}) {
@@ -150,6 +166,10 @@ test("validates FAQ content and removes duplicate keywords", () => {
       },
     },
   );
+  assert.deepEqual(validateFaqInput({ active: false }, { partial: true }), {
+    value: { active: false },
+  });
+  assert.ok(validateFaqInput({ updatedBy: adminId }, { partial: true }).error);
   for (const value of [
     null,
     {},
@@ -206,4 +226,50 @@ test("rejects invalid FAQ creation without touching the model", async () => {
     .send({ question: "Question", keywords: [], answer: "Answer" })
     .expect(400);
   assert.deepEqual(createCalls, []);
+});
+
+test("updates FAQ content and activation with server-controlled audit fields", async () => {
+  const { app, token, updateCalls } = createFaqApp();
+  const response = await request(app)
+    .patch(`/api/admin/faqs/${faqId}`)
+    .set("Cookie", `bossgudo_session=${token}`)
+    .send({
+      answer: "Updated answer.",
+      active: false,
+      updatedBy: "222222222222222222222222",
+    })
+    .expect(200);
+
+  assert.equal(response.body.faq.answer, "Updated answer.");
+  assert.equal(response.body.faq.active, false);
+  assert.equal(response.body.faq.updatedBy, adminId);
+  assert.deepEqual(updateCalls, [
+    {
+      id: faqId,
+      update: {
+        $set: {
+          answer: "Updated answer.",
+          active: false,
+          updatedBy: adminId,
+        },
+      },
+      options: { new: true, runValidators: true },
+    },
+  ]);
+});
+
+test("rejects empty FAQ updates and reports missing records", async () => {
+  const { app, token, updateCalls } = createFaqApp({ faqRecords: [] });
+  await request(app)
+    .patch(`/api/admin/faqs/${faqId}`)
+    .set("Cookie", `bossgudo_session=${token}`)
+    .send({ updatedBy: adminId })
+    .expect(400);
+  await request(app)
+    .patch(`/api/admin/faqs/${faqId}`)
+    .set("Cookie", `bossgudo_session=${token}`)
+    .send({ answer: "Updated." })
+    .expect(404)
+    .expect({ error: "FAQ not found." });
+  assert.equal(updateCalls.length, 1);
 });
