@@ -1,6 +1,6 @@
 
 # bossgudo-arc-system
-AI-assisted customer inquiry, service booking, and customer management system for BOSSGUDO A.R.C. AQUA FARM.
+Rule-based customer inquiry, service booking, and customer management system for BOSSGUDO A.R.C. AQUA FARM.
 
 ## Run the application
 
@@ -64,6 +64,30 @@ errors return HTTP 400 with `error` and `fieldErrors`; duplicate email or phone
 details return HTTP 409; unavailable MongoDB returns HTTP 503. New customer
 records are saved in the `users` collection through the shared Mongoose
 connection, with passwords hashed before persistence.
+
+## ARC Assistant FAQ backend
+
+ARC Assistant is a deterministic, rule-based FAQ responder. It does not use
+AI, machine learning, NLP, external chatbot services, or generated answers.
+`POST /api/chatbot/message` accepts a JSON `message` up to 1,000 characters and
+compares it with active FAQ questions and keywords stored in MongoDB. It
+returns the predefined answer for the strongest valid match, or a fixed
+fallback when no FAQ meets the match threshold. Active FAQ records are read
+from MongoDB for each request so administrator updates take effect immediately.
+
+FAQ management is available at `/api/admin/faqs`:
+
+- `GET /api/admin/faqs` lists FAQs; `GET /api/admin/faqs/:id` reads one.
+- `POST /api/admin/faqs` creates an FAQ.
+- `PATCH /api/admin/faqs/:id` updates FAQ fields, including its `active` state.
+- `DELETE /api/admin/faqs/:id` deletes an FAQ.
+
+Every FAQ management route enforces an administrator session on the server.
+Creation and update audit fields are taken from the authenticated administrator,
+not the request body. The initial crayfish pricing FAQ can be seeded by running
+`npm run seed:faq` with the MongoDB settings described above. The seed is
+idempotent and only inserts the initial record when it is absent; rerunning it
+does not replace administrator edits.
 
 The `auth` and `admin` middleware provide frontend navigation behavior only;
 they are not a security boundary. Server-side endpoints and resources must
