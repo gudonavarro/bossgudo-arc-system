@@ -5,7 +5,11 @@ const express = require("express");
 const request = require("supertest");
 const test = require("node:test");
 const { createAuthRouter } = require("../server/utils/auth-router");
-const { hashResetCode } = require("../server/utils/password-reset");
+const {
+  hashResetCode,
+  hashResetToken,
+  RESET_COOKIE_NAME,
+} = require("../server/utils/password-reset");
 const {
   SESSION_COOKIE_NAME,
   createRoleAuthenticationMiddleware,
@@ -1246,7 +1250,7 @@ test("does not distinguish unknown accounts from invalid reset codes", async () 
 
 test("resets a password once and revokes existing sessions", async () => {
   const token = crypto.randomBytes(32).toString("base64url");
-  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const tokenHash = hashResetToken(token);
   const user = createLoginUser({
     resetTokenHash: tokenHash,
     resetTokenExpires: new Date(Date.now() + 60_000),
@@ -1261,15 +1265,15 @@ test("resets a password once and revokes existing sessions", async () => {
 
   const response = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${token}`)
     .send({
-      token,
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
   const reusedTokenResponse = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${token}`)
     .send({
-      token,
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
@@ -1280,15 +1284,18 @@ test("resets a password once and revokes existing sessions", async () => {
   assert.equal(await bcrypt.compare("NewStrongPass1!", user.password), true);
   assert.equal("resetTokenHash" in user, false);
   assert.equal("resetTokenExpires" in user, false);
+  assert.equal("resetCodeAttempts" in user, false);
   assert.deepEqual(sessions.calls.deleteMany, [{ userId: "user-1" }]);
   assert.equal(model.calls.findOneAndUpdate[0].query.resetTokenHash, tokenHash);
   assert.ok(user.passwordChangedAt instanceof Date);
+  assert.match(response.headers["set-cookie"][0], /Path=\/api\/auth\/reset-password/i);
+  assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
 });
 
 test("rejects expired and malformed reset tokens", async () => {
   const expiredToken = crypto.randomBytes(32).toString("base64url");
   const user = createLoginUser({
-    resetTokenHash: crypto.createHash("sha256").update(expiredToken).digest("hex"),
+    resetTokenHash: hashResetToken(expiredToken),
     resetTokenExpires: new Date(Date.now() - 60_000),
   });
   const originalPassword = user.password;
@@ -1300,22 +1307,22 @@ test("rejects expired and malformed reset tokens", async () => {
 
   const expired = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${expiredToken}`)
     .send({
-      token: expiredToken,
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
   const malformed = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=not-a-token`)
     .send({
-      token: "not-a-token",
       password: "NewStrongPass1!",
       confirmPassword: "NewStrongPass1!",
     });
   const tooLongPassword = await request(app)
     .post("/api/auth/reset-password")
+    .set("Cookie", `${RESET_COOKIE_NAME}=${expiredToken}`)
     .send({
-      token: expiredToken,
       password: `NewStrongPass1!${"x".repeat(70)}`,
       confirmPassword: `NewStrongPass1!${"x".repeat(70)}`,
     });

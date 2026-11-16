@@ -32,7 +32,6 @@ const DUMMY_BCRYPT_ROUNDS = 12;
 const RESET_CODE_DURATION_MS = 10 * 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
 const RESET_CODE_PATTERN = /^\d{6}$/;
-const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PASSWORD_RESET_REQUEST_MESSAGE =
   "If an active account matches that email, a verification code will be sent.";
 const INVALID_RESET_CODE_MESSAGE = "Invalid or expired verification code.";
@@ -207,16 +206,11 @@ function validateLogin(body) {
 
 function validatePasswordReset(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { error: "Provide a reset token and new password." };
+    return { error: "Provide a new password and confirmation." };
   }
-  const { token, password, confirmPassword } = body;
-  if (
-    typeof token !== "string" ||
-    !RESET_TOKEN_PATTERN.test(token) ||
-    typeof password !== "string" ||
-    typeof confirmPassword !== "string"
-  ) {
-    return { error: "Provide a valid reset token and password." };
+  const { password, confirmPassword } = body;
+  if (typeof password !== "string" || typeof confirmPassword !== "string") {
+    return { error: "Provide a new password and confirmation." };
   }
   const passwordError = getPasswordValidationError(password);
   if (passwordError) {
@@ -225,7 +219,7 @@ function validatePasswordReset(body) {
   if (password !== confirmPassword) {
     return { error: "Passwords do not match." };
   }
-  return { value: { token, password } };
+  return { value: { password } };
 }
 
 function compareAgainstDummyHash(password) {
@@ -797,6 +791,12 @@ function createAuthRouter({
     if (validation.error) {
       return response.status(400).json({ error: validation.error });
     }
+    const resetToken = readResetToken(request);
+    if (!resetToken) {
+      return response
+        .status(400)
+        .json({ error: "Reset authorization is invalid or expired." });
+    }
     if (!isDatabaseReady(request)) {
       return response
         .status(503)
@@ -804,8 +804,8 @@ function createAuthRouter({
     }
 
     try {
-      const { token, password } = validation.value;
-      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const { password } = validation.value;
+      const tokenHash = hashResetToken(resetToken);
       const passwordHash = await bcrypt.hash(password, 12);
       const { users, sessions } = getRequestCollections(request);
       const now = new Date();
@@ -821,17 +821,33 @@ function createAuthRouter({
             passwordChangedAt: now,
             updatedAt: now,
           },
-          $unset: { resetTokenHash: "", resetTokenExpires: "" },
+          $unset: {
+            resetTokenHash: "",
+            resetTokenExpires: "",
+            resetCodeAttempts: "",
+          },
         },
         { projection: { _id: 1 }, returnDocument: "after" },
       );
 
       if (!user) {
+        response.clearCookie(RESET_COOKIE_NAME, {
+          httpOnly: true,
+          secure: isProduction(),
+          sameSite: "lax",
+          path: "/api/auth/reset-password",
+        });
         return response
           .status(400)
-          .json({ error: "This password reset link is invalid or expired." });
+          .json({ error: "Reset authorization is invalid or expired." });
       }
       await sessions.deleteMany({ userId: user._id });
+      response.clearCookie(RESET_COOKIE_NAME, {
+        httpOnly: true,
+        secure: isProduction(),
+        sameSite: "lax",
+        path: "/api/auth/reset-password",
+      });
       return response.status(200).json({ message: "Password reset successfully." });
     } catch (error) {
       console.error("Password reset completion failed:", getErrorName(error));
