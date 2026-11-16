@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const route = useRoute();
 const { isAuthenticated, isCustomer } = useAuth();
 </script>
 
@@ -15,7 +16,12 @@ const { isAuthenticated, isCustomer } = useAuth();
         <NuxtLink to="/shop">Shop</NuxtLink>
         <NuxtLink to="/booking">Bookings</NuxtLink>
         <NuxtLink v-if="isCustomer" to="/mybookings">My Bookings</NuxtLink>
-        <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
+        <NuxtLink
+          v-if="isAuthenticated"
+          :to="{ path: '/logout', query: { returnTo: route.fullPath } }"
+        >
+          Log Out
+        </NuxtLink>
         <NuxtLink v-else to="/customer-login" class="primary">Login</NuxtLink>
       </nav>
     </header>
