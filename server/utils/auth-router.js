@@ -17,7 +17,11 @@ const {
   createResetCode,
   createResetCodeEmail,
   hashResetCode,
+  hashResetToken,
   isResetSecretConfigured,
+  matchesResetCodeHash,
+  readResetToken,
+  RESET_COOKIE_NAME,
 } = require("./password-reset");
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
@@ -27,9 +31,11 @@ const PASSWORD_MAX_BYTES = 72;
 const DUMMY_BCRYPT_ROUNDS = 12;
 const RESET_CODE_DURATION_MS = 10 * 60 * 1000;
 const RESET_CODE_MAX_ATTEMPTS = 5;
+const RESET_CODE_PATTERN = /^\d{6}$/;
 const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PASSWORD_RESET_REQUEST_MESSAGE =
   "If an active account matches that email, a verification code will be sent.";
+const INVALID_RESET_CODE_MESSAGE = "Invalid or expired verification code.";
 const PASSWORD_ERROR =
   "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
 
@@ -412,6 +418,13 @@ function createAuthRouter({
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
   });
+  const resetCodeVerificationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many attempts. Please try again later." },
+  });
   const emailTestLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 3,
@@ -658,6 +671,126 @@ function createAuthRouter({
       });
     }
   });
+
+  router.post(
+    "/verify-reset-code",
+    resetCodeVerificationLimiter,
+    async (request, response) => {
+      const { email, code } = request.body ?? {};
+      if (!isValidEmailAddress(email) || typeof code !== "string" || !RESET_CODE_PATTERN.test(code)) {
+        return response
+          .status(400)
+          .json({ error: "Enter a valid email address and 6-digit code." });
+      }
+      if (!isDatabaseReady(request)) {
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+      const resetSecret = request.emailConfig?.passwordResetSecret;
+      if (!isResetSecretConfigured(resetSecret)) {
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+
+      try {
+        const { users } = getRequestCollections(request);
+        const now = new Date();
+        const user = await users.findOne(
+          { email: email.trim().toLowerCase(), isActive: true },
+          {
+            projection: {
+              _id: 1,
+              resetTokenHash: 1,
+              resetTokenExpires: 1,
+              resetCodeAttempts: 1,
+            },
+          },
+        );
+        if (
+          !user ||
+          !(user.resetTokenExpires instanceof Date) ||
+          user.resetTokenExpires <= now ||
+          typeof user.resetCodeAttempts !== "number" ||
+          user.resetCodeAttempts >= RESET_CODE_MAX_ATTEMPTS
+        ) {
+          if (user && user.resetTokenExpires instanceof Date && user.resetTokenExpires <= now) {
+            await users.updateOne(
+              { _id: user._id, resetTokenHash: user.resetTokenHash },
+              {
+                $unset: {
+                  resetTokenHash: "",
+                  resetTokenExpires: "",
+                  resetCodeAttempts: "",
+                },
+              },
+            );
+          }
+          return response
+            .status(400)
+            .json({ error: INVALID_RESET_CODE_MESSAGE });
+        }
+
+        const submittedHash = hashResetCode(code, resetSecret);
+        if (!matchesResetCodeHash(user.resetTokenHash, submittedHash)) {
+          await users.findOneAndUpdate(
+            {
+              _id: user._id,
+              resetTokenHash: user.resetTokenHash,
+              resetTokenExpires: { $gt: now },
+              resetCodeAttempts: { $lt: RESET_CODE_MAX_ATTEMPTS },
+            },
+            { $inc: { resetCodeAttempts: 1 } },
+            { projection: { _id: 1 }, returnDocument: "after" },
+          );
+          return response
+            .status(400)
+            .json({ error: INVALID_RESET_CODE_MESSAGE });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString("base64url");
+        const resetAuthorization = await users.findOneAndUpdate(
+          {
+            _id: user._id,
+            resetTokenHash: user.resetTokenHash,
+            resetTokenExpires: { $gt: now },
+            resetCodeAttempts: { $lt: RESET_CODE_MAX_ATTEMPTS },
+          },
+          {
+            $set: {
+              resetTokenHash: hashResetToken(resetToken),
+              updatedAt: now,
+            },
+            $unset: { resetCodeAttempts: "" },
+          },
+          {
+            projection: { _id: 1, resetTokenExpires: 1 },
+            returnDocument: "after",
+          },
+        );
+        if (!resetAuthorization) {
+          return response
+            .status(400)
+            .json({ error: INVALID_RESET_CODE_MESSAGE });
+        }
+
+        response.cookie(RESET_COOKIE_NAME, resetToken, {
+          httpOnly: true,
+          secure: isProduction(),
+          sameSite: "lax",
+          path: "/api/auth/reset-password",
+          maxAge: resetAuthorization.resetTokenExpires.getTime() - now.getTime(),
+        });
+        return response.status(200).json({ message: "Verification successful." });
+      } catch (error) {
+        console.error("Password reset code verification failed:", getErrorName(error));
+        return response
+          .status(503)
+          .json({ error: "Password recovery is temporarily unavailable." });
+      }
+    },
+  );
 
   router.post("/reset-password", recoveryLimiter, async (request, response) => {
     const validation = validatePasswordReset(request.body);

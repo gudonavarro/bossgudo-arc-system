@@ -124,6 +124,28 @@ function createEmailTestApp({
   return { app, token, emailConfig };
 }
 
+function createResetCodeTestApp({
+  code = "012345",
+  expiresAt = new Date(Date.now() + 10 * 60 * 1000),
+  attempts = 0,
+} = {}) {
+  const user = createLoginUser({
+    resetTokenHash: hashResetCode(code, testResetSecret),
+    resetTokenExpires: expiresAt,
+    resetCodeAttempts: attempts,
+  });
+  const model = fakeUserModel({ existingUser: user });
+  return {
+    app: createTestApp({
+      UserModel: model,
+      isDatabaseReady: () => true,
+    }),
+    model,
+    user,
+    code,
+  };
+}
+
 function fakeUserModel({
   existingUser = null,
   createError = null,
@@ -152,12 +174,23 @@ function fakeUserModel({
     },
     findOneAndUpdate(query, update, options) {
       calls.findOneAndUpdate.push({ query, update, options });
+      const expiryIsValid =
+        !query.resetTokenExpires?.$gt ||
+        existingUser?.resetTokenExpires > query.resetTokenExpires.$gt;
+      const attemptsAreValid =
+        !query.resetCodeAttempts?.$lt ||
+        (typeof existingUser?.resetCodeAttempts === "number" &&
+          existingUser.resetCodeAttempts < query.resetCodeAttempts.$lt);
       const matches =
         existingUser?.resetTokenHash === query.resetTokenHash &&
-        existingUser.resetTokenExpires > query.resetTokenExpires.$gt;
+        expiryIsValid &&
+        attemptsAreValid;
       if (matches) {
-        Object.assign(existingUser, update.$set);
-        for (const key of Object.keys(update.$unset)) delete existingUser[key];
+        Object.assign(existingUser, update.$set || {});
+        for (const [key, increment] of Object.entries(update.$inc || {})) {
+          existingUser[key] = (existingUser[key] || 0) + increment;
+        }
+        for (const key of Object.keys(update.$unset || {})) delete existingUser[key];
       }
       return fakeQuery(matches ? existingUser : null, calls);
     },
@@ -1139,6 +1172,76 @@ test("clears a reset code when email delivery fails without revealing the accoun
   assert.equal("resetTokenHash" in user, false);
   assert.equal("resetTokenExpires" in user, false);
   assert.equal("resetCodeAttempts" in user, false);
+});
+
+test("verifies a reset code once and returns a scoped authorization cookie", async () => {
+  const { app, user, code } = createResetCodeTestApp({ attempts: 2 });
+  const response = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: " ANA@EXAMPLE.COM ", code });
+  const reusedCodeResponse = await request(app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code });
+  const setCookie = response.headers["set-cookie"][0];
+  const resetToken = setCookie
+    .split(";")[0]
+    .slice("bossgudo_password_reset=".length);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { message: "Verification successful." });
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.match(setCookie, /Path=\/api\/auth\/reset-password/i);
+  assert.match(resetToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(
+    user.resetTokenHash,
+    crypto.createHash("sha256").update(resetToken).digest("hex"),
+  );
+  assert.equal("resetCodeAttempts" in user, false);
+  assert.equal(JSON.stringify(response.body).includes(code), false);
+  assert.equal(reusedCodeResponse.status, 400);
+});
+
+test("limits reset-code guesses and cleans up expired codes", async () => {
+  const { app, user, model } = createResetCodeTestApp({ code: "123456" });
+  const failures = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    failures.push(
+      await request(app)
+        .post("/api/auth/verify-reset-code")
+        .send({ email: "ana@example.com", code: "000000" }),
+    );
+  }
+  const expired = createResetCodeTestApp({
+    expiresAt: new Date(Date.now() - 1),
+  });
+  const expiredResponse = await request(expired.app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "012345" });
+
+  assert.ok(failures.every((response) => response.status === 400));
+  assert.equal(user.resetCodeAttempts, 5);
+  assert.equal(model.calls.findOneAndUpdate.length, 5);
+  assert.equal(expiredResponse.status, 400);
+  assert.equal("resetTokenHash" in expired.user, false);
+  assert.equal("resetTokenExpires" in expired.user, false);
+});
+
+test("does not distinguish unknown accounts from invalid reset codes", async () => {
+  const unknownApp = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+  const known = createResetCodeTestApp({ code: "123456" });
+  const unknownResponse = await request(unknownApp)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "unknown@example.com", code: "123456" });
+  const invalidResponse = await request(known.app)
+    .post("/api/auth/verify-reset-code")
+    .send({ email: "ana@example.com", code: "000000" });
+
+  assert.equal(unknownResponse.status, invalidResponse.status);
+  assert.deepEqual(unknownResponse.body, invalidResponse.body);
 });
 
 test("resets a password once and revokes existing sessions", async () => {
