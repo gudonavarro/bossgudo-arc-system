@@ -279,19 +279,24 @@ test("rejects invalid FAQ creation without touching the model", async () => {
 });
 
 test("updates FAQ content and activation with server-controlled audit fields", async () => {
-  const { app, token, updateCalls } = createFaqApp();
+  const creatorId = "444444444444444444444444";
+  const { app, token, updateCalls } = createFaqApp({
+    faqRecords: [createFaq({ createdBy: creatorId })],
+  });
   const response = await request(app)
     .patch(`/api/admin/faqs/${faqId}`)
     .set("Cookie", `bossgudo_session=${token}`)
     .send({
       answer: "Updated answer.",
       active: false,
+      createdBy: "555555555555555555555555",
       updatedBy: "222222222222222222222222",
     })
     .expect(200);
 
   assert.equal(response.body.faq.answer, "Updated answer.");
   assert.equal(response.body.faq.active, false);
+  assert.equal(response.body.faq.createdBy, creatorId);
   assert.equal(response.body.faq.updatedBy, adminId);
   assert.deepEqual(updateCalls, [
     {
