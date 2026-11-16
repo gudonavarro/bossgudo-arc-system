@@ -5,7 +5,10 @@ const express = require("express");
 const request = require("supertest");
 const test = require("node:test");
 const { createAuthRouter } = require("../server/utils/auth-router");
-const { SESSION_COOKIE_NAME } = require("../server/utils/authenticate");
+const {
+  SESSION_COOKIE_NAME,
+  createRoleAuthenticationMiddleware,
+} = require("../server/utils/authenticate");
 
 const validRegistration = {
   firstName: "  Ana ",
@@ -80,6 +83,7 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     updateOne: [],
     select: [],
     create: [],
+    created: [],
   };
   return {
     calls,
@@ -115,7 +119,13 @@ function fakeUserModel({ existingUser = null, createError = null } = {}) {
     async create(user) {
       calls.create.push(user);
       if (createError) throw createError;
-      return { id: "user-1", ...user };
+      const createdUser = {
+        id: "user-1",
+        ...user,
+        password: await bcrypt.hash(user.password, 4),
+      };
+      calls.created.push(createdUser);
+      return createdUser;
     },
   };
 }
@@ -171,6 +181,7 @@ function createLoginUser(overrides = {}) {
     firstName: "Ana",
     lastName: "Cruz",
     email: "ana@example.com",
+    phoneNumber: "+639171234567",
     role: "customer",
     isActive: true,
     password: bcrypt.hashSync("StrongPass1!", 4),
@@ -235,7 +246,7 @@ test("creates a customer with normalized details and a minimal safe response", a
     .send({ ...validRegistration, role: "admin", resetTokenHash: "attacker-value" });
 
   assert.equal(response.status, 201);
-  const storedUser = model.calls.create[0];
+  const storedUser = model.calls.created[0];
   assert.equal(storedUser.firstName, "Ana");
   assert.equal(storedUser.lastName, "Cruz");
   assert.equal(storedUser.email, "ana@example.com");
@@ -246,7 +257,6 @@ test("creates a customer with normalized details and a minimal safe response", a
     await bcrypt.compare(validRegistration.password, storedUser.password),
     true,
   );
-  assert.ok(storedUser.passwordChangedAt instanceof Date);
   assert.ok(storedUser.createdAt instanceof Date);
   assert.ok(storedUser.updatedAt instanceof Date);
   assert.deepEqual(response.body.user, {
@@ -431,6 +441,127 @@ test("rejects inactive users with the same unauthorized response", async () => {
   assert.deepEqual(response.body, { error: "Invalid email or password." });
 });
 
+test("rejects administrator accounts from customer login", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel({
+      existingUser: createLoginUser({ role: "admin" }),
+    }),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(response.body, { error: "Invalid email or password." });
+  assert.equal(response.headers["set-cookie"], undefined);
+});
+
+test("administrator login accepts only active administrator accounts", async () => {
+  const adminUser = createLoginUser({ role: "admin" });
+  const adminSessions = fakeSessionModel();
+  const adminApp = createTestApp({
+    UserModel: fakeUserModel({ existingUser: adminUser }),
+    SessionModel: adminSessions,
+    isDatabaseReady: () => true,
+    isProduction: () => true,
+  });
+  const customerApp = createTestApp({
+    UserModel: fakeUserModel({ existingUser: createLoginUser() }),
+    SessionModel: fakeSessionModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const adminResponse = await request(adminApp)
+    .post("/api/auth/admin/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+  const customerResponse = await request(customerApp)
+    .post("/api/auth/admin/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+
+  assert.equal(adminResponse.status, 200);
+  assert.equal(adminResponse.body.user.role, "admin");
+  assert.equal(adminSessions.calls.create.length, 1);
+  assert.deepEqual(adminResponse.body.user, {
+    id: "user-1",
+    firstName: "Ana",
+    lastName: "Cruz",
+    email: "ana@example.com",
+    role: "admin",
+  });
+  const [adminCookie = ""] = adminResponse.headers["set-cookie"] ?? [];
+  assert.match(adminCookie, /HttpOnly/);
+  assert.match(adminCookie, /Secure/);
+  assert.match(adminCookie, /SameSite=Lax/);
+  const rawToken = adminCookie
+    .split(";")[0]
+    .slice(`${SESSION_COOKIE_NAME}=`.length);
+  assert.equal(
+    adminSessions.calls.create[0].tokenHash,
+    crypto.createHash("sha256").update(rawToken).digest("hex"),
+  );
+  assert.notEqual(adminSessions.calls.create[0].tokenHash, rawToken);
+  assert.equal(customerResponse.status, 401);
+  assert.equal(customerResponse.headers["set-cookie"], undefined);
+  assert.deepEqual(customerResponse.body, {
+    error: "Invalid email or password.",
+  });
+
+  const inactiveAdminApp = createTestApp({
+    UserModel: fakeUserModel({
+      existingUser: createLoginUser({ role: "admin", isActive: false }),
+    }),
+    SessionModel: fakeSessionModel(),
+    isDatabaseReady: () => true,
+  });
+  const inactiveAdminResponse = await request(inactiveAdminApp)
+    .post("/api/auth/admin/login")
+    .send({ email: "ana@example.com", password: "StrongPass1!" });
+  assert.equal(inactiveAdminResponse.status, 401);
+  assert.equal(inactiveAdminResponse.headers["set-cookie"], undefined);
+});
+
+test("reusable administrator middleware rejects customer sessions", async () => {
+  async function checkRole(role) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const session = {
+      _id: "session-1",
+      userId: "user-1",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const app = express();
+    app.get(
+      "/admin",
+      createRoleAuthenticationMiddleware("admin", {
+        isDatabaseReady: () => true,
+        getCollections: () => ({
+          sessions: { findOne: async () => session },
+          users: {
+            findOne: async () => ({
+                _id: "user-1",
+                firstName: "Ana",
+                lastName: "Cruz",
+                email: "ana@example.com",
+                role,
+                isActive: true,
+            }),
+          },
+        }),
+      }),
+      (_request, response) => response.json({ access: "granted" }),
+    );
+    return request(app)
+      .get("/admin")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+  }
+
+  const customerResponse = await checkRole("customer");
+  const adminResponse = await checkRole("admin");
+  assert.equal(customerResponse.status, 403);
+  assert.equal(adminResponse.status, 200);
+});
+
 test("protects the current-user route and rejects missing and invalid cookies", async () => {
   const app = createTestApp({
     UserModel: fakeUserModel(),
@@ -469,7 +600,12 @@ test("authenticates using a hashed token, active user, and returns minimal ident
     expiresAt: new Date(Date.now() + 60_000),
   };
   const sessions = fakeSessionModel({ session });
-  const userModel = fakeUserModel({ existingUser: createLoginUser() });
+  const userModel = fakeUserModel({
+    existingUser: createLoginUser({
+      resetTokenHash: "must-not-be-returned",
+      resetTokenExpires: new Date(),
+    }),
+  });
   const app = createTestApp({
     UserModel: userModel,
     SessionModel: sessions,
@@ -489,8 +625,12 @@ test("authenticates using a hashed token, active user, and returns minimal ident
     firstName: "Ana",
     lastName: "Cruz",
     email: "ana@example.com",
+    phoneNumber: "+639171234567",
     role: "customer",
   });
+  assert.equal("password" in response.body.user, false);
+  assert.equal("resetTokenHash" in response.body.user, false);
+  assert.equal("resetTokenExpires" in response.body.user, false);
 });
 
 test("rejects expired sessions and inactive accounts", async () => {
@@ -553,28 +693,64 @@ test("rejects sessions created before the user's password was changed", async ()
   assert.equal(response.status, 401);
 });
 
-test("logs out by revoking the session and clearing the cookie", async () => {
-  const token = crypto.randomBytes(32).toString("base64url");
-  const session = {
-    _id: "session-1",
-    userId: "user-1",
-    expiresAt: new Date(Date.now() + 60_000),
-  };
-  const sessions = fakeSessionModel({ session });
+test("logs out customers and administrators by revoking only the current session", async () => {
+  for (const role of ["customer", "admin"]) {
+    const token = crypto.randomBytes(32).toString("base64url");
+    const sessionId = `session-${role}`;
+    const session = {
+      _id: sessionId,
+      userId: "user-1",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+    const sessions = fakeSessionModel({ session });
+    const app = createTestApp({
+      UserModel: fakeUserModel({
+        existingUser: createLoginUser({ role }),
+      }),
+      SessionModel: sessions,
+      isDatabaseReady: () => true,
+    });
+
+    const response = await request(app)
+      .post("/api/auth/logout")
+      .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(sessions.calls.deleteOne, [{ _id: sessionId }]);
+    assert.match(
+      response.headers["set-cookie"][0],
+      new RegExp(`^${SESSION_COOKIE_NAME}=;`),
+    );
+    assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
+  }
+});
+
+test("clears the session cookie when logout has no valid session", async () => {
   const app = createTestApp({
-    UserModel: fakeUserModel({ existingUser: createLoginUser() }),
-    SessionModel: sessions,
+    UserModel: fakeUserModel(),
+    SessionModel: fakeSessionModel(),
     isDatabaseReady: () => true,
   });
 
-  const response = await request(app)
+  const noCookie = await request(app).post("/api/auth/logout");
+  const expiredCookie = await request(app)
     .post("/api/auth/logout")
-    .set("Cookie", `${SESSION_COOKIE_NAME}=${token}`);
+    .set(
+      "Cookie",
+      `${SESSION_COOKIE_NAME}=${crypto.randomBytes(32).toString("base64url")}`,
+    );
 
-  assert.equal(response.status, 200);
-  assert.deepEqual(sessions.calls.deleteOne, [{ _id: "session-1" }]);
-  assert.match(response.headers["set-cookie"][0], new RegExp(`^${SESSION_COOKIE_NAME}=;`));
-  assert.match(response.headers["set-cookie"][0], /Expires=Thu, 01 Jan 1970/i);
+  assert.equal(noCookie.status, 200);
+  assert.equal(expiredCookie.status, 200);
+  assert.equal(noCookie.body.message, "Logged out.");
+  assert.match(
+    noCookie.headers["set-cookie"][0],
+    new RegExp(`^${SESSION_COOKIE_NAME}=;`),
+  );
+  assert.match(
+    expiredCookie.headers["set-cookie"][0],
+    new RegExp(`^${SESSION_COOKIE_NAME}=;`),
+  );
 });
 
 test("does not claim email recovery when SMTP is not configured", async () => {

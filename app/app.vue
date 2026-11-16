@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const route = useRoute();
-const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
+const { isAuthenticated, isCustomer } = useAuth();
 
 const currentPage = computed(() => {
   let start = 0;
@@ -20,7 +20,6 @@ const legacyPages = new Set([
 ]);
 const authPages = new Set(["customer-login", "register"]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
-const isAuthenticated = computed(() => Boolean(authUser.value));
 const navigationVisible = computed(
   () => legacyPageVisible.value || authPages.has(currentPage.value),
 );
@@ -47,9 +46,14 @@ useHead(() => ({
       <NuxtLink v-for="item in navItems" :key="item.to" :to="item.to" :data-page="item.to.replace(/^\//, '') || 'home'">
         {{ item.label }}
       </NuxtLink>
-      <NuxtLink v-if="isAuthenticated" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
-      <NuxtLink v-if="isAuthenticated" to="/logout">Log Out</NuxtLink>
-      <NuxtLink v-else to="/customer-login" class="primary">Login</NuxtLink>
+      <NuxtLink v-if="isCustomer" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
+      <NuxtLink
+        v-if="isAuthenticated"
+        :to="{ path: '/logout', query: { returnTo: route.fullPath } }"
+      >
+        Log Out
+      </NuxtLink>
+      <NuxtLink v-else-if="!isAuthenticated" to="/customer-login" class="primary">Login</NuxtLink>
     </nav>
   </header>
 

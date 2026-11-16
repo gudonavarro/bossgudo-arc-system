@@ -85,6 +85,7 @@ function toast(msg) {
   const t = document.getElementById("toast");
   if (!t) return;
   t.textContent = msg;
+  t.classList.remove("toast-success");
   t.classList.add("show");
   clearTimeout(window._tt);
   window._tt = setTimeout(() => t.classList.remove("show"), 3400);

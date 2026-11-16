@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import {
+  normalizeLoginEmail,
+  validateLoginCredentials,
+} from "~/utils/customer-auth";
+
 defineOptions({ name: "AdminLogin" });
 useHead({ title: "Admin Login | BOSSGUDO A.R.C. AQUA FARM" });
 
@@ -6,9 +11,40 @@ const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
 const errorMessage = ref("");
+const pending = ref(false);
+const { loginAdmin } = useAuth();
+const { showToast } = useToast();
 
-function submit() {
-  errorMessage.value = "Administrator sign-in is not connected yet. Your credentials were not sent.";
+async function submit() {
+  if (pending.value) return;
+
+  const validationError = validateLoginCredentials(email.value, password.value);
+  if (validationError) {
+    errorMessage.value = validationError;
+    return;
+  }
+
+  email.value = normalizeLoginEmail(email.value);
+  pending.value = true;
+  errorMessage.value = "";
+  try {
+    await loginAdmin(email.value, password.value);
+  } catch (error) {
+    const responseError = error as Error & {
+      data?: { error?: string };
+    };
+    errorMessage.value =
+      responseError.data?.error ||
+      responseError.message ||
+      "Unable to log in.";
+    password.value = "";
+    return;
+  } finally {
+    pending.value = false;
+  }
+
+  await navigateTo("/admin", { replace: true });
+  showToast("Login successful!", "success");
 }
 </script>
 
@@ -36,13 +72,12 @@ function submit() {
       <div class="login-card">
         <div class="login-card-header">
           <h2>Admin Login</h2>
-          <p class="muted">Admin sign-in is not connected. This page does not submit or verify credentials.</p>
         </div>
 
-        <form @submit.prevent="submit">
+        <form novalidate @submit.prevent="submit">
           <div class="field">
             <label for="admin-email">Email address</label>
-            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required>
+            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
           </div>
 
           <div class="field">
@@ -55,10 +90,13 @@ function submit() {
                 autocomplete="current-password"
                 placeholder="••••••••"
                 required
+                :disabled="pending"
+                @input="errorMessage = ''"
               >
               <button
                 class="password-toggle"
                 type="button"
+                :disabled="pending"
                 :aria-label="showPassword ? 'Hide password' : 'Show password'"
                 @click="showPassword = !showPassword"
               >
@@ -67,7 +105,9 @@ function submit() {
             </div>
           </div>
 
-          <button class="primary login-submit" type="submit">Log In</button>
+          <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
+            {{ pending ? "Signing in..." : "Log In" }}
+          </button>
           <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>
         </form>
 

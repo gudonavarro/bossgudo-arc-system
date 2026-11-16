@@ -1,14 +1,14 @@
-export default defineNuxtRouteMiddleware(async (to) => {
-  const { data, error } = await useFetch<{ user: unknown }>('/api/auth/session', {
-    credentials: 'include',
-    cache: 'no-store',
-  });
+import { getSafeRedirectPath } from "~/utils/customer-auth";
 
-  if (!error.value && data.value?.user) {
-    const next = to.query.next;
-    const redirectTarget = typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
-      ? next
-      : "/";
+export default defineNuxtRouteMiddleware(async (to) => {
+  const { initialize } = useAuth();
+  const user = await initialize();
+
+  if (user) {
+    const redirectTarget =
+      user.role === "customer"
+        ? getSafeRedirectPath(to.query.next) ?? "/"
+        : "/";
     return navigateTo(redirectTarget, { replace: true });
   }
 });

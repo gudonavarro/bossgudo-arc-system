@@ -1,8 +1,13 @@
 const crypto = require("node:crypto");
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcrypt");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
 const { ObjectId } = require("mongodb");
+const {
+  clearSessionCookie,
+  createSession,
+  invalidateSession,
+} = require("./session");
 const {
   isPasswordResetMailConfigured,
   sendPasswordResetEmail,
@@ -17,7 +22,6 @@ const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_BYTES = 72;
 const DUMMY_BCRYPT_ROUNDS = 12;
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const RESET_TOKEN_DURATION_MS = 30 * 60 * 1000;
 const RESET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const PASSWORD_ERROR =
@@ -158,6 +162,9 @@ function compareAgainstDummyHash(password) {
 }
 
 function getCollections(request) {
+  if (request.authCollections) {
+    return request.authCollections;
+  }
   const database = request.mongoDb;
   if (!database) {
     throw new Error("Database is unavailable.");
@@ -176,7 +183,8 @@ function asObjectId(value) {
 
 function createAuthRouter({
   getCollections: getRequestCollections = getCollections,
-  isDatabaseReady = (request) => Boolean(request.mongoDb),
+  isDatabaseReady = (request) =>
+    Boolean(request.authCollections || request.mongoDb),
   isProduction = () => process.env.NODE_ENV === "production",
   passwordResetMailConfigured = isPasswordResetMailConfigured,
   sendResetEmail = sendPasswordResetEmail,
@@ -213,13 +221,21 @@ function createAuthRouter({
     respondUnauthenticated: (_request, response) =>
       response.status(200).json({ user: null }),
   });
+  const authenticateForLogout = createAuthenticationMiddleware({
+    getCollections: getRequestCollections,
+    isDatabaseReady,
+    respondUnauthenticated: (_request, response) => {
+      clearSessionCookie(response, isProduction());
+      return response.status(200).json({ message: "Logged out." });
+    },
+  });
 
   router.use((_request, response, next) => {
     response.set("Cache-Control", "no-store");
     next();
   });
 
-  router.post("/login", loginLimiter, async (request, response) => {
+  const login = (requiredRole) => async (request, response) => {
     const validation = validateLogin(request.body);
     if (validation.error) {
       return response.status(400).json({ error: validation.error });
@@ -251,26 +267,21 @@ function createAuthRouter({
         ? await bcrypt.compare(validation.value.password, user.password)
         : await compareAgainstDummyHash(validation.value.password);
 
-      if (!user || !passwordMatches || !user.isActive) {
+      if (!user || !passwordMatches || !user.isActive || user.role !== requiredRole) {
         return response.status(401).json({ error: "Invalid email or password." });
       }
 
-      const token = crypto.randomBytes(32).toString("base64url");
-      const now = new Date();
-      await sessions.insertOne({
-        userId: user._id || user.id,
-        tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
-        expiresAt: new Date(Date.now() + SESSION_DURATION_MS),
-        createdAt: now,
-        updatedAt: now,
-      });
+      const { token, expiresAt } = await createSession(
+        sessions,
+        user._id || user.id,
+      );
 
       response.cookie(SESSION_COOKIE_NAME, token, {
         httpOnly: true,
         secure: isProduction(),
         sameSite: "lax",
         path: "/",
-        maxAge: SESSION_DURATION_MS,
+        maxAge: expiresAt.getTime() - Date.now(),
       });
 
       return response.status(200).json({
@@ -289,7 +300,10 @@ function createAuthRouter({
         .status(500)
         .json({ error: "Unable to log in right now." });
     }
-  });
+  };
+
+  router.post("/login", loginLimiter, login("customer"));
+  router.post("/admin/login", loginLimiter, login("admin"));
 
   router.get("/me", authenticate, (request, response) => {
     return response.status(200).json({ user: request.authUser });
@@ -299,16 +313,11 @@ function createAuthRouter({
     return response.status(200).json({ user: request.authUser });
   });
 
-  router.post("/logout", authenticate, async (request, response) => {
+  router.post("/logout", authenticateForLogout, async (request, response) => {
     try {
       const { sessions } = getRequestCollections(request);
-      await sessions.deleteOne({ _id: asObjectId(request.authSessionId) });
-      response.clearCookie(SESSION_COOKIE_NAME, {
-        httpOnly: true,
-        secure: isProduction(),
-        sameSite: "lax",
-        path: "/",
-      });
+      await invalidateSession(sessions, asObjectId(request.authSessionId));
+      clearSessionCookie(response, isProduction());
       return response.status(200).json({ message: "Logged out." });
     } catch (error) {
       console.error("Logout request failed:", getErrorName(error));
@@ -467,10 +476,9 @@ function createAuthRouter({
         lastName: value.lastName,
         email: value.email,
         phoneNumber: value.phoneNumber,
-        password: await bcrypt.hash(value.password, 12),
+        password: value.password,
         role: "customer",
         isActive: true,
-        passwordChangedAt: now,
         createdAt: now,
         updatedAt: now,
       };

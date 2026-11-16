@@ -1,6 +1,6 @@
 import { MongoClient, type Db } from "mongodb";
 
-interface MongoRuntimeConfig {
+export interface MongoRuntimeConfig {
   mongodbUri?: string;
   mongodbDatabase?: string;
 }
@@ -18,7 +18,7 @@ export async function connectMongo({
     throw new Error("MongoDB configuration is missing.");
   }
 
-  if (connection) {
+  if (connection !== undefined) {
     if (mongodbUri !== connectionUri || mongodbDatabase !== databaseName) {
       throw new Error("MongoDB configuration changed after connecting.");
     }
@@ -34,17 +34,35 @@ export async function connectMongo({
       await mongoClient.connect();
       const db = mongoClient.db(mongodbDatabase);
       await Promise.all([
-        db.collection("users").createIndex({ email: 1 }, { unique: true }),
-        db.collection("users").createIndex({ phoneNumber: 1 }, { unique: true }),
+        db.collection("users").createIndex(
+          { email: 1 },
+          { unique: true },
+          undefined,
+        ),
+        db.collection("users").createIndex(
+          { phoneNumber: 1 },
+          { unique: true },
+          undefined,
+        ),
         db.collection("users").createIndex(
           { resetTokenHash: 1 },
           { unique: true, sparse: true },
+          undefined,
         ),
-        db.collection("sessions").createIndex({ tokenHash: 1 }, { unique: true }),
-        db.collection("sessions").createIndex({ userId: 1 }),
+        db.collection("sessions").createIndex(
+          { tokenHash: 1 },
+          { unique: true },
+          undefined,
+        ),
+        db.collection("sessions").createIndex(
+          { userId: 1 },
+          undefined,
+          undefined,
+        ),
         db.collection("sessions").createIndex(
           { expiresAt: 1 },
           { expireAfterSeconds: 0 },
+          undefined,
         ),
       ]);
       return db;
@@ -65,6 +83,16 @@ export async function getMongoDatabase(
   config: MongoRuntimeConfig,
 ): Promise<Db> {
   return connectMongo(config);
+}
+
+export async function getMongoClient(
+  config: MongoRuntimeConfig,
+): Promise<MongoClient> {
+  await connectMongo(config);
+  if (!client) {
+    throw new Error("MongoDB client is unavailable after connecting.");
+  }
+  return client;
 }
 
 export async function pingMongo(config: MongoRuntimeConfig): Promise<void> {

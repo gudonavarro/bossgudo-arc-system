@@ -1,7 +1,6 @@
 const crypto = require("node:crypto");
 const { ObjectId } = require("mongodb");
-
-const SESSION_COOKIE_NAME = "bossgudo_session";
+const { SESSION_COOKIE_NAME } = require("./session");
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 function readSessionToken(request) {
@@ -29,6 +28,9 @@ function hashSessionToken(token) {
 }
 
 function getCollections(request) {
+  if (request.authCollections) {
+    return request.authCollections;
+  }
   const database = request.mongoDb;
   if (!database) {
     throw new Error("Database is unavailable.");
@@ -47,7 +49,9 @@ function asObjectId(value) {
 
 function createAuthenticationMiddleware({
   getCollections: getRequestCollections = getCollections,
-  isDatabaseReady = (request) => Boolean(request.mongoDb),
+  isDatabaseReady = (request) =>
+    Boolean(request.authCollections || request.mongoDb),
+  requiredRole,
   respondUnauthenticated = (_request, response) =>
     response.status(401).json({ error: "Authentication required." }),
 } = {}) {
@@ -79,6 +83,7 @@ function createAuthenticationMiddleware({
             firstName: 1,
             lastName: 1,
             email: 1,
+            phoneNumber: 1,
             role: 1,
             isActive: 1,
             passwordChangedAt: 1,
@@ -87,8 +92,11 @@ function createAuthenticationMiddleware({
       );
       const passwordChangedAfterSession =
         user?.passwordChangedAt?.getTime() > session.createdAt?.getTime();
-      if (!user || !user.isActive || passwordChangedAfterSession) {
+      if (!user?.isActive || passwordChangedAfterSession) {
         return respondUnauthenticated(request, response);
+      }
+      if (requiredRole && user.role !== requiredRole) {
+        return response.status(403).json({ error: "Forbidden." });
       }
 
       request.authUser = {
@@ -96,6 +104,7 @@ function createAuthenticationMiddleware({
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
+        phoneNumber: user.phoneNumber,
         role: user.role,
       };
       request.authSessionId = session._id;
@@ -110,7 +119,12 @@ function createAuthenticationMiddleware({
   };
 }
 
+function createRoleAuthenticationMiddleware(requiredRole, options = {}) {
+  return createAuthenticationMiddleware({ ...options, requiredRole });
+}
+
 module.exports = {
   SESSION_COOKIE_NAME,
   createAuthenticationMiddleware,
+  createRoleAuthenticationMiddleware,
 };
