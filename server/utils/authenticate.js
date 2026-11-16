@@ -83,6 +83,7 @@ function createAuthenticationMiddleware({
             firstName: 1,
             lastName: 1,
             email: 1,
+            phoneNumber: 1,
             role: 1,
             isActive: 1,
             passwordChangedAt: 1,
@@ -103,6 +104,7 @@ function createAuthenticationMiddleware({
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
+        phoneNumber: user.phoneNumber,
         role: user.role,
       };
       request.authSessionId = session._id;

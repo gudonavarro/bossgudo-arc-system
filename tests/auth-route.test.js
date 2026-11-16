@@ -181,6 +181,7 @@ function createLoginUser(overrides = {}) {
     firstName: "Ana",
     lastName: "Cruz",
     email: "ana@example.com",
+    phoneNumber: "+639171234567",
     role: "customer",
     isActive: true,
     password: bcrypt.hashSync("StrongPass1!", 4),
@@ -565,7 +566,12 @@ test("authenticates using a hashed token, active user, and returns minimal ident
     expiresAt: new Date(Date.now() + 60_000),
   };
   const sessions = fakeSessionModel({ session });
-  const userModel = fakeUserModel({ existingUser: createLoginUser() });
+  const userModel = fakeUserModel({
+    existingUser: createLoginUser({
+      resetTokenHash: "must-not-be-returned",
+      resetTokenExpires: new Date(),
+    }),
+  });
   const app = createTestApp({
     UserModel: userModel,
     SessionModel: sessions,
@@ -585,8 +591,12 @@ test("authenticates using a hashed token, active user, and returns minimal ident
     firstName: "Ana",
     lastName: "Cruz",
     email: "ana@example.com",
+    phoneNumber: "+639171234567",
     role: "customer",
   });
+  assert.equal("password" in response.body.user, false);
+  assert.equal("resetTokenHash" in response.body.user, false);
+  assert.equal("resetTokenExpires" in response.body.user, false);
 });
 
 test("rejects expired sessions and inactive accounts", async () => {
