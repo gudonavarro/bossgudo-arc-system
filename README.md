@@ -48,6 +48,22 @@ Nuxt creates these routes from the page files in `app/pages`:
   The app-wide session restoration may still call `GET /api/auth/session`. The
   page does not grant access to `/admin`.
 
+## Customer registration API
+
+`POST /api/auth/register` accepts `firstName`, `lastName`, `email`,
+`phoneNumber`, `password`, and `confirmPassword`. Names are limited to 80
+characters, email is normalized to lowercase, and Philippine mobile numbers
+are normalized to `+63` format. Passwords must be at least eight characters,
+include uppercase and lowercase letters, a number, and a symbol, and fit
+bcrypt's 72-byte limit.
+
+A successful request returns HTTP 201 with a minimal customer profile and does
+not create a login session. The response never includes credentials. Validation
+errors return HTTP 400 with `error` and `fieldErrors`; duplicate email or phone
+details return HTTP 409; unavailable MongoDB returns HTTP 503. New customer
+records are saved in the `users` collection through the shared Mongoose
+connection, with passwords hashed before persistence.
+
 The `auth` and `admin` middleware provide frontend navigation behavior only;
 they are not a security boundary. Server-side endpoints and resources must
 enforce authorization independently. The application currently includes
