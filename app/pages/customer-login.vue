@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+  getSafeRedirectPath,
+  normalizeLoginEmail,
+  validateLoginCredentials,
+} from "~/utils/customer-auth";
+
 defineOptions({ name: "CustomerLogin" });
 definePageMeta({ middleware: ["guest"] });
 useHead({ title: "Customer Login | BOSSGUDO A.R.C. AQUA FARM" });
@@ -9,14 +15,10 @@ const password = ref("");
 const errorMessage = ref("");
 const pending = ref(false);
 const showPassword = ref(false);
-const authUser = useState<{ id?: string; firstName?: string } | null>("auth:user", () => null);
-const authReady = useState<boolean>("auth:ready", () => false);
+const { login } = useAuth();
 
 function getSafeNextPath() {
-  const next = route.query.next;
-  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
-    ? next
-    : null;
+  return getSafeRedirectPath(route.query.next);
 }
 
 function getPostLoginTarget() {
@@ -28,44 +30,34 @@ const registerTarget = computed(() => {
   return next ? { path: "/register", query: { next } } : "/register";
 });
 
-watch(
-  () => [authReady.value, authUser.value],
-  async ([ready, user]) => {
-    if (ready && user) {
-      await navigateTo(getPostLoginTarget(), { replace: true });
-    }
-  },
-  { immediate: true },
-);
-
 async function submit() {
+  if (pending.value) return;
+
+  const validationError = validateLoginCredentials(email.value, password.value);
+  if (validationError) {
+    errorMessage.value = validationError;
+    return;
+  }
+
+  email.value = normalizeLoginEmail(email.value);
   pending.value = true;
   errorMessage.value = "";
   try {
-    const result = await $fetch<{ user: { id: string; firstName: string } }>("/api/auth/login", {
-      method: "POST",
-      body: { email: email.value, password: password.value },
-    });
-
-    authUser.value = result.user ?? null;
-    authReady.value = true;
-    window.dispatchEvent(
-      new CustomEvent("app:session-change", { detail: result.user }),
-    );
-
-    await navigateTo(getPostLoginTarget(), { replace: true });
+    await login(email.value, password.value);
   } catch (error) {
-    const responseError = error as {
+    const responseError = error as Error & {
       data?: { error?: string };
-      message?: string;
     };
     errorMessage.value =
       responseError.data?.error ||
       responseError.message ||
       "Unable to log in.";
+    password.value = "";
   } finally {
     pending.value = false;
   }
+
+  await navigateTo(getPostLoginTarget(), { replace: true });
 }
 </script>
 
@@ -104,7 +96,7 @@ async function submit() {
         <form @submit.prevent="submit">
           <div class="field">
             <label for="email">Email address</label>
-            <input id="email" v-model="email" type="email" autocomplete="email" placeholder="name@example.com" required>
+            <input id="email" v-model="email" type="email" autocomplete="email" placeholder="name@example.com" required :disabled="pending">
           </div>
 
           <div class="field">
@@ -117,10 +109,12 @@ async function submit() {
                 autocomplete="current-password"
                 placeholder="••••••••"
                 required
+                :disabled="pending"
               >
               <button
                 class="password-toggle"
                 type="button"
+                :disabled="pending"
                 :aria-label="showPassword ? 'Hide password' : 'Show password'"
                 @click="showPassword = !showPassword"
               >
