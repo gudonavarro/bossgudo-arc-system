@@ -11,8 +11,9 @@ const email = ref("");
 const password = ref("");
 const showPassword = ref(false);
 const errorMessage = ref("");
+const { loginAdmin } = useAuth();
 
-function submit() {
+async function submit() {
   const validationError = validateLoginCredentials(email.value, password.value);
   if (validationError) {
     errorMessage.value = validationError;
@@ -20,7 +21,19 @@ function submit() {
   }
 
   email.value = normalizeLoginEmail(email.value);
-  errorMessage.value = "Administrator sign-in is not connected yet. Your credentials were not sent.";
+  errorMessage.value = "";
+  try {
+    await loginAdmin(email.value, password.value);
+  } catch (error) {
+    const responseError = error as Error & {
+      data?: { error?: string };
+    };
+    errorMessage.value =
+      responseError.data?.error ||
+      responseError.message ||
+      "Unable to log in.";
+    password.value = "";
+  }
 }
 </script>
 
@@ -48,7 +61,6 @@ function submit() {
       <div class="login-card">
         <div class="login-card-header">
           <h2>Admin Login</h2>
-          <p class="muted">Admin sign-in is not connected. This page does not submit or verify credentials.</p>
         </div>
 
         <form novalidate @submit.prevent="submit">
