@@ -321,6 +321,7 @@ test("creates a customer with normalized details and a minimal safe response", a
   assert.equal(JSON.stringify(response.body).includes("StrongPass1!"), false);
   assert.equal("password" in response.body.user, false);
   assert.equal("resetTokenHash" in response.body.user, false);
+  assert.equal(response.headers["set-cookie"], undefined);
 });
 
 test("authenticates a customer immediately after successful registration", async () => {
@@ -359,6 +360,35 @@ test("returns conflict for an existing account", async () => {
   assert.equal(model.calls.create.length, 0);
   assert.equal(model.calls.findOne[0].$or[0].email, "ana@example.com");
   assert.equal(model.calls.findOne[0].$or[1].phoneNumber, "+639171234567");
+});
+
+test("identifies which registration fields are already in use", async () => {
+  const model = fakeUserModel({
+    existingUser: {
+      _id: "existing",
+      email: "ana@example.com",
+      phoneNumber: "+639171234567",
+    },
+  });
+  const app = createTestApp({
+    UserModel: model,
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app)
+    .post("/api/auth/register")
+    .send(validRegistration);
+
+  assert.equal(response.status, 409);
+  assert.equal(
+    response.body.fieldErrors.email,
+    "An account with this email already exists.",
+  );
+  assert.equal(
+    response.body.fieldErrors.phoneNumber,
+    "This phone number is already registered.",
+  );
+  assert.equal(model.calls.create.length, 0);
 });
 
 test("maps duplicate index races to conflict", async () => {
