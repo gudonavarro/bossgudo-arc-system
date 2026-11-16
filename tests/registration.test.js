@@ -49,6 +49,19 @@ test("reports invalid registration fields independently", () => {
   );
 });
 
+test("enforces registration name and email length limits", () => {
+  const errors = validateRegistration({
+    ...validRegistration,
+    firstName: "A".repeat(81),
+    lastName: "B".repeat(81),
+    email: `${"a".repeat(246)}@example.com`,
+  });
+
+  assert.equal(errors.firstName, "Enter a first name of at most 80 characters.");
+  assert.equal(errors.lastName, "Enter a last name of at most 80 characters.");
+  assert.equal(errors.email, "Enter a valid email address.");
+});
+
 test("rejects passwords that exceed bcrypt's UTF-8 byte limit", () => {
   const password = `StrongPass1!${"é".repeat(31)}`;
   const errors = validateRegistration({

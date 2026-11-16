@@ -130,22 +130,22 @@ function clearFieldError(field: RegistrationField) {
         <form novalidate @submit.prevent="submit">
           <div class="field">
             <label for="firstName">FIRST NAME</label>
-            <input id="firstName" v-model="form.firstName" autocomplete="given-name" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.firstName)" :aria-describedby="fieldErrors.firstName ? 'firstName-error' : undefined" @input="clearFieldError('firstName')">
+            <input id="firstName" v-model="form.firstName" autocomplete="given-name" maxlength="80" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.firstName)" :aria-describedby="fieldErrors.firstName ? 'firstName-error' : undefined" @input="clearFieldError('firstName')">
             <small v-if="fieldErrors.firstName" id="firstName-error" class="field-error show">{{ fieldErrors.firstName }}</small>
           </div>
           <div class="field">
             <label for="lastName">LAST NAME</label>
-            <input id="lastName" v-model="form.lastName" autocomplete="family-name" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.lastName)" :aria-describedby="fieldErrors.lastName ? 'lastName-error' : undefined" @input="clearFieldError('lastName')">
+            <input id="lastName" v-model="form.lastName" autocomplete="family-name" maxlength="80" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.lastName)" :aria-describedby="fieldErrors.lastName ? 'lastName-error' : undefined" @input="clearFieldError('lastName')">
             <small v-if="fieldErrors.lastName" id="lastName-error" class="field-error show">{{ fieldErrors.lastName }}</small>
           </div>
           <div class="field">
             <label for="email">EMAIL ADDRESS</label>
-            <input id="email" v-model="form.email" type="email" autocomplete="email" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.email)" :aria-describedby="fieldErrors.email ? 'email-error' : undefined" @input="clearFieldError('email')">
+            <input id="email" v-model="form.email" type="email" autocomplete="email" maxlength="254" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.email)" :aria-describedby="fieldErrors.email ? 'email-error' : undefined" @input="clearFieldError('email')">
             <small v-if="fieldErrors.email" id="email-error" class="field-error show">{{ fieldErrors.email }}</small>
           </div>
           <div class="field">
             <label for="phoneNumber">PHONE NUMBER</label>
-            <input id="phoneNumber" v-model="form.phoneNumber" type="tel" autocomplete="tel" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.phoneNumber)" :aria-describedby="fieldErrors.phoneNumber ? 'phoneNumber-error' : undefined" @input="clearFieldError('phoneNumber')">
+            <input id="phoneNumber" v-model="form.phoneNumber" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.phoneNumber)" :aria-describedby="fieldErrors.phoneNumber ? 'phoneNumber-error' : undefined" @input="clearFieldError('phoneNumber')">
             <small v-if="fieldErrors.phoneNumber" id="phoneNumber-error" class="field-error show">{{ fieldErrors.phoneNumber }}</small>
           </div>
           <div class="field">
