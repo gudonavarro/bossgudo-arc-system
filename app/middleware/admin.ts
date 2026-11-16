@@ -1,19 +1,12 @@
-interface SessionResponse {
-  user: {
-    role?: string;
-  } | null;
-}
-
 export default defineNuxtRouteMiddleware(async () => {
-  const { data, error } = await useFetch<SessionResponse>("/api/auth/session", {
-    credentials: "include",
-    cache: "no-store",
-  });
+  const { initialize } = useAuth();
+  const isHydrating = import.meta.client && useNuxtApp().isHydrating;
+  const user = await initialize({ force: !isHydrating });
 
-  if (error.value || !data.value?.user) {
+  if (!user) {
     return navigateTo("/customer-login");
   }
-  if (data.value.user.role !== "admin") {
+  if (user.role !== "admin") {
     return navigateTo("/");
   }
 });
