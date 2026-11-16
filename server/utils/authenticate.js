@@ -92,7 +92,7 @@ function createAuthenticationMiddleware({
       );
       const passwordChangedAfterSession =
         user?.passwordChangedAt?.getTime() > session.createdAt?.getTime();
-      if (!user || !user.isActive || passwordChangedAfterSession) {
+      if (!user?.isActive || passwordChangedAfterSession) {
         return respondUnauthenticated(request, response);
       }
       if (requiredRole && user.role !== requiredRole) {

@@ -94,7 +94,7 @@ export function useAuth() {
     });
 
     const safeUser = toAuthUser(result.user);
-    if (!safeUser || safeUser.role !== "customer") {
+    if (safeUser?.role !== "customer") {
       setUser(null);
       throw new Error("Unable to log in.");
     }
