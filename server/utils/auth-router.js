@@ -59,43 +59,70 @@ function getErrorName(error) {
 
 function validateRegistration(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { error: "Provide registration details." };
+    return { error: "Provide registration details.", fieldErrors: {} };
   }
 
   const { firstName, lastName, email, phoneNumber, password, confirmPassword } =
     body;
-  const stringFields = [firstName, lastName, email, phoneNumber, password, confirmPassword];
-  if (stringFields.some((value) => typeof value !== "string")) {
-    return { error: "Complete all required fields." };
+  const fieldValues = {
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+    password,
+    confirmPassword,
+  };
+  const fieldErrors = {};
+  for (const [field, value] of Object.entries(fieldValues)) {
+    if (typeof value !== "string" || !value.trim()) {
+      fieldErrors[field] = "This field is required.";
+    }
   }
-
   const normalized = {
-    firstName: firstName.trim(),
-    lastName: lastName.trim(),
-    email: email.trim().toLowerCase(),
-    phoneNumber: normalizePhoneNumber(phoneNumber.trim()),
+    firstName: typeof firstName === "string" ? firstName.trim() : "",
+    lastName: typeof lastName === "string" ? lastName.trim() : "",
+    email: typeof email === "string" ? email.trim().toLowerCase() : "",
+    phoneNumber:
+      typeof phoneNumber === "string"
+        ? normalizePhoneNumber(phoneNumber.trim())
+        : "",
   };
 
+  if (!fieldErrors.firstName && normalized.firstName.length > 80) {
+    fieldErrors.firstName = "Enter a first name of at most 80 characters.";
+  }
+  if (!fieldErrors.lastName && normalized.lastName.length > 80) {
+    fieldErrors.lastName = "Enter a last name of at most 80 characters.";
+  }
   if (
-    !normalized.firstName ||
-    normalized.firstName.length > 80 ||
-    !normalized.lastName ||
-    normalized.lastName.length > 80
+    !fieldErrors.email &&
+    (normalized.email.length > 254 || !EMAIL_PATTERN.test(normalized.email))
   ) {
-    return { error: "Enter a first and last name of at most 80 characters." };
+    fieldErrors.email = "Enter a valid email address.";
   }
-  if (normalized.email.length > 254 || !EMAIL_PATTERN.test(normalized.email)) {
-    return { error: "Enter a valid email address." };
+  if (!fieldErrors.phoneNumber && !PHONE_PATTERN.test(normalized.phoneNumber)) {
+    fieldErrors.phoneNumber = "Enter a valid PH number starting with 09 or +63.";
   }
-  if (!PHONE_PATTERN.test(normalized.phoneNumber)) {
-    return { error: "Enter a valid PH number starting with 09 or +63." };
+  const passwordError =
+    typeof password === "string" && password
+      ? getPasswordValidationError(password)
+      : null;
+  if (!fieldErrors.password && passwordError) {
+    fieldErrors.password = passwordError;
   }
-  const passwordError = getPasswordValidationError(password);
-  if (passwordError) {
-    return { error: passwordError };
+  if (
+    !fieldErrors.confirmPassword &&
+    typeof password === "string" &&
+    typeof confirmPassword === "string" &&
+    password !== confirmPassword
+  ) {
+    fieldErrors.confirmPassword = "Passwords do not match.";
   }
-  if (password !== confirmPassword) {
-    return { error: "Passwords do not match." };
+  if (Object.keys(fieldErrors).length > 0) {
+    return {
+      error: Object.values(fieldErrors)[0],
+      fieldErrors,
+    };
   }
 
   return {
@@ -446,7 +473,10 @@ function createAuthRouter({
   router.post("/register", registrationLimiter, async (request, response) => {
     const validation = validateRegistration(request.body);
     if (validation.error) {
-      return response.status(400).json({ error: validation.error });
+      return response.status(400).json({
+        error: validation.error,
+        fieldErrors: validation.fieldErrors,
+      });
     }
 
     if (!isDatabaseReady(request)) {
@@ -462,12 +492,20 @@ function createAuthRouter({
         {
           $or: [{ email: value.email }, { phoneNumber: value.phoneNumber }],
         },
-        { projection: { _id: 1 } },
+        { projection: { _id: 1, email: 1, phoneNumber: 1 } },
       );
       if (existingUser) {
-        return response
-          .status(409)
-          .json({ error: "An account with those details already exists." });
+        const fieldErrors = {};
+        if (existingUser.email === value.email) {
+          fieldErrors.email = "An account with this email already exists.";
+        }
+        if (existingUser.phoneNumber === value.phoneNumber) {
+          fieldErrors.phoneNumber = "This phone number is already registered.";
+        }
+        return response.status(409).json({
+          error: "An account with those details already exists.",
+          fieldErrors,
+        });
       }
 
       const now = new Date();
@@ -497,9 +535,17 @@ function createAuthRouter({
       });
     } catch (error) {
       if (error?.code === 11000) {
-        return response
-          .status(409)
-          .json({ error: "An account with those details already exists." });
+        const fieldErrors = {};
+        if (error.keyPattern?.email) {
+          fieldErrors.email = "An account with this email already exists.";
+        }
+        if (error.keyPattern?.phoneNumber) {
+          fieldErrors.phoneNumber = "This phone number is already registered.";
+        }
+        return response.status(409).json({
+          error: "An account with those details already exists.",
+          fieldErrors,
+        });
       }
       console.error("Registration request failed:", getErrorName(error));
       return response

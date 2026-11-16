@@ -215,7 +215,34 @@ test("rejects malformed, missing, weak, and mismatched registration details", as
     const response = await request(app).post("/api/auth/register").send(body);
     assert.equal(response.status, 400);
     assert.equal(typeof response.body.error, "string");
+    assert.ok(response.body.fieldErrors);
   }
+});
+
+test("returns field-level errors for missing and invalid registration values", async () => {
+  const app = createTestApp({
+    UserModel: fakeUserModel(),
+    isDatabaseReady: () => true,
+  });
+
+  const response = await request(app).post("/api/auth/register").send({
+    ...validRegistration,
+    firstName: "",
+    email: "not-an-email",
+    phoneNumber: "12345",
+    password: "weak",
+    confirmPassword: "different",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.fieldErrors.firstName, "This field is required.");
+  assert.equal(response.body.fieldErrors.email, "Enter a valid email address.");
+  assert.equal(
+    response.body.fieldErrors.phoneNumber,
+    "Enter a valid PH number starting with 09 or +63.",
+  );
+  assert.ok(response.body.fieldErrors.password);
+  assert.equal(response.body.fieldErrors.confirmPassword, "Passwords do not match.");
 });
 
 test("returns unavailable when the database is disconnected", async () => {
@@ -290,7 +317,9 @@ test("returns conflict for an existing account", async () => {
 });
 
 test("maps duplicate index races to conflict", async () => {
-  const model = fakeUserModel({ createError: { code: 11000 } });
+  const model = fakeUserModel({
+    createError: { code: 11000, keyPattern: { email: 1 } },
+  });
   const app = createTestApp({
     UserModel: model,
     isDatabaseReady: () => true,
@@ -302,6 +331,10 @@ test("maps duplicate index races to conflict", async () => {
 
   assert.equal(response.status, 409);
   assert.equal(response.body.error, "An account with those details already exists.");
+  assert.equal(
+    response.body.fieldErrors.email,
+    "An account with this email already exists.",
+  );
 });
 
 test("validates login input before database access", async () => {
