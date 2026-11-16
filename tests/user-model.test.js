@@ -94,12 +94,15 @@ test("hashes modified passwords without rehashing existing bcrypt hashes", async
 test("excludes sensitive fields by default and permits explicit selection", () => {
   assert.equal(UserModel.schema.path("password").options.select, false);
   assert.equal(UserModel.schema.path("resetTokenHash").options.select, false);
+  assert.equal(UserModel.schema.path("resetCodeAttempts").options.select, false);
+  assert.equal(UserModel.schema.path("passwordChangedAt").instance, "Date");
 
   const projection = UserModel.findOne()
-    .select("+password +resetTokenHash")
+    .select("+password +resetTokenHash +resetCodeAttempts")
     .projection();
   assert.equal(projection["+password"], 1);
   assert.equal(projection["+resetTokenHash"], 1);
+  assert.equal(projection["+resetCodeAttempts"], 1);
 });
 
 test("returns the existing model rather than recompiling it", () => {

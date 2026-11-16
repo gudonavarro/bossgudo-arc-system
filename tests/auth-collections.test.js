@@ -22,6 +22,7 @@ test("Mongoose repository explicitly selects the hidden password for login", () 
         firstName: 1,
         email: 1,
         password: 1,
+        resetCodeAttempts: 1,
         role: 1,
         isActive: 1,
       },
@@ -33,6 +34,7 @@ test("Mongoose repository explicitly selects the hidden password for login", () 
     firstName: 1,
     email: 1,
     "+password": 1,
+    "+resetCodeAttempts": 1,
     role: 1,
     isActive: 1,
   });
