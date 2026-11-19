@@ -1224,9 +1224,20 @@ function aboutHeading(id, eyebrow, title, sub = "") {
  * dates and labels printed on them, so they are shown uncropped and link to
  * the full-size file for closer reading.
  */
-function aboutPhoto({ src, alt, width, height, caption = "", className = "" }) {
+function aboutPhoto({ src, alt, width, height, caption = "", className = "", framed = false }) {
   const figcaption = caption ? `<figcaption class="border-t border-base-300 p-5">${caption}</figcaption>` : "";
-  return `<figure class="flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 ${className}"><a href="${src}" target="_blank" rel="noopener" class="group relative block bg-base-200" aria-label="${alt} (opens full-size photo)"><img src="${src}" alt="${alt}" width="${width}" height="${height}" loading="lazy" class="block h-auto w-full transition-opacity group-hover:opacity-90"><span class="badge pointer-events-none absolute right-3 bottom-3 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("external-link", "size-3")}View full size</span></a>${figcaption}</figure>`;
+  // Side-by-side photos share a 16:9 frame so their captions line up.
+  const fit = framed ? "aspect-video object-contain" : "h-auto";
+  return `<figure class="flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 ${className}"><a href="${src}" target="_blank" rel="noopener" class="group relative block bg-base-200" aria-label="${alt} (opens full-size photo)"><img src="${src}" alt="${alt}" width="${width}" height="${height}" loading="lazy" class="block w-full ${fit} transition-opacity group-hover:opacity-90"><span class="badge pointer-events-none absolute right-3 bottom-3 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("external-link", "size-3")}View full size</span></a>${figcaption}</figure>`;
+}
+/** Caption for an About page photo: a title, short text and detail badges. */
+function aboutCaption(title, text, details = []) {
+  const body = text ? `<p class="muted mt-1.5 text-sm leading-relaxed">${text}</p>` : "";
+  const badges = details
+    .map(([name, label]) => `<span class="badge badge-ghost gap-1">${icon(name, "size-3")}${label}</span>`)
+    .join("");
+  const badgeRow = badges ? `<div class="mt-3 flex flex-wrap gap-2">${badges}</div>` : "";
+  return `<h3 class="font-semibold text-base-content">${title}</h3>${body}${badgeRow}`;
 }
 function about() {
   const focusAreas = [
@@ -1265,7 +1276,26 @@ function about() {
   const overview = `<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2" aria-labelledby="about-overview-title"><img src="/images/aquaculture-ponds.jpg" alt="Aerated aquaculture ponds with a farm building beside them" class="h-60 w-full object-cover sm:h-72 lg:h-full" width="1280" height="720"><div class="p-6 sm:p-10"><p class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">${icon("map-pin")}General Trias, Cavite</p><p class="eyebrow mt-5">Overview</p><h2 id="about-overview-title" class="section-title mt-1">Australian Redclaw Crayfish Farming Initiative</h2><p class="mt-4 leading-relaxed text-base-content/75">The Australian Redclaw Crayfish (ARC) (<em>Cherax quadricarinatus</em>) farming initiative represents a high-potential aquaculture enterprise in the Philippines focused on sustainable seedstock production, hatchery management, and commercial grow-out operations.</p><p class="mt-3 leading-relaxed text-base-content/75">Based in General Trias, Cavite, BOSSGUDO A.R.C. AQUA FARM addresses the growing domestic and international demand for premium, high-protein freshwater crustaceans.</p><ul class="mt-6 grid gap-3 border-t border-base-300 pt-6 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3" aria-label="Focus areas">${focusMarkup}</ul><div class="mt-7 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section>`;
   const objectivesSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-objectives-title">${aboutHeading("about-objectives-title", "Core objectives & vision", "What the initiative works toward")}<div class="mt-6 grid gap-4 md:grid-cols-3">${objectiveMarkup}</div></section>`;
   const originSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-origin-title">${aboutHeading("about-origin-title", "Crayfish origin", "Where our crayfish come from", "The documented origin and development of the farm’s Australian Redclaw Crayfish stock.")}${aboutPhoto({ src: "/images/bossgudo-arc-about-origin.png", alt: "Crayfish origin chart linking partner crayfish farms with dated stock records, including trios, a quadro and kilo orders", width: 1868, height: 914, className: "mt-6" })}</section>`;
-  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}${originSection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
+  const seminarPhotos = [
+    aboutPhoto({
+      src: "/images/bossgudo-arc-about-seminar-1.png",
+      alt: "Screenshots of 2025 webinar sessions showing participants on video calls",
+      width: 1907,
+      height: 1063,
+      framed: true,
+      caption: aboutCaption("2025 webinar sessions", "Online webinar sessions held throughout 2025.", [["calendar-days", "2025"], ["users", "Online"]]),
+    }),
+    aboutPhoto({
+      src: "/images/bossgudo-arc-about-seminar-2.png",
+      alt: "ARC Breeding Quick Guide (BFAR Guidelines) webinar with participants on a video call",
+      width: 1826,
+      height: 1067,
+      framed: true,
+      caption: aboutCaption("ARC Breeding Quick Guide (BFAR Guidelines)", "Navigating BFAR Administrative Circular No. 001, Series of 2025.", [["calendar-days", "March 14, 2026"], ["clock", "9:00 AM – 12:40 PM"], ["users", "Online"]]),
+    }),
+  ].join("");
+  const seminarSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-seminars-title">${aboutHeading("about-seminars-title", "Seminars", "Webinars and educational activities", "Webinar participation and educational sessions on Australian Redclaw Crayfish.")}<div class="mt-6 grid gap-6 lg:grid-cols-2">${seminarPhotos}</div></section>`;
+  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}${originSection}${seminarSection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
 }
 /* Receipt preview for admins. The file is fetched from the admin-protected
    receipt endpoint with the session cookie and shown through a temporary
