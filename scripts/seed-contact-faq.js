@@ -8,7 +8,7 @@ async function main() {
   const connection = await connectMongoose({
     mongodbUri: process.env.MONGODB_URI || "",
     mongodbDatabase:
-      process.env.MONGODB_DATABASE || "gudonavarro_db_user",
+      process.env.MONGODB_DATABASE || "bossgudo_arc",
   });
   const inserted = await seedContactLocationFaq(getFaqModel(connection));
   console.log(
