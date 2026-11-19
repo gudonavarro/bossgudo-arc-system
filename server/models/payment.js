@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { toCents } from "../utils/money.js";
+import { toCents } from "../utils/money";
 
 const PAYMENT_TARGETS = Object.freeze(["deposit", "balance"]);
 const PAYMENT_RECORD_STATUSES = Object.freeze(["Pending", "Verified", "Rejected"]);

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { decimalToNumber, toCents } from "./money.js";
+import { decimalToNumber, toCents } from "./money";
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 const REFERENCE_SUFFIX_PATTERN = String.raw`\d{8}-[A-Z2-9]{6}`;

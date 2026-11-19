@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { isNonNegativeDecimal, toCents } from "../utils/money.js";
+import { isNonNegativeDecimal, toCents } from "../utils/money";
 
 const SERVICE_TYPES = Object.freeze(["Pond Package", "Custom Pond Design"]);
 const BOOKING_STATUSES = Object.freeze([

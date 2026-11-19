@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { toCents } from "../utils/money.js";
+import { toCents } from "../utils/money";
 
 const PACKAGE_STATUSES = Object.freeze(["Active", "Inactive"]);
 const PACKAGE_CATEGORIES = Object.freeze(["Pond Package"]);

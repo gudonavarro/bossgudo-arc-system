@@ -6,7 +6,7 @@ import {
   SERVICE_TYPES,
 } from "../models/service-booking.js";
 import { pipeline } from "node:stream/promises";
-import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
+import { depositFor, fromCents, parseAmountInput, toCents } from "./money";
 import {
   RECEIPT_CONTENT_TYPES,
   findReceiptFile,

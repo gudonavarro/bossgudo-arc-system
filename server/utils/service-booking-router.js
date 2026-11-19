@@ -1,7 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { createRequire } from "node:module";
-import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
+import { depositFor, fromCents, parseAmountInput, toCents } from "./money";
 import {
   MAX_RECEIPT_BYTES,
   RECEIPT_CONTENT_TYPES,

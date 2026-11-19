@@ -1,4 +1,4 @@
-import { decimalToNumber, fromCents, parseAmountInput } from "./money.js";
+import { decimalToNumber, fromCents, parseAmountInput } from "./money";
 import {
   PACKAGE_LIMITS,
   PACKAGE_STATUSES,

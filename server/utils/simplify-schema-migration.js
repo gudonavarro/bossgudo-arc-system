@@ -1,4 +1,4 @@
-import { fromCents, toCents } from "./money.js";
+import { fromCents, toCents } from "./money";
 import { INITIAL_SERVICE_PACKAGES } from "./service-package-seed.js";
 
 const REMOVED_BOOKING_FIELDS = ["packageNameSnapshot", "packagePrice", "balanceAmount"];

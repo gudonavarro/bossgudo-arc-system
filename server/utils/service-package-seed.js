@@ -1,4 +1,4 @@
-import { fromCents } from "./money.js";
+import { fromCents } from "./money";
 
 /**
  * The three packages the farm offered before the catalog moved to MongoDB.
