@@ -1295,7 +1295,26 @@ function about() {
     }),
   ].join("");
   const seminarSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-seminars-title">${aboutHeading("about-seminars-title", "Seminars", "Webinars and educational activities", "Webinar participation and educational sessions on Australian Redclaw Crayfish.")}<div class="mt-6 grid gap-6 lg:grid-cols-2">${seminarPhotos}</div></section>`;
-  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}${originSection}${seminarSection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
+  const communityPhotos = [
+    aboutPhoto({
+      src: "/images/bossgudo-arc-community-service-1.png",
+      alt: "Community service session at Barangay 14, Caloocan, with a talk about ARC and attendees seated in the hall",
+      width: 1896,
+      height: 1058,
+      framed: true,
+      caption: aboutCaption("Caloocan", "", [["calendar-days", "January 10, 2026"]]),
+    }),
+    aboutPhoto({
+      src: "/images/bossgudo-arc-community-service-2.png",
+      alt: "Community service session in Cavite City with a live crayfish demonstration, group photos and a certificate of appreciation",
+      width: 1907,
+      height: 1061,
+      framed: true,
+      caption: aboutCaption("Cavite City", "", [["calendar-days", "February 13, 2026"]]),
+    }),
+  ].join("");
+  const communitySection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-community-title">${aboutHeading("about-community-title", "Community service", "Community service sessions", "Documented community service activities by the farm.")}<div class="mt-6 grid gap-6 lg:grid-cols-2">${communityPhotos}</div></section>`;
+  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}${originSection}${seminarSection}${communitySection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
 }
 /* Receipt preview for admins. The file is fetched from the admin-protected
    receipt endpoint with the session cookie and shown through a temporary
