@@ -818,17 +818,6 @@ function sessionCustomerName() {
 /* ---------- booking lifecycle helpers ---------- */
 /* Booking status: Pending -> Confirmed (automatic when the 50% down payment is verified) -> Completed (service done).
    Payment status: Awaiting Deposit / Pending Verification -> Partially Paid -> (after delivery fee) Pending Verification -> Paid. */
-function stageOf(b) {
-  if (["Rejected", "Cancelled"].includes(b.booking)) return -1;
-  if (b.booking === "Pending") return 0;
-  if (b.booking === "Confirmed") return 1;
-  if (b.booking === "Completed") {
-    if (b.payment === "Paid") return 4;
-    if (b.deliveryFee != null) return 3;
-    return 2;
-  }
-  return 0;
-}
 function bookingClass(s) {
   if (["Confirmed", "Completed"].includes(s)) return "green";
   if (["Rejected", "Cancelled"].includes(s)) return "red";
@@ -895,7 +884,7 @@ function nextAction(b) {
     };
   return { done: true, label: "All done" };
 }
-function tracker(b, s = stageOf(b)) {
+function tracker(b, s) {
   if (s < 0)
     return `<div class="notice">This booking is ${safe(b.booking.toLowerCase())}.</div>`;
   return `<div class="tracker">${[
