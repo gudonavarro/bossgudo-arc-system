@@ -585,7 +585,7 @@ function bookingTimeline(server, payments) {
     time: new Date(entry.changedAt).getTime() || 0,
     at: serverTime(entry.changedAt),
     // changedBy is only populated in admin responses; customers never get it.
-    text: `Booking ${String(entry.status).toLowerCase()}${entry.note ? ` · ${entry.note}` : ""}${staffName(entry.changedBy) ? ` · by ${staffName(entry.changedBy)}` : ""}`,
+    text: `Booking ${String(entry.status).toLowerCase()}${optionalText(" · ", entry.note)}${optionalText(" · by ", staffName(entry.changedBy))}`,
   }));
   payments.forEach((payment) => {
     const label =
@@ -602,7 +602,7 @@ function bookingTimeline(server, payments) {
         text:
           payment.status === "Verified"
             ? `Your ${label} of ${money(payment.amount)} was verified.`
-            : `Your ${label} receipt was not verified${payment.rejectionReason ? `: ${payment.rejectionReason}` : "."}`,
+            : `Your ${label} receipt was not verified${optionalText(": ", payment.rejectionReason) || "."}`,
       });
     }
   });
@@ -620,6 +620,8 @@ function toCustomerBooking(server) {
   // catalog, so later catalog edits cannot change past bookings.
   const preset = server.packageSnapshot || null;
   const custom = server.customConfiguration;
+  let filtration = "";
+  if (custom) filtration = custom.filtration ? "Yes" : "No";
   return {
     server: true,
     id: server._id,
@@ -633,10 +635,10 @@ function toCustomerBooking(server) {
     freebie: (preset?.inclusions || []).map(cleanInclusion).join(" · "),
     packageLayers: preset && !custom ? preset.layers : "",
     packageDimensions: preset && !custom ? preset.dimensions : "",
-    layers: custom ? `${custom.layers} ${custom.layers === 1 ? "layer" : "layers"}` : "",
+    layers: custom ? countLabel(custom.layers, "layer") : "",
     pondWidth: custom ? custom.width : null,
     pondHeight: custom ? custom.length : null,
-    filtration: custom ? (custom.filtration ? "Yes" : "No") : "",
+    filtration,
     date: isoDate ? fmtDate(isoDate) : "",
     isoDate,
     booking: server.bookingStatus,
@@ -741,29 +743,39 @@ function customerCanPay(b) {
     return "balance";
   return null;
 }
-function customerMessage(b) {
-  if (b.booking === "Rejected")
-    return "The owner could not accept this booking. Please contact the farm for details.";
-  if (b.booking === "Cancelled")
-    return "This booking was cancelled. The 50% down payment is non-refundable under the booking policy.";
+/** Messages for bookings that are closed; these take priority over payments. */
+const CLOSED_BOOKING_MESSAGES = new Map([
+  ["Rejected", "The owner could not accept this booking. Please contact the farm for details."],
+  ["Cancelled", "This booking was cancelled. The 50% down payment is non-refundable under the booking policy."],
+]);
+/** Messages for open bookings with no receipt under review. */
+const OPEN_BOOKING_MESSAGES = new Map([
+  ["Approved", "Your booking has been accepted. Pay the 50% down payment to reserve your date."],
+  ["Confirmed", "Your booking is confirmed and your date is reserved. After the service is done, the owner will add any delivery fee and you can pay the remaining balance here."],
+  ["Ongoing", "Your service is in progress."],
+]);
+function receiptReviewMessage(b) {
   if (b.payment === "Verification Pending")
     return b.proof?.target === "balance"
       ? "Your balance receipt is being checked against the GCash transaction. You will get an update here once it is verified."
       : "Your 50% down payment receipt is being checked against the GCash transaction. Your booking is confirmed once the owner verifies it.";
   if (b.payment === "Rejected")
-    return `The owner could not verify your last receipt${b.proof?.rejectionReason ? `: ${b.proof.rejectionReason}` : ""}. Please check the details and resubmit.`;
-  if (b.booking === "Approved")
-    return "Your booking has been accepted. Pay the 50% down payment to reserve your date.";
-  if (b.booking === "Confirmed")
-    return "Your booking is confirmed and your date is reserved. After the service is done, the owner will add any delivery fee and you can pay the remaining balance here.";
-  if (b.booking === "Ongoing") return "Your service is in progress.";
-  if (b.booking === "Completed" && b.payment === "Paid")
-    return "Service completed and fully paid. Thank you!";
-  if (b.booking === "Completed" && b.deliveryFee == null)
-    return "Service completed. The owner will confirm the delivery fee next, then you can pay your remaining balance here.";
-  if (b.booking === "Completed")
-    return "The delivery fee has been added. Please pay your outstanding balance to finish.";
+    return `The owner could not verify your last receipt${optionalText(": ", b.proof?.rejectionReason)}. Please check the details and resubmit.`;
   return "";
+}
+function completedBookingMessage(b) {
+  if (b.payment === "Paid") return "Service completed and fully paid. Thank you!";
+  if (b.deliveryFee == null)
+    return "Service completed. The owner will confirm the delivery fee next, then you can pay your remaining balance here.";
+  return "The delivery fee has been added. Please pay your outstanding balance to finish.";
+}
+function customerMessage(b) {
+  const message =
+    CLOSED_BOOKING_MESSAGES.get(b.booking) ||
+    receiptReviewMessage(b) ||
+    OPEN_BOOKING_MESSAGES.get(b.booking);
+  if (message) return message;
+  return b.booking === "Completed" ? completedBookingMessage(b) : "";
 }
 
 function receiptContentType(file) {
@@ -950,7 +962,7 @@ function updateNavBadge() {
   document.querySelectorAll("[data-nav-badge]").forEach((badge) => {
     badge.textContent = n ? String(n) : "";
     badge.hidden = !n;
-    badge.setAttribute("aria-label", n ? `${n} new update${n === 1 ? "" : "s"}` : "");
+    badge.setAttribute("aria-label", n ? countLabel(n, "new update") : "");
   });
 }
 
@@ -970,6 +982,25 @@ function safe(s) {
         c
       ],
   );
+}
+/** `prefix` followed by the formatted value, or "" when the value is empty. */
+function optionalText(prefix, value, format = String) {
+  return value ? prefix + format(value) : "";
+}
+/** A count with its noun, e.g. "1 layer" or "2 layers". */
+function countLabel(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+/** Summary line for the customer account linked to a booking or visit. */
+function accountSummaryLine(account) {
+  if (!account) return "";
+  const inactive = account.active ? "" : " (inactive)";
+  return `<div class="summary-line"><span>Customer account</span><strong>${safe(account.name)} · ${safe(account.email || "—")}${inactive}</strong></div>`;
+}
+/** Summary line for when a record was reviewed and by whom. */
+function reviewedSummaryLine(label, reviewedAt, reviewerName) {
+  if (!reviewedAt) return "";
+  return `<div class="summary-line"><span>${label}</span><strong>${safe(serverTime(reviewedAt))}${optionalText(" · ", reviewerName, safe)}</strong></div>`;
 }
 function money(n) {
   return (
@@ -1024,14 +1055,14 @@ document.addEventListener("keydown", (event) => {
   const focusable = [...box.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])")]
     .filter((element) => element.offsetParent !== null);
   if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  const activeIndex = focusable.indexOf(document.activeElement);
+  const lastIndex = focusable.length - 1;
+  if (event.shiftKey && activeIndex === 0) {
     event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
+    focusable.at(-1).focus();
+  } else if (!event.shiftKey && (activeIndex === lastIndex || !box.contains(document.activeElement))) {
     event.preventDefault();
-    first.focus();
+    focusable[0].focus();
   }
 });
 function pkgChips(layers, dimensions) {
@@ -1391,12 +1422,18 @@ async function viewPaymentReceipt(ref, paymentId) {
   const actions = `${close}<a class="btn" href="${url}" target="_blank" rel="noopener">Open in new tab</a>`;
   openModal(title, safe(ref), body, actions, true);
 }
+function choicePointsMarkup(points) {
+  return points.map((p) => `<li>${icon("check", "size-4 text-primary")}<span>${p}</span></li>`).join("");
+}
+function changeBookingTypeButton() {
+  return `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`;
+}
 function bookingChooser() {
   const loginHint = loggedIn
     ? ""
     : `<div class="notice mt-6 flex items-center gap-3">${icon("lock", "size-5 text-primary")}<span>You’ll be asked to log in or create an account before completing a booking.</span></div>`;
   const choice = (iconName, title, text, points, action, label) =>
-    `<article class="tile choice"><span class="service-icon">${icon(iconName, "size-7")}</span><h2>${title}</h2><p class="muted">${text}</p><ul class="choice-points">${points.map((p) => `<li>${icon("check", "size-4 text-primary")}<span>${p}</span></li>`).join("")}</ul><button class="btn btn-primary btn-block mt-auto" onclick="chooseBookingType('${action}')">${label}${icon("arrow-right")}</button></article>`;
+    `<article class="tile choice"><span class="service-icon">${icon(iconName, "size-7")}</span><h2>${title}</h2><p class="muted">${text}</p><ul class="choice-points">${choicePointsMarkup(points)}</ul><button class="btn btn-primary btn-block mt-auto" onclick="chooseBookingType('${action}')">${label}${icon("arrow-right")}</button></article>`;
   return `${pageHead(["Home", "Bookings"], "Booking", "What would you like to book today?")}<div class="choice-grid">${choice("waves", "Book a Service", "Pond packages, manufacturing, installation, and custom pond design.", ["Choose a package or design a custom pond", "Pick an open weekend service date", "Pay a 50% down payment through GCash"], "service", "Select Service")}${choice("trees", "Book a Visitation", "Schedule a farm visit for 1–5 visitors on available weekends.", ["1–5 visitors per visit", "Available Saturdays and Sundays", "Special dates can be requested for review"], "visit", "Select Visitation")}</div>${loginHint}`;
 }
 function chooseBookingType(t) {
@@ -1498,7 +1535,7 @@ function visitBooking() {
   let stepContent = visitReviewStep();
   if (visitStep === 1) stepContent = visitDateStep();
   else if (visitStep === 2) stepContent = visitDetailsStep();
-  return `${pageHead(["Home", "Bookings", "Book a Visitation"], "Book a Visitation", "Visit the farm with 1–5 visitors on an available Saturday or Sunday.", `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`)}${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel mt-0">${stepContent}</div>`;
+  return `${pageHead(["Home", "Bookings", "Book a Visitation"], "Book a Visitation", "Visit the farm with 1–5 visitors on an available Saturday or Sunday.", changeBookingTypeButton())}${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel mt-0">${stepContent}</div>`;
 }
 function visitDateStep() {
   if (visitMode === "special")
@@ -1930,7 +1967,7 @@ function serviceBooking() {
   else if (wizardStep === 2) stepContent = dateStep();
   else if (wizardStep === 3) stepContent = detailsStep();
   else if (wizardStep === 4) stepContent = reviewStep();
-  return `${pageHead(["Home", "Bookings", "Book a Service"], "Book a Service", "Choose a package, pick your date, enter your details, review, then pay the 50% down payment.", `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`)}${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel mt-0">${stepContent}</div>`;
+  return `${pageHead(["Home", "Bookings", "Book a Service"], "Book a Service", "Choose a package, pick your date, enter your details, review, then pay the 50% down payment.", changeBookingTypeButton())}${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel mt-0">${stepContent}</div>`;
 }
 
 function success() {
@@ -2026,15 +2063,25 @@ function mybookings() {
   return `${header}<div class="flex flex-wrap items-center gap-2"><span class="badge badge-ghost gap-1.5 py-3">${icon("user", "size-3.5")}Signed in as ${safe(sessionCustomerName())}</span><span class="badge badge-ghost py-3">${mine.length} service booking${mine.length === 1 ? "" : "s"}</span><span class="badge badge-ghost py-3">${myVisits.length} visitation${myVisits.length === 1 ? "" : "s"}</span></div>${freshUpdatesMarkup(fresh)}<section aria-labelledby="serviceBookingsTitle"><h2 id="serviceBookingsTitle" class="section-title mt-10 mb-4 text-2xl">Service bookings</h2><div class="space-y-4">${bookingMarkup}</div></section><section aria-labelledby="visitsTitle"><h2 id="visitsTitle" class="section-title mt-10 mb-4 text-2xl">Farm visitations</h2><div class="space-y-4">${visitMarkup}</div></section><div class="notice mt-8 flex items-start gap-2">${icon("shield-check", "size-4 mt-0.5 text-primary")}<span>GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</span></div>`;
 }
 
+function pondDetailsText(b) {
+  if (b.packageLayers) return `${safe(b.packageLayers)} · ${safe(b.packageDimensions)}`;
+  if (b.pondWidth) return `${b.pondWidth} m × ${b.pondHeight} m · ${safe(b.layers)}`;
+  return safe(b.layers || "—");
+}
+function verifiedPaymentsMarkup(b) {
+  const payments = (b.paymentHistory || [])
+    .map((payment) => {
+      const targetLabel =
+        payment.target === "deposit" ? "50% down payment" : "Remaining balance";
+      return `<div class="summary-line"><span>${targetLabel} · ${safe(payment.verifiedAt)}</span><strong>${money(payment.amount)} · ${safe(payment.reference)}</strong></div>`;
+    })
+    .join("");
+  return payments ? `<h4 class="modal-section">Verified payments</h4>${payments}` : "";
+}
 function viewBooking(ref, admin, record = null) {
   const b = record || (admin ? adminBookingByRef(ref) : customerBookingByRef(ref));
   if (!b) return;
-  let pondDetails = safe(b.layers || "—");
-  if (b.packageLayers) {
-    pondDetails = `${safe(b.packageLayers)} · ${safe(b.packageDimensions)}`;
-  } else if (b.pondWidth) {
-    pondDetails = `${b.pondWidth} m × ${b.pondHeight} m · ${safe(b.layers)}`;
-  }
+  const pondDetails = pondDetailsText(b);
   const noticeMarkup = admin
     ? ""
     : `<div class="notice">${safe(customerMessage(b))}</div>`;
@@ -2051,22 +2098,9 @@ function viewBooking(ref, admin, record = null) {
     : "";
   const deliveryFee =
     b.deliveryFee != null ? money(b.deliveryFee) : "Not set yet";
-  const payments = (b.paymentHistory || [])
-    .map((payment) => {
-      const targetLabel =
-        payment.target === "deposit" ? "50% down payment" : "Remaining balance";
-      return `<div class="summary-line"><span>${targetLabel} · ${safe(payment.verifiedAt)}</span><strong>${money(payment.amount)} · ${safe(payment.reference)}</strong></div>`;
-    })
-    .join("");
-  let paymentHistoryMarkup = payments
-    ? `<h4 class="modal-section">Verified payments</h4>${payments}`
-    : "";
-  if (admin) {
-    const account = b.account
-      ? `<div class="summary-line"><span>Customer account</span><strong>${safe(b.account.name)} · ${safe(b.account.email || "—")}${b.account.active ? "" : " (inactive)"}</strong></div>`
-      : "";
-    paymentHistoryMarkup = `${account}<h4 class="modal-section">Payment records</h4>${adminPaymentRecordsMarkup(b)}`;
-  }
+  const paymentHistoryMarkup = admin
+    ? `${accountSummaryLine(b.account)}<h4 class="modal-section">Payment records</h4>${adminPaymentRecordsMarkup(b)}`
+    : verifiedPaymentsMarkup(b);
   const body = `<div class="flex flex-wrap gap-1.5"><span class="badge badge-soft ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="badge badge-soft ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div>${trackerMarkup}${noticeMarkup}<h4 class="modal-section">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${contactEmail}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pondDetails}${filtrationMarkup}</strong></div>${freebieMarkup}${notesMarkup}<h4 class="modal-section">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line is-highlight"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${paymentHistoryMarkup}<h4 class="modal-section">Status updates</h4>${timelineHtml(b, !admin)}`;
   const actions = `<button class="btn" onclick="closeModal()">Close</button>`;
   openModal(
@@ -2111,7 +2145,9 @@ function customerPaymentPage() {
   const paymentDetails = isBalancePayment
     ? `<div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${money(b.deliveryFee || 0)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount)}</strong></div>`
     : `<div class="summary-line"><span>Total service price</span><strong>${money(b.total)}</strong></div>`;
-  return `<div class="mx-auto max-w-4xl">${pageHead(["Customer Portal", "My Bookings", "GCash Payment"], pageTitle, `Booking ${safe(b.ref)} · ${safe(b.pkg)}`, `<span class="badge badge-soft badge-success">${paymentType}</span>`)}${gcashDetailsMarkup(paymentDetails, amount, "Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.")}<div class="panel">${receiptUploadMarkup("The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.")}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="setPage('mybookings')">Cancel</button><button class="btn btn-primary" id="submitPaymentButton" onclick="submitPaymentProof('${b.ref}','${target}')">${icon("upload")}I’ve Paid — Submit Receipt</button></div></div></div>`;
+  const bookingSubtitle = `Booking ${safe(b.ref)} · ${safe(b.pkg)}`;
+  const paymentBadge = `<span class="badge badge-soft badge-success">${paymentType}</span>`;
+  return `<div class="mx-auto max-w-4xl">${pageHead(["Customer Portal", "My Bookings", "GCash Payment"], pageTitle, bookingSubtitle, paymentBadge)}${gcashDetailsMarkup(paymentDetails, amount, "Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.")}<div class="panel">${receiptUploadMarkup("The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.")}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="setPage('mybookings')">Cancel</button><button class="btn btn-primary" id="submitPaymentButton" onclick="submitPaymentProof('${b.ref}','${target}')">${icon("upload")}I’ve Paid — Submit Receipt</button></div></div></div>`;
 }
 async function submitPaymentProof(ref, target) {
   if (submitting) return;
@@ -2302,10 +2338,8 @@ function adminPaymentRecordsMarkup(b) {
       let statusClass = "badge-warning";
       if (payment.status === "Verified") statusClass = "badge-success";
       else if (payment.status === "Rejected") statusClass = "badge-error";
-      const reviewer = staffName(payment.verifiedBy);
-      const reviewed = payment.verifiedAt
-        ? `<div class="summary-line"><span>${payment.status === "Verified" ? "Verified" : "Reviewed"}</span><strong>${safe(serverTime(payment.verifiedAt))}${reviewer ? ` · ${safe(reviewer)}` : ""}</strong></div>`
-        : "";
+      const reviewLabel = payment.status === "Verified" ? "Verified" : "Reviewed";
+      const reviewed = reviewedSummaryLine(reviewLabel, payment.verifiedAt, staffName(payment.verifiedBy));
       const reason = payment.rejectionReason
         ? `<div class="summary-line"><span>Rejection reason</span><strong>${safe(payment.rejectionReason)}</strong></div>`
         : "";
@@ -2371,7 +2405,7 @@ function admin() {
   const tabMarkup = tabs.map(adminTabMarkup).join("");
   const content =
     (ADMIN_DATA_TABS.has(adminTab) && adminDataStatusPanel()) || views[adminTab]();
-  return `<div class="drawer lg:drawer-open"><input id="adminDrawer" type="checkbox" class="drawer-toggle" aria-label="Toggle admin navigation"><div class="drawer-content min-w-0 bg-base-200"><div class="mx-auto w-full max-w-[90rem] px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:pt-7">${crumbs(["Admin", cur[1]])}<div class="mt-1 mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="admin-title">${cur[1]}</h1><p class="muted mt-1 text-sm">${descriptions[adminTab] || ""}</p></div><button class="btn btn-sm" onclick="reloadAdminData();adminPackagesState='idle';render()" ${adminDataState === "loading" ? "disabled" : ""}>${icon("refresh-cw")}Refresh</button></div>${content}</div></div><div class="drawer-side z-50 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)]"><label for="adminDrawer" aria-label="Close admin navigation" class="drawer-overlay"></label><aside class="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 lg:min-h-0 lg:h-full lg:w-64"><div class="flex h-16 items-center justify-between border-b border-base-300 px-4 lg:hidden"><span class="font-semibold">Admin menu</span><label for="adminDrawer" class="btn btn-ghost btn-sm btn-square" aria-label="Close admin navigation">${icon("x", "size-5")}</label></div><nav aria-label="Admin sections" class="flex-1 overflow-y-auto"><ul class="menu w-full gap-0.5 p-3">${tabMarkup}</ul></nav></aside></div></div>`;
+  return `<div class="drawer lg:drawer-open"><input id="adminDrawer" type="checkbox" class="drawer-toggle" aria-label="Toggle admin navigation"><div class="drawer-content min-w-0 bg-base-200"><div class="mx-auto w-full max-w-360 px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:pt-7">${crumbs(["Admin", cur[1]])}<div class="mt-1 mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="admin-title">${cur[1]}</h1><p class="muted mt-1 text-sm">${descriptions[adminTab] || ""}</p></div><button class="btn btn-sm" onclick="reloadAdminData();adminPackagesState='idle';render()" ${adminDataState === "loading" ? "disabled" : ""}>${icon("refresh-cw")}Refresh</button></div>${content}</div></div><div class="drawer-side z-50 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)]"><label for="adminDrawer" aria-label="Close admin navigation" class="drawer-overlay"></label><aside class="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 lg:min-h-0 lg:h-full lg:w-64"><div class="flex h-16 items-center justify-between border-b border-base-300 px-4 lg:hidden"><span class="font-semibold">Admin menu</span><label for="adminDrawer" class="btn btn-ghost btn-sm btn-square" aria-label="Close admin navigation">${icon("x", "size-5")}</label></div><nav aria-label="Admin sections" class="flex-1 overflow-y-auto"><ul class="menu w-full gap-0.5 p-3">${tabMarkup}</ul></nav></aside></div></div>`;
 }
 /** Banner for admin sections that are not connected to the database yet. */
 function sampleDataNotice(detail) {
@@ -2408,7 +2442,7 @@ function pagerMarkup(total, current, onPage) {
   const to = Math.min(total, page * ADMIN_PAGE_SIZE);
   const btn = (target, label, disabled, extra = "") =>
     `<button class="join-item btn btn-sm ${extra}" ${disabled ? "disabled" : ""} onclick="${onPage}(${target})">${label}</button>`;
-  return `<div class="admin-card-foot"><span>Showing ${from}–${to} of ${total}</span><nav class="join" aria-label="Pagination">${btn(page - 1, `${icon("chevron-left")}<span class="sr-only">Previous page</span>`, page <= 1)}<button class="join-item btn btn-sm btn-active pointer-events-none" aria-current="page">Page ${page} of ${pages}</button>${btn(page + 1, `<span class="sr-only">Next page</span>${icon("chevron-right")}`, page >= pages)}</nav></div>`;
+  return `<div class="admin-card-foot"><span>Showing ${from}–${to} of ${total}</span><nav class="join" aria-label="Pagination">${btn(page - 1, icon("chevron-left") + '<span class="sr-only">Previous page</span>', page <= 1)}<button class="join-item btn btn-sm btn-active pointer-events-none" aria-current="page">Page ${page} of ${pages}</button>${btn(page + 1, '<span class="sr-only">Next page</span>' + icon("chevron-right"), page >= pages)}</nav></div>`;
 }
 function pageSlice(list, current) {
   const pages = Math.max(1, Math.ceil(list.length / ADMIN_PAGE_SIZE));
@@ -2792,6 +2826,29 @@ function paymentReviewBody(b, payment, paymentType) {
  * Verifies or rejects a submitted payment through the backend, which applies
  * the amount, deposit and status rules and is the final authority.
  */
+/**
+ * Reads the verify/reject form for a payment. Returns the request body, or
+ * null after showing the form error when the input is incomplete.
+ */
+function paymentDecisionBody(payment, valid) {
+  if (valid) {
+    if (!document.getElementById("m_checked")?.checked) {
+      showFormError("Tick the box to confirm you checked the actual GCash transaction first.");
+      return null;
+    }
+    if (paymentAmountsDiffer(payment) && !document.getElementById("m_mismatch")?.checked) {
+      showFormError("Confirm the amount difference before verifying this payment.");
+      return null;
+    }
+    return { decision: "approve" };
+  }
+  const reason = (document.getElementById("m_reason")?.value || "").trim();
+  if (!reason || reason.length > 500) {
+    showFormError("Enter a rejection reason (up to 500 characters). The customer will see it.");
+    return null;
+  }
+  return { decision: "reject", rejectionReason: reason };
+}
 async function verifyPayment(ref, paymentId, valid) {
   if (adminActionPending) return;
   const b = adminBookingByRef(ref);
@@ -2801,25 +2858,8 @@ async function verifyPayment(ref, paymentId, valid) {
     return;
   }
   clearFormError();
-  let body;
-  if (valid) {
-    if (!document.getElementById("m_checked")?.checked) {
-      showFormError("Tick the box to confirm you checked the actual GCash transaction first.");
-      return;
-    }
-    if (paymentAmountsDiffer(p) && !document.getElementById("m_mismatch")?.checked) {
-      showFormError("Confirm the amount difference before verifying this payment.");
-      return;
-    }
-    body = { decision: "approve" };
-  } else {
-    const reason = (document.getElementById("m_reason")?.value || "").trim();
-    if (!reason || reason.length > 500) {
-      showFormError("Enter a rejection reason (up to 500 characters). The customer will see it.");
-      return;
-    }
-    body = { decision: "reject", rejectionReason: reason };
-  }
+  const body = paymentDecisionBody(p, valid);
+  if (!body) return;
 
   const activeId = valid ? "verifyPaymentButton" : "rejectPaymentButton";
   const otherButton = document.getElementById(valid ? "rejectPaymentButton" : "verifyPaymentButton");
@@ -2910,9 +2950,7 @@ function specialVisitCard(visit) {
     visit.status === "Pending Review"
       ? `<button class="btn btn-primary btn-sm" onclick="updateVisit('${visit.ref}','Approved')">${icon("check")}Approve special date</button><button class="btn btn-soft btn-error btn-sm" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
       : "";
-  const reviewed = visit.reviewedAt
-    ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(visit.reviewedAt))}${visit.reviewerName ? ` · ${safe(visit.reviewerName)}` : ""}</strong></div>`
-    : "";
+  const reviewed = reviewedSummaryLine("Reviewed", visit.reviewedAt, visit.reviewerName);
   return `<article class="tile p-4"><div class="admin-header"><div class="min-w-0"><p class="muted text-xs">${visit.ref} · Submitted ${safe(visit.submittedAt)}</p><h3 class="mt-1 font-semibold">${fmtDate(visit.date, true)}</h3></div><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="mt-2"><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}</div><div class="mt-4 flex flex-wrap gap-2">${reviewActions}<button class="btn btn-sm" onclick="adminViewVisit('${visit.ref}')">${icon("eye")}View</button></div></article>`;
 }
 const VISIT_STATUS_PROMPTS = {
@@ -2944,24 +2982,23 @@ async function adminViewVisit(ref) {
       `/api/admin/visitation-bookings/${encodeURIComponent(ref)}`,
     );
     const v = toAdminVisit(server);
-    const account = v.account
-      ? `<div class="summary-line"><span>Customer account</span><strong>${safe(v.account.name)} · ${safe(v.account.email || "—")}${v.account.active ? "" : " (inactive)"}</strong></div>`
-      : "";
+    const account = accountSummaryLine(v.account);
     const reason = v.reason
       ? `<div class="summary-line"><span>Reason for special date</span><strong>${safe(v.reason)}</strong></div>`
       : "";
-    const reviewed = v.reviewedAt
-      ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(v.reviewedAt))}${v.reviewerName ? ` · ${safe(v.reviewerName)}` : ""}</strong></div>`
-      : "";
+    const reviewed = reviewedSummaryLine("Reviewed", v.reviewedAt, v.reviewerName);
     const history = (server.statusHistory || [])
       .slice()
       .reverse()
       .map((entry) => {
         const by = staffName(entry.changedBy);
-        return `<li>${safe(entry.status)}${entry.note ? ` · ${safe(entry.note)}` : ""}${by ? ` · by ${safe(by)}` : ""}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
+        return `<li>${safe(entry.status)}${optionalText(" · ", entry.note, safe)}${optionalText(" · by ", by, safe)}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
       })
       .join("");
-    const body = `<div class="mb-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 class="modal-section">Status updates</h4>${history ? `<ul class="updates">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
+    const historyMarkup = history
+      ? `<ul class="updates">${history}</ul>`
+      : '<p class="muted">No updates yet.</p>';
+    const body = `<div class="mb-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 class="modal-section">Status updates</h4>${historyMarkup}`;
     openModal("Visitation details", safe(ref), body, close);
   } catch (error) {
     openModal("Visitation details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this visitation.")}</p>`, close);
@@ -3226,7 +3263,7 @@ function viewPackage(code) {
   if (!x) return;
   const line = (label, value) => `<div class="summary-line"><span>${label}</span><strong>${value}</strong></div>`;
   const inclusions = x.inclusions.map((item) => `<li class="flex items-start gap-2">${icon("gift", "size-4 text-secondary")}<span>${safe(cleanInclusion(item))}</span></li>`).join("");
-  const body = `<div class="overflow-hidden rounded-box">${packagePhoto(x)}</div><div class="my-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p class="mt-3 text-sm">${safe(x.description)}</p><h4 class="modal-section">Inclusions</h4><ul class="space-y-1 text-sm">${inclusions}</ul><h4 class="modal-section">History</h4>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
+  const body = `<div class="overflow-hidden rounded-box">${packagePhoto(x)}</div><div class="my-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p class="mt-3 text-sm">${safe(x.description)}</p><h4 class="modal-section">Inclusions</h4><ul class="space-y-1 text-sm">${inclusions}</ul><h4 class="modal-section">History</h4>${line("Created", safe(serverTime(x.createdAt)) + optionalText(" · ", x.createdBy, safe))}${line("Last updated", safe(serverTime(x.updatedAt)) + optionalText(" · ", x.updatedBy, safe))}`;
   openModal("Package details", safe(x.name), body, `<button class="btn" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="openPackageForm('${safe(x.id)}')">${icon("pencil")}Edit</button>`, true);
 }
 function releasePackageFormPhoto() {
@@ -3660,7 +3697,10 @@ function salesPaymentRow({ booking, payment }) {
   const paymentType =
     payment.paymentTarget === "deposit" ? "50% down payment" : "Remaining balance";
   const verifier = staffName(payment.verifiedBy);
-  return `<tr><td data-label="Booking" class="font-semibold">${safe(booking.ref)}</td><td data-label="Customer">${safe(booking.name)}</td><td data-label="Payment type">${paymentType}</td><td data-label="Amount">${money(payment.amount)}</td><td data-label="GCash reference" class="font-mono text-xs">${safe(payment.gcashReference || "—")}</td><td data-label="Receipt file">${safe(payment.receiptFileName)}</td><td data-label="Verified">${safe(serverTime(payment.verifiedAt))}${verifier ? `<span class="block text-xs text-base-content/60">by ${safe(verifier)}</span>` : ""}<span class="block text-xs text-base-content/60">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td data-label="Status"><span class="badge badge-soft badge-sm badge-success">${safe(payment.status)}</span></td></tr>`;
+  const verifierMarkup = verifier
+    ? `<span class="block text-xs text-base-content/60">by ${safe(verifier)}</span>`
+    : "";
+  return `<tr><td data-label="Booking" class="font-semibold">${safe(booking.ref)}</td><td data-label="Customer">${safe(booking.name)}</td><td data-label="Payment type">${paymentType}</td><td data-label="Amount">${money(payment.amount)}</td><td data-label="GCash reference" class="font-mono text-xs">${safe(payment.gcashReference || "—")}</td><td data-label="Receipt file">${safe(payment.receiptFileName)}</td><td data-label="Verified">${safe(serverTime(payment.verifiedAt))}${verifierMarkup}<span class="block text-xs text-base-content/60">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td data-label="Status"><span class="badge badge-soft badge-sm badge-success">${safe(payment.status)}</span></td></tr>`;
 }
 
 /* ----- render ----- */
