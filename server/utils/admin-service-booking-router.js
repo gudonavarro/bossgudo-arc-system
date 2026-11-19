@@ -226,7 +226,6 @@ function applyDeliveryFee(booking, deliveryFeeCents) {
   if (cents.paid === 0) {
     booking.depositAmount = fromCents(depositFor(total));
   }
-  booking.balanceAmount = fromCents(total - cents.paid);
   if (cents.paid > 0) {
     booking.paymentStatus = derivePaymentStatus(cents.paid, total);
   }
@@ -281,7 +280,6 @@ function applyPaymentReview(booking, payment, { decision, adminId, now }) {
 
   const paid = cents.paid + toCents(payment.amount);
   booking.paidAmount = fromCents(paid);
-  booking.balanceAmount = fromCents(cents.total - paid);
   booking.paymentStatus = derivePaymentStatus(paid, cents.total);
   if (booking.bookingStatus === "Approved" && paid >= cents.deposit) {
     booking.bookingStatus = "Confirmed";

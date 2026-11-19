@@ -10,7 +10,7 @@ import {
   normalizeReceiptFileName,
   storeReceipt,
 } from "./receipt-storage.js";
-import { PAYMENT_METHODS, PAYMENT_TARGETS } from "../models/payment.js";
+import { PAYMENT_TARGETS } from "../models/payment.js";
 import {
   CUSTOM_POND_PRICING,
   calculateCustomPondCents,
@@ -155,7 +155,6 @@ function validateServiceBookingInput(body, authUser) {
     const configuration = validateCustomConfiguration(body.customConfiguration);
     if (configuration.error) return configuration;
     pricing = {
-      packageNameSnapshot: CUSTOM_POND_PRICING.name,
       packagePriceCents: 0,
       packageSnapshot: null,
       customizationFeeCents: calculateCustomPondCents(configuration.value),
@@ -186,9 +185,6 @@ function validatePaymentInput(body) {
   if (!PAYMENT_TARGETS.includes(body.paymentTarget)) {
     return { error: "Payment target must be deposit or balance." };
   }
-  if (!PAYMENT_METHODS.includes(body.method)) {
-    return { error: "Select a supported payment method." };
-  }
   const amount = parseAmountInput(body.amount);
   if (amount.error) {
     return {
@@ -198,7 +194,7 @@ function validatePaymentInput(body) {
 
   const gcashReference = validateText(body.gcashReference, {
     field: "GCash reference",
-    required: body.method === "GCash",
+    required: true,
     maxLength: 64,
   });
   if (gcashReference.error) return gcashReference;
@@ -232,9 +228,8 @@ function validatePaymentInput(body) {
   return {
     value: {
       paymentTarget: body.paymentTarget,
-      method: body.method,
       amountCents: amount.value,
-      gcashReference: gcashReference.value || undefined,
+      gcashReference: gcashReference.value,
       receiptFileName: receiptFileName.value,
       receiptStorageKey: receiptStorageKey.value,
     },
@@ -324,14 +319,15 @@ function createServiceBookingRouter() {
         if (!servicePackage) {
           throw new HttpError(400, "Select an available service package.");
         }
-        input.packageNameSnapshot = servicePackage.name;
         input.packagePriceCents = toCents(servicePackage.price);
         input.packageSnapshot = packageSnapshot(servicePackage);
       }
       const duplicate = await ServiceBooking.exists({
         customer_id: authUser.id,
         serviceDate: input.serviceDate,
-        packageNameSnapshot: input.packageNameSnapshot,
+        ...(input.packageSnapshot
+          ? { "packageSnapshot.code": input.packageSnapshot.code }
+          : { serviceType: input.serviceType }),
         bookingStatus: { $in: ACTIVE_BOOKING_STATUSES },
       });
       if (duplicate) {
@@ -349,8 +345,6 @@ function createServiceBookingRouter() {
             customer_id: authUser.id,
             reference,
             serviceType: input.serviceType,
-            packageNameSnapshot: input.packageNameSnapshot,
-            packagePrice: fromCents(input.packagePriceCents),
             packageSnapshot: input.packageSnapshot,
             serviceDate: input.serviceDate,
             serviceLocation: input.serviceLocation,
@@ -364,7 +358,6 @@ function createServiceBookingRouter() {
             totalAmount: fromCents(totalCents),
             depositAmount: fromCents(depositFor(totalCents)),
             paidAmount: fromCents(0),
-            balanceAmount: fromCents(totalCents),
             // Service bookings are accepted automatically on submission so
             // the customer can pay the 50% deposit right away; the booking
             // becomes Confirmed once the owner verifies that deposit.
@@ -530,7 +523,6 @@ function createServiceBookingRouter() {
           paymentTarget: input.paymentTarget,
           amount: fromCents(input.amountCents),
           expectedAmount: fromCents(expectedCents),
-          method: input.method,
           gcashReference: input.gcashReference,
           receiptFileName: receipt.filename || input.receiptFileName,
           receiptStorageKey: input.receiptStorageKey,
