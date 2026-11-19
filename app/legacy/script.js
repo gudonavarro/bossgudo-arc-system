@@ -1935,7 +1935,7 @@ let adminServiceBookings = [],
   adminDataState = "idle",
   adminDataError = "",
   adminActionPending = false;
-const ADMIN_DATA_TABS = new Set(["overview", "bookings", "payments", "visits", "special"]);
+const ADMIN_DATA_TABS = new Set(["overview", "bookings", "payments", "visits", "special", "sales"]);
 
 async function fetchAllPages(path, key) {
   const items = [];
@@ -3212,35 +3212,39 @@ async function deleteFaq(id) {
 }
 
 /* ----- sales ----- */
+/** Sales come only from Verified payments; booking value is reported separately. */
 function adminSales() {
-  const history = bookings.flatMap((b) =>
-      (b.paymentHistory || []).map((p) => ({ ...p, ref: b.ref, name: b.name })),
-    ),
-    received = bookings.reduce((s, b) => s + Number(b.paidAmount || 0), 0),
-    live = bookings.filter(
-      (b) => !["Rejected", "Cancelled"].includes(b.booking),
-    ),
-    booked = live.reduce((s, b) => s + Number(b.total || 0), 0);
-  const outstanding = Math.max(
-    0,
-    booked - live.reduce((sum, booking) => sum + Number(booking.paidAmount || 0), 0),
+  const figures = adminMoneyFigures();
+  const paidOnBookings = sumMoney(adminServiceBookings.map((b) => b.paidAmount));
+  const history = verifiedPaymentRows().sort(
+    (a, b) => new Date(b.payment.verifiedAt) - new Date(a.payment.verifiedAt),
   );
-  const bookingRows = bookings.map(salesBookingRow).join("");
+  // Both totals come from the backend and must agree; flag it if they ever do not.
+  const integrityNotice =
+    Math.abs(paidOnBookings - figures.received) > 0.001
+      ? `<div class="notice" role="alert" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:12px">Verified payments (${money(figures.received)}) do not match the paid amounts recorded on bookings (${money(paidOnBookings)}). Review the payment records before relying on these totals.</div>`
+      : "";
+  const bookingRows = adminServiceBookings.length
+    ? adminServiceBookings.map(salesBookingRow).join("")
+    : '<tr><td colspan="7" class="muted">No bookings yet.</td></tr>';
   const paymentRows = history.length
     ? history.map(salesPaymentRow).join("")
     : '<tr><td colspan="8" class="muted">No verified transactions yet.</td></tr>';
-  return `<div class="stat-grid"><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(received)}</div></div><div class="stat"><div class="label">Booked value (active)</div><div class="value" style="font-size:22px">${money(booked)}</div></div><div class="stat"><div class="label">Still to collect</div><div class="value" style="font-size:22px">${money(outstanding)}</div></div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Sales & transaction records</h3><span class="muted" style="font-size:12px">Verified transactions only</span></div><div class="notice" style="margin-top:12px">A submitted receipt is not counted as a sale until you verify the actual GCash transaction.</div><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Booking status</th><th>Total (with delivery)</th><th>Payment status</th><th>Verified received</th><th>Still to collect</th></tr></thead><tbody>${bookingRows}</tbody></table></div><h3 style="margin-top:24px">Verified payment history</h3><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment type</th><th>Amount</th><th>GCash reference</th><th>Receipt file</th><th>Verified</th><th>Status</th></tr></thead><tbody>${paymentRows}</tbody></table></div></div>`;
+  return `<div class="stat-grid"><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(figures.received)}</div></div><div class="stat"><div class="label">Booked value (confirmed bookings)</div><div class="value" style="font-size:22px">${money(figures.bookedValue)}</div></div><div class="stat"><div class="label">Still to collect (confirmed bookings)</div><div class="value" style="font-size:22px">${money(figures.toCollect)}</div>${awaitingDepositNote(figures)}</div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Sales & transaction records</h3><span class="muted" style="font-size:12px">Verified transactions only</span></div><div class="notice" style="margin-top:12px">A submitted receipt is not counted as a sale until you verify the actual GCash transaction. Pending and rejected payments are never included.</div>${integrityNotice}<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Booking status</th><th>Total (with delivery)</th><th>Payment status</th><th>Verified received</th><th>Still to collect</th></tr></thead><tbody>${bookingRows}</tbody></table></div><h3 style="margin-top:24px">Verified payment history</h3><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment type</th><th>Amount</th><th>GCash reference</th><th>Receipt file</th><th>Verified</th><th>Status</th></tr></thead><tbody>${paymentRows}</tbody></table></div></div>`;
 }
 function salesBookingRow(booking) {
-  const outstanding = ["Rejected", "Cancelled"].includes(booking.booking)
-    ? "—"
-    : money(Math.max(0, booking.total - (booking.paidAmount || 0)));
-  return `<tr><td>${booking.ref}</td><td>${safe(booking.name)}</td><td>${safe(booking.booking)}</td><td>${money(booking.total)}</td><td>${safe(booking.payment)}</td><td>${money(booking.paidAmount || 0)}</td><td>${outstanding}</td></tr>`;
+  let outstanding = money(booking.balance);
+  if (["Rejected", "Cancelled"].includes(booking.booking)) outstanding = "—";
+  else if (!COMMITTED_BOOKING_STATUSES.has(booking.booking)) {
+    outstanding = '<span class="muted">Awaiting deposit</span>';
+  }
+  return `<tr><td>${safe(booking.ref)}</td><td>${safe(booking.name)}</td><td>${safe(booking.booking)}</td><td>${money(booking.total)}</td><td>${safe(booking.payment)}</td><td>${money(booking.paidAmount || 0)}</td><td>${outstanding}</td></tr>`;
 }
-function salesPaymentRow(payment) {
+function salesPaymentRow({ booking, payment }) {
   const paymentType =
-    payment.target === "deposit" ? "50% down payment" : "Remaining balance";
-  return `<tr><td>${safe(payment.ref)}</td><td>${safe(payment.name)}</td><td>${paymentType}</td><td>${money(payment.amount)}</td><td>${safe(payment.reference)}</td><td>${safe(payment.fileName)}</td><td>${safe(payment.verifiedAt)}</td><td><span class="status green">${safe(payment.status)}</span></td></tr>`;
+    payment.paymentTarget === "deposit" ? "50% down payment" : "Remaining balance";
+  const verifier = staffName(payment.verifiedBy);
+  return `<tr><td>${safe(booking.ref)}</td><td>${safe(booking.name)}</td><td>${paymentType}</td><td>${money(payment.amount)}</td><td>${safe(payment.gcashReference || "—")}</td><td>${safe(payment.receiptFileName)}</td><td>${safe(serverTime(payment.verifiedAt))}${verifier ? `<br><span class="muted">by ${safe(verifier)}</span>` : ""}<br><span class="muted">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td><span class="status green">${safe(payment.status)}</span></td></tr>`;
 }
 
 /* ----- render ----- */
