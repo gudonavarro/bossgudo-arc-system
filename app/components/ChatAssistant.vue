@@ -7,13 +7,14 @@
   <div class="chat-assistant">
     <button
       id="chatLaunch"
-      class="btn btn-primary fixed right-4 bottom-4 z-50 h-12 gap-2 rounded-full px-5 shadow-lg shadow-primary/25 sm:right-6 sm:bottom-6"
+      class="btn btn-primary fixed right-4 bottom-4 z-50 size-14 gap-2 rounded-full p-0 shadow-lg shadow-primary/25 sm:right-6 sm:bottom-6 sm:h-12 sm:w-auto sm:px-5"
       type="button"
       aria-controls="chatBox"
       aria-expanded="false"
+      aria-label="Ask ARC Assistant"
     >
-      <AppIcon name="message-circle" />
-      <span>Ask ARC Assistant</span>
+      <AppIcon name="message-circle" size="size-6 sm:size-5" />
+      <span class="hidden sm:inline">Ask ARC Assistant</span>
     </button>
 
     <section

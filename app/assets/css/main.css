@@ -1,13 +1,10 @@
 /*
  * Boss Gudo design system: Tailwind CSS v4 + DaisyUI v5.
  *
- * The previous stylesheet is loaded into the "legacy" cascade layer, which
- * sits below DaisyUI components, while views move to the new components.
+ * Two themes share the brand colours: "bossgudo" for the customer website
+ * and "bossgudo-admin" (tighter radii) for the admin dashboard.
  */
-@layer theme, base, legacy, components, utilities;
-
 @import "tailwindcss";
-@import "./style.css" layer(legacy);
 
 /* The legacy script renders its views from HTML strings. */
 @source "../../legacy/script.js";
@@ -437,13 +434,6 @@
 
 /* Admin dashboard: compact, data-oriented surfaces. */
 @layer components {
-  /* Long status labels may wrap inside narrow table cells. */
-  .badge:not(.badge-xs) {
-    height: auto;
-    min-height: var(--size);
-    padding-block: 0.125rem;
-    line-height: 1.25;
-  }
   .admin-title {
     @apply text-2xl font-semibold tracking-tight text-base-content;
   }
@@ -497,17 +487,26 @@
       @apply block w-full;
     }
     .data-table tbody tr {
-      @apply border-b border-base-300 px-4 py-3;
+      @apply border-b border-base-300 px-5 py-3;
     }
     .data-table td {
-      @apply grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 border-0 px-0 py-1.5;
+      @apply relative min-h-7 border-0 py-1.5;
+      /* Overrides the DaisyUI table cell padding (logical properties). */
+      padding-inline: 8rem 0 !important;
     }
     .data-table td[data-label]::before {
       content: attr(data-label);
-      @apply text-xs font-medium text-base-content/55;
+      @apply absolute top-1.5 left-0 w-28 text-xs font-medium text-base-content/55;
     }
     .data-table td[colspan] {
-      @apply block;
+      padding-inline: 0 !important;
     }
+  }
+}
+
+/* Status badges stay on one line; tables scroll inside their container. */
+@layer utilities {
+  .badge {
+    white-space: nowrap;
   }
 }
