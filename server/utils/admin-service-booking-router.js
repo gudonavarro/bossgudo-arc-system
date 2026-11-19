@@ -5,11 +5,13 @@ import {
   PAYMENT_STATUSES,
   SERVICE_TYPES,
 } from "../models/service-booking.js";
+import { depositFor, fromCents, parseAmountInput } from "./money.js";
 import {
   HttpError,
   OBJECT_ID_PATTERN,
   bookingCents,
   bookingIdentifierFilter,
+  derivePaymentStatus,
   handleRouteError,
   paginationMeta,
   parsePagination,
@@ -205,6 +207,47 @@ function assertStatusTransition(booking, nextStatus) {
   }
 }
 
+const DELIVERY_FEE_STATUSES = new Set(["Approved", "Confirmed", "Ongoing", "Completed"]);
+
+/**
+ * Recalculates the booking totals for a new delivery fee. The required
+ * deposit follows the new total until a payment has been verified; after
+ * that the verified deposit stands and the change flows into the balance.
+ */
+function applyDeliveryFee(booking, deliveryFeeCents) {
+  if (!DELIVERY_FEE_STATUSES.has(booking.bookingStatus)) {
+    throw new HttpError(
+      409,
+      `The delivery fee cannot be set on a ${booking.bookingStatus} booking.`,
+    );
+  }
+  if (booking.paymentStatus === "Verification Pending") {
+    throw new HttpError(
+      409,
+      "Review the payment awaiting verification before changing the delivery fee.",
+    );
+  }
+
+  const cents = bookingCents(booking);
+  const total = cents.packagePrice + cents.customizationFee + deliveryFeeCents;
+  if (total < cents.paid) {
+    throw new HttpError(
+      409,
+      "The new total would be less than the amount already paid.",
+    );
+  }
+
+  booking.deliveryFee = fromCents(deliveryFeeCents);
+  booking.totalAmount = fromCents(total);
+  if (cents.paid === 0) {
+    booking.depositAmount = fromCents(depositFor(total));
+  }
+  booking.balanceAmount = fromCents(total - cents.paid);
+  if (cents.paid > 0) {
+    booking.paymentStatus = derivePaymentStatus(cents.paid, total);
+  }
+}
+
 function createAdminServiceBookingRouter() {
   const router = express.Router();
   const authenticateAdmin = createAuthenticationMiddleware({
@@ -323,6 +366,36 @@ function createAdminServiceBookingRouter() {
       return response.status(200).json({ booking: serializeBooking(booking) });
     } catch (error) {
       return handleRouteError(response, error, "Booking status update");
+    }
+  });
+
+  router.patch("/:identifier/delivery-fee", async (request, response) => {
+    const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+    if (!identifierFilter) {
+      return response.status(400).json({ error: "Invalid booking id or reference." });
+    }
+    const deliveryFee = parseAmountInput(request.body?.deliveryFee, {
+      allowZero: true,
+    });
+    if (deliveryFee.error) {
+      return response.status(400).json({
+        error: "Delivery fee must be zero or a positive value with at most two decimals.",
+      });
+    }
+
+    const { ServiceBooking } = request.bookingModels;
+    try {
+      const booking = await ServiceBooking.findOne(identifierFilter);
+      if (!booking) {
+        return response.status(404).json({ error: "Booking not found." });
+      }
+      applyDeliveryFee(booking, deliveryFee.value);
+      booking.deliveryFeeSetBy = request.authUser.id;
+      booking.deliveryFeeSetAt = new Date();
+      await booking.save();
+      return response.status(200).json({ booking: serializeBooking(booking) });
+    } catch (error) {
+      return handleRouteError(response, error, "Delivery fee update");
     }
   });
 
