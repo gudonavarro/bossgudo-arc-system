@@ -11,7 +11,7 @@ import {
   RECEIPT_CONTENT_TYPES,
   findReceiptFile,
   openReceiptDownload,
-} from "./receipt-storage.js";
+} from "./receipt-storage";
 import {
   HttpError,
   OBJECT_ID_PATTERN,

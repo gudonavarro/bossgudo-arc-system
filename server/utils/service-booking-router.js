@@ -9,7 +9,7 @@ import {
   findOwnedReceipt,
   normalizeReceiptFileName,
   storeReceipt,
-} from "./receipt-storage.js";
+} from "./receipt-storage";
 import { PAYMENT_TARGETS } from "../models/payment";
 import {
   CUSTOM_POND_PRICING,

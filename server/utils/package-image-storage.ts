@@ -1,26 +1,39 @@
-import mongoose from "mongoose";
+import mongoose, { type Connection, type Model, type mongo } from "mongoose";
 import { pipeline } from "node:stream/promises";
-import { contentMatchesType } from "./receipt-storage.js";
+import { connectedDb, contentMatchesType } from "./receipt-storage";
+import type { PackageImage, ServicePackage } from "../models/service-package";
 
 /**
  * Package photo storage in the `package_images` GridFS bucket, separate from
  * payment receipts. Packages store only a reference to the file.
  */
 const PACKAGE_IMAGE_BUCKET = "package_images";
-const PACKAGE_IMAGE_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"]);
+const PACKAGE_IMAGE_TYPES: readonly string[] = Object.freeze(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PACKAGE_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PACKAGE_IMAGE_DIMENSION = 1200;
 const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 
-function getBucket(connection) {
-  return new mongoose.mongo.GridFSBucket(connection.db, { bucketName: PACKAGE_IMAGE_BUCKET });
+export interface ImageDimensions {
+  width: number;
+  height: number;
 }
 
-function jpegDimensions(buffer) {
+/** The parts of an Express response used to stream a photo. */
+export type ImageResponse = NodeJS.WritableStream & {
+  destroyed: boolean;
+  status(code: number): { json(body: unknown): unknown };
+  set(headers: Record<string, string>): unknown;
+};
+
+function getBucket(connection: Connection): mongo.GridFSBucket {
+  return new mongoose.mongo.GridFSBucket(connectedDb(connection), { bucketName: PACKAGE_IMAGE_BUCKET });
+}
+
+function jpegDimensions(buffer: Buffer): ImageDimensions | null {
   let offset = 2;
   while (offset + 9 < buffer.length) {
     if (buffer[offset] !== 0xff) return null;
-    const marker = buffer[offset + 1];
+    const marker = buffer[offset + 1] as number;
     if (marker === 0xff) {
       offset += 1;
       continue;
@@ -37,7 +50,7 @@ function jpegDimensions(buffer) {
   return null;
 }
 
-function webpDimensions(buffer) {
+function webpDimensions(buffer: Buffer): ImageDimensions | null {
   if (buffer.length < 30) return null;
   const chunk = buffer.toString("ascii", 12, 16);
   if (chunk === "VP8 ") {
@@ -54,7 +67,7 @@ function webpDimensions(buffer) {
 }
 
 /** Reads pixel dimensions from the image header without decoding it. */
-function imageDimensions(buffer, contentType) {
+function imageDimensions(buffer: Buffer, contentType: string): ImageDimensions | null {
   try {
     if (contentType === "image/png") {
       return buffer.length >= 24 && buffer.toString("ascii", 12, 16) === "IHDR"
@@ -70,7 +83,7 @@ function imageDimensions(buffer, contentType) {
 }
 
 /** Validates an uploaded photo; returns an error message or null. */
-function validatePackageImage(buffer, contentType) {
+function validatePackageImage(buffer: unknown, contentType: string): string | null {
   if (!PACKAGE_IMAGE_TYPES.includes(contentType)) {
     return "Upload the photo as a JPG, PNG or WEBP image.";
   }
@@ -87,7 +100,11 @@ function validatePackageImage(buffer, contentType) {
   return null;
 }
 
-async function storePackageImage(connection, buffer, { contentType, code }) {
+async function storePackageImage(
+  connection: Connection,
+  buffer: Buffer,
+  { contentType, code }: { contentType: string; code: string },
+): Promise<mongo.ObjectId> {
   const upload = getBucket(connection).openUploadStream(`${code}-photo`, {
     metadata: { packageCode: code, contentType },
   });
@@ -100,22 +117,31 @@ async function storePackageImage(connection, buffer, { contentType, code }) {
 }
 
 /** Deletes a photo file only when no package references it any more. */
-async function deletePackageImageIfUnreferenced(connection, ServicePackage, fileId) {
+async function deletePackageImageIfUnreferenced(
+  connection: Connection,
+  ServicePackage: Pick<Model<ServicePackage>, "exists">,
+  fileId: mongo.ObjectId | null | undefined,
+): Promise<boolean> {
   if (!fileId) return false;
   if (await ServicePackage.exists({ "image.fileId": fileId })) return false;
   try {
     await getBucket(connection).delete(fileId);
     return true;
   } catch (error) {
-    if (/FileNotFound|File not found/i.test(error?.message ?? "")) return false;
+    if (/FileNotFound|File not found/i.test((error as { message?: string } | null)?.message ?? "")) return false;
     throw error;
   }
 }
 
 /** Streams a package photo with safe headers. */
-async function sendPackageImage(response, connection, pkg, { cacheControl }) {
-  const file = await connection.db
-    .collection(`${PACKAGE_IMAGE_BUCKET}.files`)
+async function sendPackageImage(
+  response: ImageResponse,
+  connection: Connection,
+  pkg: { image: PackageImage },
+  { cacheControl }: { cacheControl: string },
+): Promise<void> {
+  const file = await connectedDb(connection)
+    .collection<mongo.GridFSFile>(`${PACKAGE_IMAGE_BUCKET}.files`)
     .findOne({ _id: pkg.image.fileId });
   if (!file) {
     response.status(404).json({ error: "Photo not found." });
@@ -136,7 +162,7 @@ async function sendPackageImage(response, connection, pkg, { cacheControl }) {
   } catch (error) {
     // The browser cancelled the request (e.g. the image was re-rendered);
     // there is nobody left to answer, so this is not a server error.
-    if (error?.code === "ERR_STREAM_PREMATURE_CLOSE" || response.destroyed) return;
+    if ((error as { code?: unknown } | null)?.code === "ERR_STREAM_PREMATURE_CLOSE" || response.destroyed) return;
     throw error;
   }
 }

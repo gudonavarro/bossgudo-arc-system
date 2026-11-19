@@ -25,7 +25,7 @@ import {
   sendPackageImage,
   storePackageImage,
   validatePackageImage,
-} from "./package-image-storage.js";
+} from "./package-image-storage";
 
 const require = createRequire(import.meta.url);
 const path = require("node:path");
