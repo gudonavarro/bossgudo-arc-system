@@ -43,7 +43,7 @@ onMounted(() => cancelButton.value?.focus());
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[80] grid place-items-center bg-neutral/60 p-4 backdrop-blur-sm">
+  <div class="fixed inset-0 z-80 grid place-items-center bg-neutral/60 p-4 backdrop-blur-sm">
     <section
       class="w-full max-w-sm rounded-box bg-base-100 p-6 shadow-2xl"
       role="alertdialog"

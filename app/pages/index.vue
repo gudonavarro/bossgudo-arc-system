@@ -199,7 +199,7 @@ const faqs = [
           <img
             src="/images/redclaw-crayfish.jpg"
             alt="An Australian Red Claw crayfish showing the red patch on its claw"
-            class="aspect-[4/3] w-full rounded-box object-cover"
+            class="aspect-4/3 w-full rounded-box object-cover"
             width="1280"
             height="750"
             fetchpriority="high"
@@ -268,7 +268,7 @@ const faqs = [
         <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <template v-if="catalogStatus === 'pending' || catalogStatus === 'idle'">
             <div v-for="n in 3" :key="n" class="card p-0 border border-base-300 bg-base-100" aria-hidden="true">
-              <div class="skeleton aspect-[4/3] rounded-b-none" />
+              <div class="skeleton aspect-4/3 rounded-b-none" />
               <div class="card-body gap-3">
                 <div class="skeleton h-6 w-2/3" />
                 <div class="skeleton h-4 w-full" />
@@ -294,7 +294,7 @@ const faqs = [
             :key="item.code"
             class="card overflow-hidden border border-base-300 bg-base-100 p-0"
           >
-            <figure class="relative aspect-[4/3] bg-base-200">
+            <figure class="relative aspect-4/3 bg-base-200">
               <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name" class="size-full object-cover" loading="lazy">
               <AppIcon v-else name="shrimp" size="size-16 text-primary/30" />
               <span v-if="item.featured" class="badge badge-secondary absolute top-3 left-3 gap-1 font-semibold">
@@ -333,7 +333,7 @@ const faqs = [
       <img
         src="/images/aquaculture-ponds.jpg"
         alt="Aerated aquaculture ponds with a farm building beside them"
-        class="aspect-[4/3] w-full rounded-box object-cover"
+        class="aspect-4/3 w-full rounded-box object-cover"
         width="1280"
         height="720"
         loading="lazy"
@@ -391,7 +391,7 @@ const faqs = [
           <img
             src="/images/redclaw-crayfish-wild.jpg"
             alt="A Red Claw crayfish on leaf litter"
-            class="mt-8 aspect-[16/7] w-full rounded-box object-cover"
+            class="mt-8 aspect-16/7 w-full rounded-box object-cover"
             width="1280"
             height="465"
             loading="lazy"

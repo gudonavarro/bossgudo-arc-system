@@ -263,7 +263,7 @@
   }
   .updates > li::before {
     content: "";
-    @apply absolute top-1.5 -left-[1.3rem] size-2.5 rounded-full border-2 border-base-100 bg-primary;
+    @apply absolute top-1.5 left-[-1.3rem] size-2.5 rounded-full border-2 border-base-100 bg-primary;
   }
   .updates time {
     @apply mt-0.5 block text-xs text-base-content/55;
@@ -345,13 +345,13 @@
     @apply opacity-70;
   }
   .pkg-media {
-    @apply relative grid h-44 place-items-center overflow-hidden bg-gradient-to-br from-primary/10 to-accent/20 text-primary/45;
+    @apply relative grid h-44 place-items-center overflow-hidden bg-linear-to-br from-primary/10 to-accent/20 text-primary/45;
   }
   .pkg-media > img {
     @apply size-full object-cover;
   }
   .pkg-placeholder {
-    @apply grid size-full place-items-center bg-gradient-to-br from-primary/10 to-accent/20 text-primary/45;
+    @apply grid size-full place-items-center bg-linear-to-br from-primary/10 to-accent/20 text-primary/45;
   }
   .package-photo {
     @apply block h-56 w-full object-cover;

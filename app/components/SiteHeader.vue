@@ -31,7 +31,7 @@ watch(
 
 <template>
   <header class="site-header sticky top-0 z-40 w-full border-b border-base-300 bg-base-100/95 backdrop-blur">
-    <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-[4.5rem] lg:px-8">
+    <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-18 lg:px-8">
       <NuxtLink to="/" class="flex min-w-0 items-center gap-3 rounded-lg" aria-label="BOSSGUDO A.R.C. AQUA FARM home">
         <img
           src="/images/boss-gudo-logo.png"
