@@ -18,8 +18,10 @@ import {
   bookingCents,
   bookingIdentifierFilter,
   derivePaymentStatus,
+  escapeRegExp,
   handleRouteError,
   paginationMeta,
+  parseCalendarDate,
   parsePagination,
   serializeBooking,
   serializePayment,
@@ -38,21 +40,6 @@ const CUSTOMER_FIELDS = "firstName lastName email phoneNumber isActive";
 const STAFF_FIELDS = "firstName lastName role";
 const AUDIT_VIEW = Object.freeze({ includeAudit: true });
 const MAX_SEARCH_LENGTH = 100;
-
-function parseCalendarDate(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return null;
-  }
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== value
-    ? null
-    : date;
-}
-
-function escapeRegExp(text) {
-  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-}
 
 const ENUM_FILTERS = [
   ["bookingStatus", BOOKING_STATUSES, "Invalid booking status."],

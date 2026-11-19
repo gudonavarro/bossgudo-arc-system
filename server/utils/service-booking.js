@@ -156,6 +156,22 @@ function parseFutureServiceDate(
   return { value: date };
 }
 
+/** Parses any valid YYYY-MM-DD calendar date (UTC midnight), or null. */
+function parseCalendarDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+    ? null
+    : date;
+}
+
+function escapeRegExp(text) {
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
 /** True for a Saturday or Sunday stored as UTC midnight of that day. */
 function isWeekendDate(date) {
   const day = date.getUTCDay();
@@ -335,12 +351,14 @@ export {
   bookingCents,
   bookingIdentifierFilter,
   derivePaymentStatus,
+  escapeRegExp,
   getErrorName,
   handleRouteError,
   isDateClosed,
   isDuplicateKeyError,
   isWeekendDate,
   paginationMeta,
+  parseCalendarDate,
   parseFutureServiceDate,
   parsePagination,
   saveWithUniqueReference,
