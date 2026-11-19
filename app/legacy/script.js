@@ -938,11 +938,11 @@ function myUnread() {
   );
 }
 function updateNavBadge() {
-  const n = myUnread(),
-    buttons = document.querySelectorAll('.nav a[data-page="mybookings"]');
-  buttons.forEach((btn) => {
-    btn.innerHTML =
-      "My Bookings" + (n ? `<span class="badge">${n}</span>` : "");
+  const n = myUnread();
+  document.querySelectorAll("[data-nav-badge]").forEach((badge) => {
+    badge.textContent = n ? String(n) : "";
+    badge.hidden = !n;
+    badge.setAttribute("aria-label", n ? `${n} new update${n === 1 ? "" : "s"}` : "");
   });
 }
 
@@ -3492,18 +3492,28 @@ if (chatLaunch && chatBox) {
   chatLaunch.onclick = () => {
     chatBox.style.display = "block";
     chatLaunch.setAttribute("aria-expanded", "true");
+    document.getElementById("chatText")?.focus();
   };
 }
 if (chatClose && chatBox) {
   chatClose.onclick = () => {
     chatBox.style.display = "none";
     chatLaunch?.setAttribute("aria-expanded", "false");
+    chatLaunch?.focus();
   };
+  chatBox.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") chatClose.click();
+  });
 }
 function appendChatBubble(container, message, isUser = false, link = null) {
+  const row = document.createElement("div");
+  row.className = isUser ? "chat chat-end" : "chat chat-start";
   const bubble = document.createElement("div");
-  bubble.className = isUser ? "bubble user" : "bubble";
+  bubble.className = isUser
+    ? "chat-bubble chat-bubble-primary text-sm whitespace-pre-line"
+    : "chat-bubble bg-base-100 text-base-content text-sm whitespace-pre-line";
   bubble.textContent = message;
+  row.append(bubble);
   if (!isUser && link) {
     const safeLink =
       typeof link.label === "string" &&
@@ -3517,7 +3527,7 @@ function appendChatBubble(container, message, isUser = false, link = null) {
         window.location.origin;
     if (safeLink) {
       const linkElement = document.createElement("a");
-      linkElement.className = "chat-link";
+      linkElement.className = "chat-link btn btn-primary btn-xs mt-2";
       linkElement.href = link.href;
       linkElement.textContent = link.label;
       bubble.append(document.createElement("br"), linkElement);
@@ -3525,7 +3535,7 @@ function appendChatBubble(container, message, isUser = false, link = null) {
       console.error("ARC Assistant returned an invalid link.");
     }
   }
-  container.append(bubble);
+  container.append(row);
 }
 if (chatForm) {
   chatForm.onsubmit = async (e) => {
@@ -3539,7 +3549,8 @@ if (chatForm) {
     input.value = "";
     if (submitButton) {
       submitButton.disabled = true;
-      submitButton.textContent = "Sending...";
+      submitButton.setAttribute("aria-busy", "true");
+      submitButton.setAttribute("aria-label", "Sending…");
     }
     try {
       const response = await fetch("/api/chatbot/message", {
@@ -3566,7 +3577,8 @@ if (chatForm) {
     } finally {
       if (submitButton) {
         submitButton.disabled = false;
-        submitButton.textContent = "Send";
+        submitButton.setAttribute("aria-busy", "false");
+        submitButton.setAttribute("aria-label", "Send message");
       }
       body.scrollTop = body.scrollHeight;
     }

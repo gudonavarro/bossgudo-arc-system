@@ -16,8 +16,8 @@
 
 @plugin "daisyui" {
   themes: false;
-  exclude: badge, breadcrumbs, calendar, card, footer, hero, label, modal, stat,
-    status, steps, timeline, toast;
+  exclude: breadcrumbs, calendar, label, modal, stat, status, steps, timeline,
+    toast;
 }
 
 /* Customer website: welcoming, rounded, generous spacing. */
@@ -112,5 +112,38 @@
   }
   svg.icon {
     flex-shrink: 0;
+  }
+}
+
+@layer components {
+  /* Global notification. Shown by useToast() and the legacy toast(). */
+  .app-toast {
+    display: none;
+    pointer-events: auto;
+    align-items: center;
+    gap: 0.625rem;
+    max-width: min(28rem, 100%);
+    padding: 0.875rem 1.125rem;
+    border-radius: var(--radius-box);
+    background: var(--color-neutral);
+    color: var(--color-neutral-content);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.45;
+    box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.35);
+  }
+  .app-toast.show {
+    display: flex;
+  }
+  /* The legacy script marks the current nav link with .active. */
+  #mobileNav .menu a.active,
+  #mobileNav .menu a.router-link-exact-active {
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  .app-toast.toast-success {
+    background: var(--color-success);
+    color: var(--color-success-content);
   }
 }

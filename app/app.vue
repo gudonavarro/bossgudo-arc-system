@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const route = useRoute();
-const { isAuthenticated, isCustomer } = useAuth();
 
 const currentPage = computed(() => {
   let start = 0;
@@ -19,83 +18,48 @@ const legacyPages = new Set([
   "admin",
 ]);
 const authPages = new Set(["customer-login", "register"]);
+const standalonePages = new Set([
+  "customer-login",
+  "admin-login",
+  "register",
+  "forgot-password",
+  "reset-password",
+]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
-const navigationVisible = computed(
-  () => legacyPageVisible.value || authPages.has(currentPage.value),
+const headerVisible = computed(
+  () =>
+    currentPage.value === "home" ||
+    legacyPageVisible.value ||
+    authPages.has(currentPage.value),
+);
+const footerVisible = computed(() => !standalonePages.has(currentPage.value));
+const chatVisible = computed(() => currentPage.value !== "admin-login");
+const isAdminArea = computed(() =>
+  ["admin", "admin-login"].includes(currentPage.value),
 );
 
-const navItems = [
-  { label: "Home", to: "/" },
-  { label: "About", to: "/about" },
-  { label: "Shop", to: "/shop" },
-  { label: "Bookings", to: "/booking" },
-];
-
 useHead(() => ({
+  htmlAttrs: { "data-theme": isAdminArea.value ? "bossgudo-admin" : "bossgudo" },
   bodyAttrs: { "data-page": currentPage.value },
 }));
 </script>
 
 <template>
-  <header v-if="navigationVisible" class="topbar inner-navbar">
-    <NuxtLink to="/" class="brand">
-      <img src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo" class="brand-logo">
-      <span class="brand-name">BOSSGUDO<small>A.R.C. AQUA FARM</small></span>
-    </NuxtLink>
-    <nav id="mainNav" class="nav" aria-label="Main navigation">
-      <NuxtLink v-for="item in navItems" :key="item.to" :to="item.to" :data-page="item.to.replace(/^\//, '') || 'home'">
-        {{ item.label }}
-      </NuxtLink>
-      <NuxtLink v-if="isCustomer" to="/mybookings" data-page="mybookings">My Bookings</NuxtLink>
-      <NuxtLink
-        v-if="isAuthenticated"
-        :to="{ path: '/logout', query: { returnTo: route.fullPath } }"
-      >
-        Log Out
-      </NuxtLink>
-      <NuxtLink v-else-if="!isAuthenticated" to="/customer-login" class="primary">Login</NuxtLink>
-    </nav>
-  </header>
+  <a href="#content" class="btn btn-primary btn-sm fixed top-2 left-2 z-[100] -translate-y-20 focus:translate-y-0">Skip to content</a>
 
-  <main id="app" v-show="legacyPageVisible" />
-  <div v-show="!legacyPageVisible"><NuxtPage /></div>
+  <SiteHeader v-if="headerVisible" :overlay="currentPage === 'home'" />
+
+  <div id="content" class="min-h-[60vh]">
+    <main id="app" v-show="legacyPageVisible" class="legacy-view" />
+    <div v-show="!legacyPageVisible"><NuxtPage /></div>
+  </div>
 
   <div id="modalHost" />
-  <output class="toast" id="toast" aria-live="polite" />
-
-  <footer v-if="!['customer-login', 'admin-login', 'register', 'forgot-password', 'reset-password'].includes(currentPage)" class="footer">
-    <div class="footer-social">
-      <h3>SOCIAL</h3>
-      <div class="social-links">
-        <a href="https://www.facebook.com/profile.php?id=61575088857931" target="_blank" rel="noopener noreferrer" aria-label="Visit our Facebook page" title="Facebook">
-          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.019 4.388 11.015 10.125 11.927v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.514c-1.491 0-1.956.93-1.956 1.885v2.269h3.328l-.532 3.49h-2.796V24C19.612 23.088 24 18.092 24 12.073Z" />
-          </svg>
-        </a>
-        <a href="https://www.tiktok.com/@jedd.angelo?is_from_webapp=1&amp;sender_device=pc" target="_blank" rel="noopener noreferrer" aria-label="Visit our TikTok page" title="TikTok">
-          <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.68a6.33 6.33 0 0 0 10.81 4.48 6.37 6.37 0 0 0 1.86-4.57v-6.2a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.34z" />
-          </svg>
-        </a>
-      </div>
-    </div>
-    <aside class="footer-bottom">
-      &copy; <span id="footerYear" /> BOSSGUDO A.R.C. AQUA FARM. All rights reserved.
-    </aside>
-  </footer>
-
-  <button v-if="currentPage !== 'admin-login'" class="chat-launch" id="chatLaunch" type="button">💬 Ask ARC Assistant</button>
-  <div v-if="currentPage !== 'admin-login'" class="chat-box" id="chatBox">
-    <div class="chat-head">
-      ARC Inquiry Assistant
-      <button class="small" id="chatClose" type="button" aria-label="Close assistant">✕</button>
-    </div>
-    <div class="chat-body" id="chatBody">
-      <div class="bubble">Hi! Ask me about crayfish prices and other topics covered by the farm FAQs.</div>
-    </div>
-    <form class="chat-input" id="chatForm">
-      <input id="chatText" placeholder="Ask about crayfish prices..." aria-label="Ask a question" maxlength="1000" required>
-      <button class="primary" type="submit">Send</button>
-    </form>
+  <div class="pointer-events-none fixed inset-x-0 top-4 z-[90] flex justify-center px-4 sm:justify-end sm:px-6">
+    <output id="toast" class="app-toast" aria-live="polite" />
   </div>
+
+  <SiteFooter v-if="footerVisible" />
+
+  <ChatAssistant v-show="chatVisible" />
 </template>
