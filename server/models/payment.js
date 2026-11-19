@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import { toCents } from "../utils/money.js";
 
 const PAYMENT_TARGETS = Object.freeze(["deposit", "balance"]);
-const PAYMENT_METHODS = Object.freeze(["GCash"]);
 const PAYMENT_RECORD_STATUSES = Object.freeze(["Pending", "Verified", "Rejected"]);
 
 const positiveMoney = {
@@ -30,8 +29,8 @@ const paymentSchema = new mongoose.Schema(
     paymentTarget: { type: String, enum: PAYMENT_TARGETS, required: true },
     amount: positiveMoney,
     expectedAmount: positiveMoney,
-    method: { type: String, enum: PAYMENT_METHODS, required: true },
-    gcashReference: { type: String, trim: true, maxlength: 64 },
+    // GCash is the only payment method, so every payment has a GCash reference.
+    gcashReference: { type: String, required: true, trim: true, maxlength: 64 },
     receiptFileName: {
       type: String,
       required: true,
@@ -80,7 +79,6 @@ function getPaymentModel(connection) {
 }
 
 export {
-  PAYMENT_METHODS,
   PAYMENT_RECORD_STATUSES,
   PAYMENT_TARGETS,
   getPaymentModel,

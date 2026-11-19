@@ -618,7 +618,7 @@ function toCustomerBooking(server) {
     phone: server.customerPhone,
     location: server.serviceLocation,
     notes: server.notes || "",
-    pkg: server.packageNameSnapshot,
+    pkg: server.packageName,
     freebie: (preset?.inclusions || []).join(" · "),
     packageLayers: preset && !custom ? preset.layers : "",
     packageDimensions: preset && !custom ? preset.dimensions : "",
@@ -790,7 +790,6 @@ async function submitServerPayment(serverBooking, target, { reference, file }) {
     body: JSON.stringify({
       paymentTarget: target,
       amount,
-      method: "GCash",
       gcashReference: reference,
       receiptFileName: receipt.receiptFileName,
       receiptStorageKey: receipt.receiptStorageKey,

@@ -280,8 +280,9 @@ function serializeBooking(document, { includeAudit = false } = {}) {
     reference: booking.reference,
     customer_id: booking.customer_id,
     serviceType: booking.serviceType,
-    packageNameSnapshot: booking.packageNameSnapshot,
-    packagePrice: decimalToNumber(booking.packagePrice),
+    // Derived for display: custom pond designs have no catalog package.
+    packageName: booking.packageSnapshot?.name ?? booking.serviceType,
+    packagePrice: booking.packageSnapshot ? decimalToNumber(booking.packageSnapshot.price) : 0,
     packageSnapshot: booking.packageSnapshot
       ? {
           code: booking.packageSnapshot.code,
@@ -306,7 +307,8 @@ function serializeBooking(document, { includeAudit = false } = {}) {
     totalAmount: decimalToNumber(booking.totalAmount),
     depositAmount: decimalToNumber(booking.depositAmount),
     paidAmount: decimalToNumber(booking.paidAmount),
-    balanceAmount: decimalToNumber(booking.balanceAmount),
+    // Not stored: the balance is always total - paid.
+    balanceAmount: (toCents(booking.totalAmount) - toCents(booking.paidAmount)) / 100,
     bookingStatus: booking.bookingStatus,
     paymentStatus: booking.paymentStatus,
     deliveryFeeSetAt: booking.deliveryFeeSetAt ?? null,
@@ -332,7 +334,6 @@ function serializePayment(document, { includeAudit = false } = {}) {
     paymentTarget: payment.paymentTarget,
     amount: decimalToNumber(payment.amount),
     expectedAmount: decimalToNumber(payment.expectedAmount),
-    method: payment.method,
     gcashReference: payment.gcashReference ?? null,
     receiptFileName: payment.receiptFileName,
     status: payment.status,
@@ -349,14 +350,16 @@ function serializePayment(document, { includeAudit = false } = {}) {
 }
 
 function bookingCents(booking) {
+  const total = toCents(booking.totalAmount);
+  const paid = toCents(booking.paidAmount);
   return {
-    packagePrice: toCents(booking.packagePrice),
+    packagePrice: booking.packageSnapshot ? toCents(booking.packageSnapshot.price) : 0,
     customizationFee: toCents(booking.customizationFee),
     deliveryFee: toCents(booking.deliveryFee),
-    total: toCents(booking.totalAmount),
+    total,
     deposit: toCents(booking.depositAmount),
-    paid: toCents(booking.paidAmount),
-    balance: toCents(booking.balanceAmount),
+    paid,
+    balance: total - paid,
   };
 }
 
