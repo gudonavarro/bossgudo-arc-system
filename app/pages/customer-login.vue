@@ -7,7 +7,7 @@ import {
 
 defineOptions({ name: "CustomerLogin" });
 definePageMeta({ middleware: ["guest"] });
-useHead({ title: "Customer Login | BOSSGUDO A.R.C. AQUA FARM" });
+useHead({ title: "Login | BOSSGUDO A.R.C. AQUA FARM" });
 
 const route = useRoute();
 const email = ref("");
@@ -66,7 +66,7 @@ async function submit() {
 <template>
   <AuthLayout with-header label="Customer login form">
     <div class="mb-6">
-      <h1 class="text-2xl font-semibold tracking-tight">Customer login</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">Login</h1>
       <p class="mt-1 text-sm text-base-content/65">Log in to book services and track your bookings.</p>
     </div>
 

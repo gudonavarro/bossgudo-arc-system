@@ -1093,7 +1093,7 @@ const pageTitles = {
   shop: "Shop",
   booking: "Bookings",
   mybookings: "My Bookings",
-  "customer-login": "Customer Login",
+  "customer-login": "Login",
   admin: "Admin Dashboard",
   register: "Create an Account",
   success: "Booking Submitted",
