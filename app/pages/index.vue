@@ -49,61 +49,49 @@ function openAssistant() {
 const services: {
   title: string;
   text: string;
-  image: string;
-  alt: string;
   icon: IconName;
   to: string;
   cta: string;
 }[] = [
   {
-    title: "Pond Packages",
-    text: "Ready-to-book pond installation packages, each with an included freebie.",
-    image: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=900&q=80",
-    alt: "Clear water in a pond installation",
+    title: "Pond packages",
+    text: "Ready-to-book pond setups from the farm, each with an included freebie.",
     icon: "package",
     to: "/shop",
     cta: "View packages",
   },
   {
-    title: "Custom Pond Design",
+    title: "Custom pond design",
     text: "Choose 1–3 layers, set your own width and length, and decide on filtration.",
-    image: "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=80",
-    alt: "Water pond landscape",
     icon: "ruler",
     to: "/booking",
     cta: "Plan a custom pond",
   },
   {
-    title: "Farm Visitation",
+    title: "Farm visitation",
     text: "Visit the farm with 1–5 visitors on an available Saturday or Sunday.",
-    image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=900&q=80",
-    alt: "Farm landscape for a visit",
     icon: "trees",
     to: "/booking",
     cta: "Plan a farm visit",
   },
 ];
 
-const steps: { title: string; text: string; icon: IconName }[] = [
+const steps: { title: string; text: string }[] = [
   {
     title: "Choose a service",
     text: "Pick a pond package, design a custom pond, or plan a farm visit.",
-    icon: "list-checks",
   },
   {
     title: "Pick a weekend date",
     text: "Select an open date on the farm calendar and add your details.",
-    icon: "calendar-days",
   },
   {
     title: "Pay the 50% down payment",
     text: "Send it through GCash and upload your receipt with the booking.",
-    icon: "smartphone",
   },
   {
     title: "Track your booking",
     text: "Your booking is confirmed once the owner verifies the payment.",
-    icon: "badge-check",
   },
 ];
 
@@ -164,62 +152,72 @@ const faqs = [
 <template>
   <div class="bg-base-100">
     <!-- Hero -->
-    <section class="hero relative min-h-[88vh] overflow-hidden bg-neutral">
-      <img
-        src="/images/home-hero-bg.jpg"
-        alt=""
-        class="absolute inset-0 size-full object-cover object-[50%_70%]"
-        fetchpriority="high"
-      >
-      <div class="absolute inset-0 bg-gradient-to-r from-[#0f2418]/90 via-[#14301f]/70 to-[#14301f]/20" />
-      <div class="hero-content relative z-10 w-full max-w-7xl justify-start px-4 pt-28 pb-16 sm:px-6 lg:px-8">
-        <div class="max-w-2xl text-white">
-          <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/90">
-            <AppIcon name="shrimp" size="size-4" />
-            Australian Red Claw · Crayfish services
+    <section class="border-b border-base-300 bg-base-100" aria-labelledby="hero-title">
+      <div class="mx-auto grid max-w-7xl items-center gap-10 px-4 pt-10 pb-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14 lg:px-8 lg:pt-16 lg:pb-20">
+        <div>
+          <p class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+            <AppIcon name="map-pin" size="size-4" />
+            General Trias, Cavite
           </p>
-          <h1 class="font-display text-4xl leading-[1.08] font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Good ponds make good beginnings.
+          <h1 id="hero-title" class="mt-5 text-4xl leading-[1.1] font-bold tracking-tight text-base-content sm:text-5xl lg:text-[3.4rem]">
+            Australian Red Claw crayfish and the ponds to raise them
           </h1>
-          <p class="mt-6 max-w-xl text-base leading-relaxed text-white/85 sm:text-lg">
-            Welcome to Boss Gudo A.R.C. Aqua Farm. Find a pond package, plan a
-            custom setup, or arrange a farm visit with a clear, friendly booking
-            process.
+          <p class="mt-5 max-w-xl text-lg leading-relaxed text-base-content/70">
+            Boss Gudo A.R.C. Aqua Farm supplies Red Claw stock and builds pond
+            setups for new and growing farms, with training and after-sales
+            support. Book a pond package, design a custom pond, or visit the farm.
           </p>
           <div class="mt-8 flex flex-wrap gap-3">
             <NuxtLink to="/booking" class="btn btn-primary btn-lg">
               <AppIcon name="calendar-plus" />
               Book a service
             </NuxtLink>
-            <NuxtLink to="/shop" class="btn btn-lg border-white/40 bg-white/10 text-white backdrop-blur hover:bg-white hover:text-primary">
-              Explore pond packages
-              <AppIcon name="arrow-right" />
+            <NuxtLink to="/shop" class="btn btn-outline btn-lg border-base-300 hover:border-primary hover:bg-primary/5 hover:text-primary">
+              View pond packages
             </NuxtLink>
           </div>
-          <ul class="mt-10 grid gap-3 text-sm text-white/85 sm:grid-cols-3" aria-label="Highlights">
-            <li class="flex items-center gap-2">
-              <AppIcon name="calendar-check" size="size-4 text-white" />
-              Farm visits on weekends
-            </li>
-            <li class="flex items-center gap-2">
-              <AppIcon name="sprout" size="size-4 text-white" />
-              For new and growing farms
-            </li>
-            <li class="flex items-center gap-2">
-              <AppIcon name="smartphone" size="size-4 text-white" />
-              Simple GCash payments
-            </li>
-          </ul>
+          <dl class="mt-10 grid max-w-xl grid-cols-1 gap-x-8 gap-y-4 border-t border-base-300 pt-6 sm:grid-cols-3">
+            <div>
+              <dt class="text-sm text-base-content/60">Pond packages</dt>
+              <dd class="mt-0.5 font-semibold">
+                <template v-if="lowestPrice !== null">From {{ peso(lowestPrice) }}</template>
+                <template v-else>With a freebie</template>
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm text-base-content/60">Farm visits</dt>
+              <dd class="mt-0.5 font-semibold">Weekends, 1–5 visitors</dd>
+            </div>
+            <div>
+              <dt class="text-sm text-base-content/60">Payment</dt>
+              <dd class="mt-0.5 font-semibold">50% down via GCash</dd>
+            </div>
+          </dl>
         </div>
+
+        <figure class="relative">
+          <img
+            src="/images/redclaw-crayfish.jpg"
+            alt="An Australian Red Claw crayfish showing the red patch on its claw"
+            class="aspect-[4/3] w-full rounded-box object-cover"
+            width="1280"
+            height="750"
+            fetchpriority="high"
+          >
+          <figcaption class="mt-3 flex items-start gap-2 text-sm text-base-content/60">
+            <AppIcon name="shrimp" size="size-4 mt-0.5 text-secondary" />
+            <span>Australian Red Claw (<em>Cherax quadricarinatus</em>), named for the red patch on mature males’ claws.</span>
+          </figcaption>
+        </figure>
       </div>
     </section>
 
     <!-- Services -->
-    <section class="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8" aria-labelledby="services-title">
+    <section class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20" aria-labelledby="services-title">
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div class="max-w-2xl">
-          <p class="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Our services</p>
-          <h2 id="services-title" class="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+          <p class="text-sm font-semibold text-primary">Our services</p>
+          <h2 id="services-title" class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
             Services built around your needs
           </h2>
           <p class="mt-3 text-base-content/70">
@@ -232,44 +230,28 @@ const faqs = [
         </NuxtLink>
       </div>
 
-      <div class="mt-10 grid gap-6 md:grid-cols-3">
-        <article
-          v-for="service in services"
-          :key="service.title"
-          class="card group overflow-hidden p-0 border border-base-300 bg-base-100 transition-shadow hover:shadow-xl"
-        >
-          <figure class="aspect-[4/3] overflow-hidden">
-            <img
-              :src="service.image"
-              :alt="service.alt"
-              class="size-full object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-            >
-          </figure>
-          <div class="card-body">
-            <span class="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary">
-              <AppIcon :name="service.icon" />
-            </span>
-            <h3 class="card-title mt-2 text-xl">{{ service.title }}</h3>
-            <p class="text-base-content/70">{{ service.text }}</p>
-            <div class="card-actions mt-3">
-              <NuxtLink :to="service.to" class="btn btn-outline btn-primary btn-sm">
-                {{ service.cta }}
-                <AppIcon name="arrow-right" size="size-4" />
-              </NuxtLink>
-            </div>
-          </div>
+      <div class="mt-10 grid divide-y divide-base-300 rounded-box border border-base-300 md:grid-cols-3 md:divide-x md:divide-y-0">
+        <article v-for="service in services" :key="service.title" class="flex flex-col p-6 lg:p-8">
+          <span class="grid size-11 place-items-center rounded-lg bg-primary/10 text-primary">
+            <AppIcon :name="service.icon" />
+          </span>
+          <h3 class="mt-5 text-lg font-semibold">{{ service.title }}</h3>
+          <p class="mt-2 flex-1 text-base-content/70">{{ service.text }}</p>
+          <NuxtLink :to="service.to" class="link mt-5 inline-flex items-center gap-1.5 font-semibold text-primary no-underline hover:underline">
+            {{ service.cta }}
+            <AppIcon name="arrow-right" size="size-4" />
+          </NuxtLink>
         </article>
       </div>
     </section>
 
     <!-- Package highlights (live catalog) -->
-    <section class="bg-base-200 py-20" aria-labelledby="packages-title">
+    <section class="bg-base-200 py-16 lg:py-20" aria-labelledby="packages-title">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex flex-wrap items-end justify-between gap-4">
           <div class="max-w-2xl">
-            <p class="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Package highlights</p>
-            <h2 id="packages-title" class="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <p class="text-sm font-semibold text-primary">Package highlights</p>
+            <h2 id="packages-title" class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
               Pond packages ready to book
             </h2>
             <p class="mt-3 text-base-content/70">
@@ -293,7 +275,7 @@ const faqs = [
                 <div class="skeleton h-4 w-4/5" />
               </div>
             </div>
-            <span class="sr-only" role="status">Loading packages…</span>
+            <output class="sr-only">Loading packages…</output>
           </template>
 
           <div v-else-if="catalogStatus === 'error'" role="alert" class="alert alert-warning sm:col-span-2 lg:col-span-3">
@@ -312,9 +294,9 @@ const faqs = [
             :key="item.code"
             class="card overflow-hidden border border-base-300 bg-base-100 p-0"
           >
-            <figure class="relative aspect-[4/3] bg-gradient-to-br from-primary/10 to-accent/20">
-              <img v-if="item.imageUrl" :src="item.imageUrl" :alt="`${item.name} photo`" class="size-full object-cover" loading="lazy">
-              <AppIcon v-else name="shrimp" size="size-16 text-primary/40" />
+            <figure class="relative aspect-[4/3] bg-base-200">
+              <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name" class="size-full object-cover" loading="lazy">
+              <AppIcon v-else name="shrimp" size="size-16 text-primary/30" />
               <span v-if="item.featured" class="badge badge-secondary absolute top-3 left-3 gap-1 font-semibold">
                 <AppIcon name="star" size="size-3" />
                 Most popular
@@ -347,25 +329,18 @@ const faqs = [
     </section>
 
     <!-- About the farm -->
-    <section class="mx-auto grid max-w-7xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:px-8" aria-labelledby="about-title">
-      <div class="relative">
-        <img
-          src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1100&q=80"
-          alt="Open farmland under a clear sky"
-          class="aspect-[4/3] w-full rounded-box object-cover"
-          loading="lazy"
-        >
-        <div class="absolute -bottom-6 left-6 hidden items-center gap-3 rounded-box border border-base-300 bg-base-100 p-4 shadow-lg sm:flex">
-          <img src="/images/boss-gudo-logo.png" alt="" class="size-12 rounded-full" width="48" height="48">
-          <div>
-            <p class="font-display text-lg font-semibold">Boss Gudo</p>
-            <p class="text-xs text-base-content/60">General Trias, Cavite</p>
-          </div>
-        </div>
-      </div>
+    <section class="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:gap-14 lg:px-8 lg:py-20" aria-labelledby="about-title">
+      <img
+        src="/images/aquaculture-ponds.jpg"
+        alt="Aerated aquaculture ponds with a farm building beside them"
+        class="aspect-[4/3] w-full rounded-box object-cover"
+        width="1280"
+        height="720"
+        loading="lazy"
+      >
       <div>
-        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-primary">About the farm</p>
-        <h2 id="about-title" class="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+        <p class="text-sm font-semibold text-primary">About the farm</p>
+        <h2 id="about-title" class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
           Supporting new and growing crayfish enthusiasts
         </h2>
         <p class="mt-5 leading-relaxed text-base-content/75">
@@ -374,21 +349,21 @@ const faqs = [
           farm aims to help customers understand the basics of raising crayfish
           and setting up suitable ponds.
         </p>
-        <ul class="mt-6 grid gap-3 sm:grid-cols-2">
-          <li class="flex items-center gap-3 text-sm font-medium">
-            <span class="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"><AppIcon name="shrimp" size="size-4" /></span>
+        <ul class="mt-6 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          <li class="flex items-center gap-3 font-medium">
+            <AppIcon name="shrimp" size="size-5 text-primary" />
             Crayfish supply
           </li>
-          <li class="flex items-center gap-3 text-sm font-medium">
-            <span class="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"><AppIcon name="wrench" size="size-4" /></span>
+          <li class="flex items-center gap-3 font-medium">
+            <AppIcon name="wrench" size="size-5 text-primary" />
             Pond setup assistance
           </li>
-          <li class="flex items-center gap-3 text-sm font-medium">
-            <span class="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"><AppIcon name="graduation-cap" size="size-4" /></span>
+          <li class="flex items-center gap-3 font-medium">
+            <AppIcon name="graduation-cap" size="size-5 text-primary" />
             Training
           </li>
-          <li class="flex items-center gap-3 text-sm font-medium">
-            <span class="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"><AppIcon name="handshake" size="size-4" /></span>
+          <li class="flex items-center gap-3 font-medium">
+            <AppIcon name="handshake" size="size-5 text-primary" />
             After-sales support
           </li>
         </ul>
@@ -400,11 +375,11 @@ const faqs = [
     </section>
 
     <!-- Australian Red Claw -->
-    <section class="bg-neutral py-20 text-neutral-content" aria-labelledby="arc-title">
-      <div class="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:px-8">
+    <section class="bg-neutral py-16 text-neutral-content lg:py-20" aria-labelledby="arc-title">
+      <div class="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:gap-14 lg:px-8">
         <div>
-          <p class="text-sm font-semibold uppercase tracking-[0.14em] text-[#e8a39d]">The species</p>
-          <h2 id="arc-title" class="mt-2 font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+          <p class="text-sm font-semibold text-[#e8a39d]">The species</p>
+          <h2 id="arc-title" class="mt-1 text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Australian Red Claw crayfish
           </h2>
           <p class="mt-5 leading-relaxed text-neutral-content/80">
@@ -413,7 +388,25 @@ const faqs = [
             males. Boss Gudo supplies Red Claw stock in several sizes, from
             young craylings for growing out to breeders for your own ponds.
           </p>
-          <div class="mt-8 flex flex-wrap gap-3">
+          <img
+            src="/images/redclaw-crayfish-wild.jpg"
+            alt="A Red Claw crayfish on leaf litter"
+            class="mt-8 aspect-[16/7] w-full rounded-box object-cover"
+            width="1280"
+            height="465"
+            loading="lazy"
+          >
+        </div>
+        <div class="lg:pt-10">
+          <h3 class="text-sm font-semibold text-neutral-content/70">Available stock sizes</h3>
+          <ul class="mt-4 divide-y divide-white/10 border-y border-white/10">
+            <li v-for="size in stockSizes" :key="size.name" class="flex items-center justify-between gap-4 py-4">
+              <span class="font-medium text-white">{{ size.name }}</span>
+              <span class="text-sm text-neutral-content/70">{{ size.detail }}</span>
+            </li>
+          </ul>
+          <p class="mt-4 text-sm text-neutral-content/60">Prices and availability are answered by the ARC Assistant from the farm’s latest price list.</p>
+          <div class="mt-6 flex flex-wrap gap-3">
             <button type="button" class="btn btn-primary" @click="openAssistant">
               <AppIcon name="message-circle" />
               Ask about current prices
@@ -423,89 +416,73 @@ const faqs = [
             </NuxtLink>
           </div>
         </div>
-        <div>
-          <h3 class="text-sm font-semibold uppercase tracking-[0.14em] text-neutral-content/60">Available stock sizes</h3>
-          <ul class="mt-4 divide-y divide-white/10 rounded-box border border-white/10 bg-white/5">
-            <li v-for="size in stockSizes" :key="size.name" class="flex items-center justify-between gap-4 px-5 py-4">
-              <span class="flex items-center gap-3 font-medium text-white">
-                <AppIcon name="shrimp" size="size-5 text-[#e8a39d]" />
-                {{ size.name }}
-              </span>
-              <span class="text-sm text-neutral-content/70">{{ size.detail }}</span>
-            </li>
-          </ul>
-          <p class="mt-3 text-xs text-neutral-content/60">Prices and availability are answered by the ARC Assistant from the farm’s latest price list.</p>
-        </div>
       </div>
     </section>
 
     <!-- How it works -->
-    <section class="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8" aria-labelledby="steps-title">
-      <div class="mx-auto max-w-2xl text-center">
-        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-primary">How it works</p>
-        <h2 id="steps-title" class="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">From choosing to confirmed in four steps</h2>
+    <section class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20" aria-labelledby="steps-title">
+      <div class="max-w-2xl">
+        <p class="text-sm font-semibold text-primary">How it works</p>
+        <h2 id="steps-title" class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">From choosing to confirmed in four steps</h2>
       </div>
-      <ol class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <li v-for="(step, index) in steps" :key="step.title" class="relative rounded-box border border-base-300 bg-base-100 p-6">
-          <span class="text-xs font-bold tracking-[0.14em] text-base-content/50">STEP {{ String(index + 1).padStart(2, "0") }}</span>
-          <span class="mt-4 grid size-12 place-items-center rounded-xl bg-primary text-primary-content">
-            <AppIcon :name="step.icon" />
-          </span>
-          <h3 class="mt-4 text-lg font-semibold">{{ step.title }}</h3>
+      <ol class="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <li v-for="(step, index) in steps" :key="step.title" class="border-t-2 border-primary pt-5">
+          <span class="text-sm font-semibold text-primary">Step {{ index + 1 }}</span>
+          <h3 class="mt-2 text-lg font-semibold">{{ step.title }}</h3>
           <p class="mt-2 text-sm leading-relaxed text-base-content/70">{{ step.text }}</p>
         </li>
       </ol>
     </section>
 
     <!-- Why choose us -->
-    <section class="bg-base-200 py-20" aria-labelledby="why-title">
+    <section class="bg-base-200 py-16 lg:py-20" aria-labelledby="why-title">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="max-w-2xl">
-          <p class="text-sm font-semibold uppercase tracking-[0.14em] text-primary">Why choose us</p>
-          <h2 id="why-title" class="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Practical support from pond to harvest</h2>
+          <p class="text-sm font-semibold text-primary">Why choose us</p>
+          <h2 id="why-title" class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Practical support for your crayfish farm</h2>
         </div>
-        <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <div v-for="reason in reasons" :key="reason.title" class="rounded-box bg-base-100 p-6">
-            <AppIcon :name="reason.icon" size="size-7 text-primary" />
-            <h3 class="mt-4 font-semibold">{{ reason.title }}</h3>
-            <p class="mt-2 text-sm leading-relaxed text-base-content/70">{{ reason.text }}</p>
+        <div class="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+          <div v-for="reason in reasons" :key="reason.title">
+            <AppIcon :name="reason.icon" size="size-6 text-primary" />
+            <h3 class="mt-3 font-semibold">{{ reason.title }}</h3>
+            <p class="mt-1.5 text-sm leading-relaxed text-base-content/70">{{ reason.text }}</p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- FAQ + contact -->
-    <section class="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1.4fr_1fr] lg:px-8" aria-labelledby="faq-title">
+    <section class="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.4fr_1fr] lg:px-8 lg:py-20" aria-labelledby="faq-title">
       <div>
-        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-primary">FAQs</p>
-        <h2 id="faq-title" class="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Common questions</h2>
-        <div class="mt-8 space-y-3">
+        <p class="text-sm font-semibold text-primary">FAQs</p>
+        <h2 id="faq-title" class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Common questions</h2>
+        <div class="mt-8 divide-y divide-base-300 border-y border-base-300">
           <details
             v-for="(item, index) in faqs"
             :key="item.q"
-            class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100"
+            class="collapse collapse-arrow rounded-none"
             :open="index === 0"
           >
-            <summary class="collapse-title font-semibold">{{ item.q }}</summary>
-            <div class="collapse-content text-sm leading-relaxed text-base-content/75">
+            <summary class="collapse-title px-0 font-semibold">{{ item.q }}</summary>
+            <div class="collapse-content px-0 text-base-content/75">
               <p>{{ item.a }}</p>
             </div>
           </details>
         </div>
-        <p class="mt-6 text-sm text-base-content/70">
+        <p class="mt-6 text-base-content/70">
           Have another question?
           <button type="button" class="link link-primary font-semibold" @click="openAssistant">Ask the ARC Assistant</button>
         </p>
       </div>
 
       <aside class="h-fit rounded-box bg-primary p-8 text-primary-content" aria-labelledby="contact-title">
-        <h2 id="contact-title" class="font-display text-2xl font-semibold text-primary-content">Visit or contact the farm</h2>
-        <ul class="mt-6 space-y-5 text-sm">
+        <h2 id="contact-title" class="text-2xl font-bold text-primary-content">Visit or contact the farm</h2>
+        <ul class="mt-6 space-y-5">
           <li class="flex gap-3">
             <AppIcon name="map-pin" size="size-5 mt-0.5 shrink-0" />
             <span>
               {{ FARM.address }}<br>
-              <span class="text-primary-content/75">{{ FARM.landmark }} · Search “{{ FARM.mapsQuery }}” on Waze or Google Maps</span>
+              <span class="text-sm text-primary-content/75">{{ FARM.landmark }} · Search “{{ FARM.mapsQuery }}” on Waze or Google Maps</span>
             </span>
           </li>
           <li class="flex items-center gap-3">

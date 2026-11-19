@@ -37,15 +37,15 @@ withDefaults(
     >
       <img
         v-if="variant === 'customer'"
-        src="/images/home-hero-bg.jpg"
+        src="/images/aquaculture-ponds.jpg"
         alt=""
-        class="absolute inset-0 size-full object-cover object-[50%_70%]"
+        class="absolute inset-0 size-full object-cover"
       >
       <div
         class="absolute inset-0"
         :class="variant === 'admin'
           ? 'bg-[radial-gradient(circle_at_20%_20%,rgba(46,106,67,0.45),transparent_55%)]'
-          : 'bg-gradient-to-br from-[#0f2418]/90 via-[#14301f]/75 to-[#14301f]/40'"
+          : 'bg-[#10261a]/80'"
       />
       <div class="relative z-10 flex w-full flex-col justify-between p-12 text-white xl:p-16">
         <NuxtLink to="/" class="flex w-fit items-center gap-3">

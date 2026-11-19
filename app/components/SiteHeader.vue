@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { IconName } from "~/utils/icons";
 
-const props = defineProps<{ overlay?: boolean }>();
-
 const route = useRoute();
 const { isAuthenticated, isCustomer, user } = useAuth();
 const menuOpen = ref(false);
@@ -29,36 +27,22 @@ watch(
     menuOpen.value = false;
   },
 );
-
-const linkClass = computed(() =>
-  props.overlay
-    ? "text-white/85 hover:text-white hover:bg-white/10"
-    : "text-base-content/75 hover:text-primary hover:bg-primary/5",
-);
 </script>
 
 <template>
-  <header
-    class="site-header z-40 w-full"
-    :class="overlay
-      ? 'absolute inset-x-0 top-0 text-white'
-      : 'sticky top-0 border-b border-base-300 bg-base-100/95 backdrop-blur'"
-  >
-    <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-20 lg:px-8">
+  <header class="site-header sticky top-0 z-40 w-full border-b border-base-300 bg-base-100/95 backdrop-blur">
+    <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-[4.5rem] lg:px-8">
       <NuxtLink to="/" class="flex min-w-0 items-center gap-3 rounded-lg" aria-label="BOSSGUDO A.R.C. AQUA FARM home">
         <img
           src="/images/boss-gudo-logo.png"
           alt=""
-          class="size-10 shrink-0 rounded-full bg-white/90 p-0.5 lg:size-11"
-          width="44"
-          height="44"
+          class="size-10 shrink-0 rounded-full"
+          width="40"
+          height="40"
         >
         <span class="leading-tight">
-          <span class="block font-display text-lg font-semibold tracking-tight">BOSSGUDO</span>
-          <span
-            class="block text-[0.68rem] font-semibold uppercase tracking-[0.18em]"
-            :class="overlay ? 'text-white/70' : 'text-primary'"
-          >A.R.C. Aqua Farm</span>
+          <span class="block text-base font-bold tracking-tight">BOSSGUDO</span>
+          <span class="block text-[0.68rem] font-semibold tracking-[0.16em] text-primary uppercase">A.R.C. Aqua Farm</span>
         </span>
       </NuxtLink>
 
@@ -68,8 +52,7 @@ const linkClass = computed(() =>
           :key="item.to"
           :to="item.to"
           :data-page="item.page"
-          class="nav-link rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-          :class="linkClass"
+          class="nav-link rounded-lg px-3 py-2 text-[0.95rem] font-medium text-base-content/75 transition-colors hover:bg-primary/5 hover:text-primary"
         >
           {{ item.label }}
         </NuxtLink>
@@ -77,8 +60,7 @@ const linkClass = computed(() =>
           v-if="isCustomer"
           to="/mybookings"
           data-page="mybookings"
-          class="nav-link inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-          :class="linkClass"
+          class="nav-link inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[0.95rem] font-medium text-base-content/75 transition-colors hover:bg-primary/5 hover:text-primary"
         >
           My Bookings
           <span data-nav-badge class="badge badge-secondary badge-sm" hidden />
@@ -87,15 +69,11 @@ const linkClass = computed(() =>
 
       <div class="ml-auto flex items-center gap-2 lg:ml-4">
         <template v-if="isCustomer">
-          <span class="hidden items-center gap-2 text-sm xl:inline-flex" :class="overlay ? 'text-white/80' : 'text-base-content/70'">
+          <span class="hidden items-center gap-2 text-sm text-base-content/70 xl:inline-flex">
             <AppIcon name="user" size="size-4" />
             {{ firstName }}
           </span>
-          <NuxtLink
-            :to="logoutTarget"
-            class="btn btn-sm hidden sm:inline-flex"
-            :class="overlay ? 'btn-ghost text-white hover:bg-white/10' : 'btn-ghost'"
-          >
+          <NuxtLink :to="logoutTarget" class="btn btn-ghost btn-sm hidden sm:inline-flex">
             <AppIcon name="log-out" size="size-4" />
             Log out
           </NuxtLink>
@@ -105,15 +83,11 @@ const linkClass = computed(() =>
             <AppIcon name="layout-dashboard" size="size-4" />
             Dashboard
           </NuxtLink>
-          <NuxtLink
-            :to="logoutTarget"
-            class="btn btn-sm hidden sm:inline-flex"
-            :class="overlay ? 'btn-ghost text-white hover:bg-white/10' : 'btn-ghost'"
-          >
+          <NuxtLink :to="logoutTarget" class="btn btn-ghost btn-sm hidden sm:inline-flex">
             Log out
           </NuxtLink>
         </template>
-        <NuxtLink v-else to="/customer-login" class="btn btn-primary btn-sm hidden sm:inline-flex lg:btn-md">
+        <NuxtLink v-else to="/customer-login" class="btn btn-primary btn-sm hidden sm:inline-flex">
           <AppIcon name="log-in" size="size-4" />
           Log in
         </NuxtLink>
@@ -121,7 +95,6 @@ const linkClass = computed(() =>
         <button
           type="button"
           class="btn btn-square btn-ghost lg:hidden"
-          :class="overlay ? 'text-white hover:bg-white/10' : ''"
           :aria-expanded="menuOpen"
           aria-controls="mobileNav"
           :aria-label="menuOpen ? 'Close menu' : 'Open menu'"
@@ -176,14 +149,8 @@ const linkClass = computed(() =>
 <style scoped>
 .nav-link.router-link-exact-active,
 .nav-link.active {
-  font-weight: 600;
-}
-.site-header:not(.text-white) .nav-link.router-link-exact-active {
   color: var(--color-primary);
   background: color-mix(in oklab, var(--color-primary) 8%, transparent);
-}
-.site-header.text-white .nav-link.router-link-exact-active {
-  color: #fff;
-  background: rgb(255 255 255 / 0.12);
+  font-weight: 600;
 }
 </style>

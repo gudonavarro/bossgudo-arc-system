@@ -51,7 +51,7 @@ useHead(() => ({
 <template>
   <a href="#content" class="btn btn-primary btn-sm fixed top-2 left-2 z-100 -translate-y-20 focus:translate-y-0">Skip to content</a>
 
-  <SiteHeader v-if="headerVisible" :overlay="currentPage === 'home'" />
+  <SiteHeader v-if="headerVisible" />
   <AdminTopbar v-if="isAdminPage" />
 
   <div id="content" class="min-h-[60vh]">

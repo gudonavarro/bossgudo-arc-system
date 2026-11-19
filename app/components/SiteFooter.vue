@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FARM, MAPS_URL } from "~/utils/site";
+import { FARM, MAPS_URL, PHOTO_CREDITS } from "~/utils/site";
 
 const year = new Date().getFullYear();
 </script>
@@ -72,9 +72,16 @@ const year = new Date().getFullYear();
       </div>
     </div>
     <div class="border-t border-white/10">
-      <p class="mx-auto max-w-7xl px-4 py-5 text-xs text-neutral-content/60 sm:px-6 lg:px-8">
-        &copy; <span id="footerYear">{{ year }}</span> BOSSGUDO A.R.C. AQUA FARM. All rights reserved.
-      </p>
+      <div class="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-xs text-neutral-content/60 sm:px-6 lg:px-8">
+        <p>&copy; <span id="footerYear">{{ year }}</span> BOSSGUDO A.R.C. AQUA FARM. All rights reserved.</p>
+        <p>
+          Photos from Wikimedia Commons:
+          <template v-for="(photo, index) in PHOTO_CREDITS" :key="photo.file">
+            <a :href="photo.source" target="_blank" rel="noopener noreferrer" class="link link-hover">{{ photo.subject }}</a> by {{ photo.author }}<template v-if="index < PHOTO_CREDITS.length - 1">; </template>
+          </template>
+          (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" class="link link-hover">CC BY-SA 4.0</a>).
+        </p>
+      </div>
     </div>
   </footer>
 </template>

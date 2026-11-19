@@ -16,3 +16,25 @@ export const FARM = {
 } as const;
 
 export const MAPS_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(FARM.mapsQuery)}`;
+
+/** Attribution for the CC BY-SA 4.0 photos in public/images. */
+export const PHOTO_CREDITS = [
+  {
+    file: "redclaw-crayfish.jpg",
+    subject: "Red Claw crayfish",
+    author: "5snake5",
+    source: "https://commons.wikimedia.org/wiki/File:Cherax_quadricarinatus_im_Aquarium.jpg",
+  },
+  {
+    file: "redclaw-crayfish-wild.jpg",
+    subject: "Red Claw on leaf litter",
+    author: "nature.catcher",
+    source: "https://commons.wikimedia.org/wiki/File:Australian_red_claw_crayfish_(Cherax_quadricarinatus).jpg",
+  },
+  {
+    file: "aquaculture-ponds.jpg",
+    subject: "Dumangas Brackishwater Station",
+    author: "RDBD86",
+    source: "https://commons.wikimedia.org/wiki/File:Dumangas_Brackishwater_Station.jpg",
+  },
+] as const;

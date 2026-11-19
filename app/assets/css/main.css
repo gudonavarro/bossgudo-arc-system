@@ -510,3 +510,32 @@
     white-space: nowrap;
   }
 }
+
+/*
+ * Customer website refinements. Every rule is scoped to the customer theme
+ * ([data-theme="bossgudo"]) so the admin dashboard, which uses
+ * "bossgudo-admin", is not affected.
+ */
+@layer base {
+  [data-theme="bossgudo"] {
+    /* Headings use Inter, the same family as the admin dashboard. */
+    --font-display: var(--font-sans);
+  }
+}
+@layer components {
+  [data-theme="bossgudo"] .page-title {
+    @apply font-bold;
+  }
+  [data-theme="bossgudo"] .section-title {
+    @apply font-bold;
+  }
+  [data-theme="bossgudo"] .muted {
+    @apply text-base-content/70;
+  }
+  /* Flat placeholders instead of gradients for packages without photos. */
+  [data-theme="bossgudo"] .pkg-media,
+  [data-theme="bossgudo"] .pkg-placeholder {
+    background-image: none;
+    @apply bg-base-200 text-primary/30;
+  }
+}
