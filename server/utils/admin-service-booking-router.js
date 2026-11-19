@@ -505,7 +505,7 @@ function createAdminServiceBookingRouter() {
               ...(decision === "reject" ? { rejectionReason } : {}),
             },
           },
-          { new: true, runValidators: true, session },
+          { returnDocument: "after", runValidators: true, session },
         );
         if (!payment) {
           throw new HttpError(409, "This payment has already been reviewed.");
