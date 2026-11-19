@@ -3,8 +3,6 @@
  *
  * The previous stylesheet is loaded into the "legacy" cascade layer, which
  * sits below DaisyUI components, while views move to the new components.
- * DaisyUI components whose names collide with legacy classes stay excluded
- * until the views that use those classes are migrated.
  */
 @layer theme, base, legacy, components, utilities;
 
@@ -16,7 +14,6 @@
 
 @plugin "daisyui" {
   themes: false;
-  exclude: label, stat;
 }
 
 /* Customer website: welcoming, rounded, generous spacing. */
@@ -435,5 +432,82 @@
   }
   .booking-card {
     @apply p-5 sm:p-6;
+  }
+}
+
+/* Admin dashboard: compact, data-oriented surfaces. */
+@layer components {
+  /* Long status labels may wrap inside narrow table cells. */
+  .badge:not(.badge-xs) {
+    height: auto;
+    min-height: var(--size);
+    padding-block: 0.125rem;
+    line-height: 1.25;
+  }
+  .admin-title {
+    @apply text-2xl font-semibold tracking-tight text-base-content;
+  }
+  .admin-card {
+    @apply overflow-hidden rounded-box border border-base-300 bg-base-100;
+  }
+  .admin-card-head {
+    @apply flex flex-wrap items-start justify-between gap-3 border-b border-base-300 px-5 py-4;
+  }
+  .admin-card-title {
+    @apply flex items-center gap-2 text-base font-semibold text-base-content;
+  }
+  .admin-card-foot {
+    @apply flex flex-wrap items-center justify-between gap-3 border-t border-base-300 px-5 py-3 text-xs text-base-content/60;
+  }
+  .admin-toolbar {
+    @apply flex flex-wrap items-center gap-3 border-b border-base-300 bg-base-200/50 px-5 py-3;
+  }
+  .todo-row {
+    @apply flex flex-wrap items-center justify-between gap-3 px-5 py-3.5;
+  }
+  .stat-card {
+    @apply w-full rounded-box border border-base-300 bg-base-100;
+  }
+  .stat-card .stat {
+    @apply px-5 py-4;
+  }
+  .stat-card .stat-title {
+    @apply text-xs font-medium text-base-content/60;
+  }
+  .stat-card .stat-value {
+    @apply mt-1 text-3xl text-base-content;
+  }
+
+  .data-table thead th {
+    @apply bg-base-200/60 text-xs font-semibold tracking-wide text-base-content/60 uppercase;
+  }
+  .data-table tbody tr {
+    @apply align-top transition-colors hover:bg-base-200/50;
+  }
+
+  /* Tables become labelled cards on small screens. */
+  @media (width < 48rem) {
+    .data-table thead {
+      @apply sr-only;
+    }
+    .data-table,
+    .data-table tbody,
+    .data-table tr,
+    .data-table td {
+      @apply block w-full;
+    }
+    .data-table tbody tr {
+      @apply border-b border-base-300 px-4 py-3;
+    }
+    .data-table td {
+      @apply grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 border-0 px-0 py-1.5;
+    }
+    .data-table td[data-label]::before {
+      content: attr(data-label);
+      @apply text-xs font-medium text-base-content/55;
+    }
+    .data-table td[colspan] {
+      @apply block;
+    }
   }
 }

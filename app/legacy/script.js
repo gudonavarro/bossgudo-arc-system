@@ -18,6 +18,10 @@ let bFilter = "all",
   cSearch = "",
   vFilter = "all",
   pkgSearch = "";
+// Admin table pagination (client-side, over the loaded records).
+let bPage = 1,
+  vPage = 1;
+const ADMIN_PAGE_SIZE = 10;
 let bookingType = null,
   visitStep = 1,
   visitMode = "regular",
@@ -1556,14 +1560,14 @@ function adminCalendar() {
   const closedDates = [...blockedDates[kind]].sort((a, b) =>
     a.localeCompare(b),
   );
-  const serviceClass = kind === "service" ? "btn-active btn-primary" : "btn-ghost";
-  const visitClass = kind === "visit" ? "btn-active btn-primary" : "btn-ghost";
+  const tab = (value, label) =>
+    `<button role="tab" class="tab ${kind === value ? "tab-active" : ""}" aria-selected="${kind === value}" onclick="setCalKind('${value}')">${label}</button>`;
   const closedMarkup = closedDates.length
     ? closedDates.map((date) =>
-      `<div class="summary-line"><span>${fmtDate(date)}</span><button class="btn btn-sm" onclick="toggleBlock('${kind}','${date}')">Reopen</button></div>`,
+      `<div class="summary-line"><span>${fmtDate(date)}</span><button class="btn btn-xs" onclick="toggleBlock('${kind}','${date}')">Reopen</button></div>`,
     ).join("")
-    : '<p class="muted">No closed dates.</p>';
-  return `${sampleDataNotice("Closing or reopening dates here only changes this browser's view. It is not saved and does not change which dates the server accepts for bookings.")}<div class="panel"><div class="admin-header"><div><h3>Calendar Controls</h3><p class="muted">Open or close weekend dates. Customers can select only open dates.</p></div><div class="pill-row"><button class="btn ${serviceClass} btn-sm" onclick="setCalKind('service')">Package service calendar</button><button class="btn ${visitClass} btn-sm" onclick="setCalKind('visit')">Visitation calendar</button></div></div><div class="cal-wrap mt-5">${calendarBlock(kind, "admin")}<div><div class="tile"><h3>Closed dates</h3>${closedMarkup}</div></div></div><div class="notice" style="margin-top:16px">Click a weekend date to close or reopen it. Past dates cannot be changed. Closing a date does not cancel existing bookings.</div></div>`;
+    : '<p class="muted text-sm">No closed dates.</p>';
+  return `${sampleDataNotice("Closing or reopening dates here only changes this browser's view. It is not saved and does not change which dates the server accepts for bookings.")}<div class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">Calendar controls</h2><p class="muted text-sm">Open or close weekend dates. Customers can select only open dates.</p></div><div role="tablist" class="tabs tabs-box tabs-sm">${tab("service", "Package service calendar")}${tab("visit", "Visitation calendar")}</div></div><div class="cal-wrap p-4 sm:p-5">${calendarBlock(kind, "admin")}<div class="space-y-4"><div class="tile"><h3 class="tile-title">${icon("calendar-days", "size-4 text-primary")}Closed dates</h3>${closedMarkup}</div><div class="notice">Click a weekend date to close or reopen it. Past dates cannot be changed. Closing a date does not cancel existing bookings.</div></div></div></div>`;
 }
 function pkgCardPublic(x) {
   const featured = x.featured ? `<span class="pkg-badge badge badge-secondary gap-1">${icon("star", "size-3")}Most popular</span>` : "";
@@ -2166,10 +2170,10 @@ function adminVisitByRef(ref) {
 /** Loading or error panel for tabs that depend on booking records. */
 function adminDataStatusPanel() {
   if (adminDataState === "error") {
-    return `<div class="panel" role="alert"><h3 style="margin-top:0">Booking records could not be loaded</h3><p class="muted">${safe(adminDataError)}</p><button class="btn" onclick="reloadAdminData()">Try again</button></div>`;
+    return `<div class="alert alert-error alert-soft" role="alert">${icon("circle-alert", "size-5")}<div><h3 class="font-semibold">Booking records could not be loaded</h3><p class="text-sm">${safe(adminDataError)}</p></div><button class="btn btn-sm" onclick="reloadAdminData()">${icon("refresh-cw")}Try again</button></div>`;
   }
   if (adminDataState !== "loaded") {
-    return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading booking records…</p></div>';
+    return `<div class="space-y-4" aria-busy="true"><span class="sr-only" role="status">Loading booking records…</span><div class="grid gap-4 sm:grid-cols-3"><div class="skeleton h-24"></div><div class="skeleton h-24"></div><div class="skeleton h-24"></div></div><div class="skeleton h-72"></div></div>`;
   }
   return "";
 }
@@ -2201,7 +2205,7 @@ async function adminViewBooking(ref) {
   }
 }
 function adminPaymentRecordsMarkup(b) {
-  if (!b.payments?.length) return '<p class="muted">No payments submitted yet.</p>';
+  if (!b.payments?.length) return '<p class="muted text-sm">No payments submitted yet.</p>';
   return b.payments
     .map((payment) => {
       const label = payment.paymentTarget === "deposit" ? "50% down payment" : "Balance payment";
@@ -2215,7 +2219,7 @@ function adminPaymentRecordsMarkup(b) {
       const reason = payment.rejectionReason
         ? `<div class="summary-line"><span>Rejection reason</span><strong>${safe(payment.rejectionReason)}</strong></div>`
         : "";
-      return `<div class="tile" style="margin:10px 0"><div class="admin-header"><strong>${label}</strong><span class="badge badge-soft ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}<div style="margin-top:10px"><button class="btn btn-sm" onclick="viewPaymentReceipt('${b.ref}','${payment._id}')">View receipt</button></div></div>`;
+      return `<div class="tile my-3 p-4"><div class="admin-header"><strong class="text-sm">${label}</strong><span class="badge badge-soft ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}<div class="mt-3"><button class="btn btn-sm" onclick="viewPaymentReceipt('${b.ref}','${payment._id}')">${icon("receipt")}View receipt</button></div></div>`;
     })
     .join("");
 }
@@ -2234,20 +2238,20 @@ function admin() {
   const c = adminCounts();
   const tabs = [
     ["g", "Overview"],
-    ["overview", "Dashboard"],
+    ["overview", "Dashboard", 0, "layout-dashboard"],
     ["g", "Operations"],
-    ["bookings", "Package Bookings", c.bookings],
-    ["payments", "Payments", c.payments],
-    ["visits", "Visitations"],
-    ["special", "Special-Date Requests", c.special],
+    ["bookings", "Package Bookings", c.bookings, "clipboard-list"],
+    ["payments", "Payments", c.payments, "wallet"],
+    ["visits", "Visitations", 0, "trees"],
+    ["special", "Special-Date Requests", c.special, "calendar-plus"],
     ["g", "Schedule"],
-    ["calendar", "Calendar Controls"],
+    ["calendar", "Calendar Controls", 0, "calendar-days"],
     ["g", "Catalog & Content"],
-    ["catalog", "Package Catalog"],
-    ["faqs", "Assistant FAQs"],
+    ["catalog", "Package Catalog", 0, "package"],
+    ["faqs", "Assistant FAQs", 0, "message-square-text"],
     ["g", "People & Money"],
-    ["customers", "Customers"],
-    ["sales", "Sales Records"],
+    ["customers", "Customers", 0, "users"],
+    ["sales", "Sales Records", 0, "chart-column"],
   ];
   const views = {
     overview: adminOverview,
@@ -2261,21 +2265,76 @@ function admin() {
     sales: adminSales,
     faqs: adminFaqs,
   };
+  const descriptions = {
+    overview: "What needs your attention today, money received and what is coming up.",
+    bookings: "Move each package booking from approval to completion and final payment.",
+    payments: "Verify GCash receipts against the actual transaction before recording them.",
+    visits: "Weekend farm visits, including approved special dates.",
+    special: "Approve or decline visit requests for dates outside the regular schedule.",
+    calendar: "Open or close weekend dates for services and visits.",
+    catalog: "Manage the pond packages customers can choose in the Shop.",
+    faqs: "Answers the ARC Assistant gives to customer questions.",
+    customers: "Customer contact details and booking history.",
+    sales: "Verified payments and amounts still to collect.",
+  };
   const cur = tabs.find((t) => t[0] === adminTab) || ["", "Dashboard"];
   const tabMarkup = tabs.map(adminTabMarkup).join("");
   const content =
     (ADMIN_DATA_TABS.has(adminTab) && adminDataStatusPanel()) || views[adminTab]();
-  return `<div class="breadcrumbs">Admin Portal / ${cur[1]}</div><div class="admin-header"><div><h1 class="page-title">Admin Dashboard</h1><p class="muted">Manage bookings, payments, visits, the calendar, packages, customers and assistant answers.</p></div></div><div class="layout" style="margin-top:20px"><aside class="sidebar">${tabMarkup}</aside><section style="min-width:0">${content}</section></div>`;
+  return `<div class="drawer lg:drawer-open"><input id="adminDrawer" type="checkbox" class="drawer-toggle" aria-label="Toggle admin navigation"><div class="drawer-content min-w-0 bg-base-200"><div class="mx-auto w-full max-w-[90rem] px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:pt-7">${crumbs(["Admin", cur[1]])}<div class="mt-1 mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="admin-title">${cur[1]}</h1><p class="muted mt-1 text-sm">${descriptions[adminTab] || ""}</p></div><button class="btn btn-sm" onclick="reloadAdminData();adminPackagesState='idle';render()" ${adminDataState === "loading" ? "disabled" : ""}>${icon("refresh-cw")}Refresh</button></div>${content}</div></div><div class="drawer-side z-50 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)]"><label for="adminDrawer" aria-label="Close admin navigation" class="drawer-overlay"></label><aside class="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 lg:min-h-0 lg:h-full lg:w-64"><div class="flex h-16 items-center justify-between border-b border-base-300 px-4 lg:hidden"><span class="font-semibold">Admin menu</span><label for="adminDrawer" class="btn btn-ghost btn-sm btn-square" aria-label="Close admin navigation">${icon("x", "size-5")}</label></div><nav aria-label="Admin sections" class="flex-1 overflow-y-auto"><ul class="menu w-full gap-0.5 p-3">${tabMarkup}</ul></nav></aside></div></div>`;
 }
 /** Banner for admin sections that are not connected to the database yet. */
 function sampleDataNotice(detail) {
-  return `<div class="notice" role="note" style="margin-bottom:14px;background:#fff6db;border-color:#ecd38a;color:#6b4e00"><strong>Sample data — not connected to the database.</strong> ${safe(detail)}</div>`;
+  return `<div class="alert alert-warning alert-soft mb-4 text-sm" role="note">${icon("triangle-alert", "size-5")}<span><strong>Sample data — not connected to the database.</strong> ${safe(detail)}</span></div>`;
 }
 function adminTabMarkup(tab) {
-  if (tab[0] === "g") return `<div class="group">${tab[1]}</div>`;
-  const activeClass = adminTab === tab[0] ? "active" : "";
-  const countMarkup = tab[2] ? `<span class="count">${tab[2]}</span>` : "";
-  return `<button class="${activeClass}" onclick="adminTab='${tab[0]}';render()">${tab[1]}${countMarkup}</button>`;
+  if (tab[0] === "g") return `<li class="menu-title mt-3 first:mt-0">${tab[1]}</li>`;
+  const active = adminTab === tab[0];
+  const countMarkup = tab[2] ? `<span class="badge badge-sm badge-warning ml-auto">${tab[2]}</span>` : "";
+  return `<li><button class="${active ? "menu-active" : ""}" ${active ? 'aria-current="page"' : ""} onclick="adminTab='${tab[0]}';render();window.scrollTo({top:0})">${icon(tab[3], "size-4")}<span>${tab[1]}</span>${countMarkup}</button></li>`;
+}
+function statCard(label, value, iconName, opts = {}) {
+  const tone = opts.tone || "primary";
+  const tones = {
+    primary: "bg-primary/10 text-primary",
+    warning: "bg-warning/15 text-warning",
+    success: "bg-success/10 text-success",
+    info: "bg-info/10 text-info",
+  };
+  const valueClass = opts.money ? "stat-value text-2xl" : "stat-value";
+  const desc = opts.desc ? `<div class="stat-desc whitespace-normal">${opts.desc}</div>` : "";
+  const inner = `<div class="stat-figure"><span class="grid size-10 place-items-center rounded-lg ${tones[tone]}">${icon(iconName, "size-5")}</span></div><div class="stat-title whitespace-normal">${label}</div><div class="${valueClass}">${value}</div>${desc}`;
+  return opts.onclick
+    ? `<button class="stats stat-card content-start text-left transition-colors hover:border-primary/40" onclick="${opts.onclick}"><div class="stat">${inner}</div></button>`
+    : `<div class="stats stat-card"><div class="stat">${inner}</div></div>`;
+}
+function pagerMarkup(total, current, onPage) {
+  const pages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  if (total <= ADMIN_PAGE_SIZE) {
+    return `<div class="admin-card-foot"><span>${total} record${total === 1 ? "" : "s"}</span></div>`;
+  }
+  const page = Math.min(current, pages);
+  const from = (page - 1) * ADMIN_PAGE_SIZE + 1;
+  const to = Math.min(total, page * ADMIN_PAGE_SIZE);
+  const btn = (target, label, disabled, extra = "") =>
+    `<button class="join-item btn btn-sm ${extra}" ${disabled ? "disabled" : ""} onclick="${onPage}(${target})">${label}</button>`;
+  return `<div class="admin-card-foot"><span>Showing ${from}–${to} of ${total}</span><nav class="join" aria-label="Pagination">${btn(page - 1, `${icon("chevron-left")}<span class="sr-only">Previous page</span>`, page <= 1)}<button class="join-item btn btn-sm btn-active pointer-events-none" aria-current="page">Page ${page} of ${pages}</button>${btn(page + 1, `<span class="sr-only">Next page</span>${icon("chevron-right")}`, page >= pages)}</nav></div>`;
+}
+function pageSlice(list, current) {
+  const pages = Math.max(1, Math.ceil(list.length / ADMIN_PAGE_SIZE));
+  const page = Math.min(Math.max(1, current), pages);
+  return list.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
+}
+function setBPage(n) {
+  bPage = n;
+  refreshBookingTable();
+}
+function setVPage(n) {
+  vPage = n;
+  render();
+}
+function searchField(placeholder, value, oninput, label) {
+  return `<label class="input input-sm w-full sm:w-72">${icon("search", "size-4 text-base-content/45")}<input type="search" class="grow" placeholder="${placeholder}" value="${safe(value)}" oninput="${oninput}" aria-label="${label}"></label>`;
 }
 
 /* Dashboard figures from the real records. Definitions:
@@ -2316,7 +2375,7 @@ function isActiveBooking(b) {
 function awaitingDepositNote(figures) {
   const count = figures.awaitingDeposit.length;
   if (!count) return "";
-  return `<div class="muted" style="font-size:12px;margin-top:4px">Excludes ${count} awaiting deposit (${money(figures.awaitingDepositValue)} due)</div>`;
+  return `Excludes ${count} awaiting deposit (${money(figures.awaitingDepositValue)} due)`;
 }
 function adminOverview() {
   const figures = adminMoneyFigures(),
@@ -2350,34 +2409,42 @@ function adminOverview() {
   const actionMarkup = adminActionMarkup(todo, spec);
   const comingMarkup = comingUpMarkup(coming);
   const actionLabel = actionCount === 1 ? "item" : "items";
-  return `<div class="stat-grid"><div class="stat"><div class="label">Needs your action</div><div class="value">${actionCount}</div></div><div class="stat" role="button" style="cursor:pointer" onclick="adminTab='payments';render()"><div class="label">Payments to verify</div><div class="value">${c.payments}</div></div><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(figures.received)}</div></div></div><div class="stat-grid" style="margin-top:12px"><div class="stat"><div class="label">Active package bookings</div><div class="value">${live.length}</div></div><div class="stat"><div class="label">Upcoming visits</div><div class="value">${upcomingV.length}</div></div><div class="stat"><div class="label">Still to collect (confirmed bookings)</div><div class="value" style="font-size:22px">${money(figures.toCollect)}</div>${awaitingDepositNote(figures)}</div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Action needed</h3><span class="muted" style="font-size:12px">${actionCount} ${actionLabel}</span></div>${actionMarkup}</div><div class="panel"><h3 style="margin-top:0">Coming up</h3>${comingMarkup}</div><div class="notice" style="margin-top:15px"><strong>How a booking flows:</strong> the customer books and pays the 50% down payment → you verify it in GCash → the booking is <strong>Confirmed</strong> automatically and the customer sees an update → on the day you <strong>Start service</strong>, then mark it <strong>Completed</strong> and add the delivery fee → the customer pays the outstanding balance → you verify it → <strong>Paid</strong>.</div>`;
+  const stats = [
+    statCard("Needs your action", actionCount, "list-checks", { tone: actionCount ? "warning" : "success" }),
+    statCard("Payments to verify", c.payments, "wallet", { tone: c.payments ? "warning" : "success", onclick: "adminTab='payments';render()", desc: "Open the payments queue" }),
+    statCard("Verified money received", money(figures.received), "banknote", { tone: "success", money: true }),
+    statCard("Active package bookings", live.length, "clipboard-list", { tone: "info" }),
+    statCard("Upcoming visits", upcomingV.length, "trees", { tone: "info" }),
+    statCard("Still to collect (confirmed bookings)", money(figures.toCollect), "hourglass", { money: true, desc: awaitingDepositNote(figures) }),
+  ].join("");
+  return `<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">${stats}</div><div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"><section class="admin-card"><div class="admin-card-head"><h2 class="admin-card-title">${icon("list-checks", "size-4 text-primary")}Action needed</h2><span class="badge badge-ghost">${actionCount} ${actionLabel}</span></div><div class="divide-y divide-base-300">${actionMarkup}</div></section><section class="admin-card"><div class="admin-card-head"><h2 class="admin-card-title">${icon("calendar-days", "size-4 text-primary")}Coming up</h2><span class="badge badge-ghost">${coming.length}</span></div><div class="divide-y divide-base-300">${comingMarkup}</div></section></div><details class="collapse collapse-arrow mt-6 border border-base-300 bg-base-100"><summary class="collapse-title text-sm font-semibold">How a booking flows</summary><div class="collapse-content text-sm leading-relaxed text-base-content/75"><p>The customer books and pays the 50% down payment → you verify it in GCash → the booking is <strong>Confirmed</strong> automatically and the customer sees an update → on the day you <strong>Start service</strong>, then mark it <strong>Completed</strong> and add the delivery fee → the customer pays the outstanding balance → you verify it → <strong>Paid</strong>.</p></div></details>`;
 }
 function adminActionMarkup(todo, specialVisits) {
   const bookingItems = todo
     .map((booking) => {
       const action = nextAction(booking);
-      return `<div class="todo"><div><strong>${booking.ref} · ${safe(booking.name)}</strong><div class="muted">${safe(booking.pkg)} · ${safe(booking.date)} · ${safe(booking.booking)} / ${safe(booking.payment)}</div></div><button class="btn btn-primary btn-sm" onclick="${action.fn}">${action.label}</button></div>`;
+      return `<div class="todo-row"><div class="min-w-0"><p class="font-semibold">${booking.ref} · ${safe(booking.name)}</p><p class="muted truncate text-sm">${safe(booking.pkg)} · ${safe(booking.date)}</p><div class="mt-1.5 flex flex-wrap gap-1"><span class="badge badge-soft badge-sm ${bookingClass(booking.booking)}">${safe(booking.booking)}</span><span class="badge badge-soft badge-sm ${payClass(booking.payment)}">${safe(booking.payment)}</span></div></div><button class="btn btn-primary btn-sm shrink-0" onclick="${action.fn}">${action.label}</button></div>`;
     })
     .join("");
   const visitItems = specialVisits
     .map(
       (visit) =>
-        `<div class="todo"><div><strong>${visit.ref} · ${safe(visit.name)}</strong><div class="muted">Special-date visit request · ${fmtDate(visit.date)}</div></div><button class="btn btn-primary btn-sm" onclick="adminTab='special';render()">Review request</button></div>`,
+        `<div class="todo-row"><div class="min-w-0"><p class="font-semibold">${visit.ref} · ${safe(visit.name)}</p><p class="muted text-sm">Special-date visit request · ${fmtDate(visit.date)}</p></div><button class="btn btn-primary btn-sm shrink-0" onclick="adminTab='special';render()">Review request</button></div>`,
     )
     .join("");
   if (!bookingItems && !visitItems) {
-    return '<div class="empty">🎉 Nothing needs your attention right now.</div>';
+    return `<div class="px-5 py-10 text-center text-sm text-base-content/60">${icon("circle-check", "size-8 mx-auto mb-2 text-success")}Nothing needs your attention right now.</div>`;
   }
   return bookingItems + visitItems;
 }
 function comingUpMarkup(items) {
   if (!items.length) {
-    return '<p class="muted">No confirmed services or visits scheduled.</p>';
+    return '<p class="muted px-5 py-8 text-center text-sm">No confirmed services or visits scheduled.</p>';
   }
   return items
     .map(
       (item) =>
-        `<div class="summary-line"><span><span class="badge badge-soft badge-neutral">${item.t}</span> &nbsp;${safe(item.l)}</span><strong>${fmtDate(item.d)}</strong></div>`,
+        `<div class="flex items-center gap-3 px-5 py-3"><div class="w-14 shrink-0 rounded-field bg-base-200 py-1.5 text-center"><p class="text-[0.65rem] font-semibold text-base-content/55 uppercase">${new Date(item.d + "T12:00:00").toLocaleString("en-US", { month: "short" })}</p><p class="text-lg leading-none font-bold">${new Date(item.d + "T12:00:00").getDate()}</p></div><div class="min-w-0"><span class="badge badge-ghost badge-sm">${item.t}</span><p class="mt-1 truncate text-sm">${safe(item.l)}</p></div></div>`,
     )
     .join("");
 }
@@ -2426,15 +2493,15 @@ function bookingRow(b) {
   if (na.fn) {
     actionMarkup = `<button class="btn ${na.cls} btn-sm" onclick="${na.fn}">${na.label}</button>`;
   } else if (na.wait) {
-    actionMarkup = `<span class="muted">⏳ ${na.wait}</span>`;
+    actionMarkup = `<span class="inline-flex items-center gap-1.5 text-xs text-base-content/65">${icon("hourglass", "size-3.5")}${na.wait}</span>`;
   } else {
-    actionMarkup = `<span class="muted">✓ ${na.label || "Closed"}</span>`;
+    actionMarkup = `<span class="inline-flex items-center gap-1.5 text-xs text-base-content/65">${icon("check", "size-3.5")}${na.label || "Closed"}</span>`;
   }
   const pondMarkup = b.pondWidth
     ? ` · ${b.pondWidth}×${b.pondHeight} m · Filtration ${safe(b.filtration)}`
     : "";
   const freebieMarkup = b.freebie
-    ? `<br><span class="muted">🎁 ${safe(b.freebie)}</span>`
+    ? `<span class="mt-0.5 flex items-start gap-1 text-xs text-base-content/60">${icon("gift", "size-3.5 mt-px text-secondary")}${safe(b.freebie)}</span>`
     : "";
   const deliveryLabel =
     b.deliveryFee == null ? "not set" : money(b.deliveryFee);
@@ -2443,17 +2510,20 @@ function bookingRow(b) {
   const awaitingReview = b.payment === "Verification Pending";
   const rejectMarkup =
     !awaitingReview && ["Pending", "Approved"].includes(b.booking)
-      ? `<button class="btn btn-soft btn-error btn-sm" onclick="updateBooking('${b.ref}','Rejected')">Reject</button>`
+      ? `<button class="btn btn-ghost btn-xs text-error" onclick="updateBooking('${b.ref}','Rejected')">Reject</button>`
       : "";
   const cancelMarkup =
     !closed && !awaitingReview && ["Pending", "Approved", "Confirmed"].includes(b.booking)
-      ? `<button class="btn btn-soft btn-error btn-sm" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`
+      ? `<button class="btn btn-ghost btn-xs text-error" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`
       : "";
-  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="badge badge-soft ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="badge badge-soft ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${deliveryLabel}</span></td><td>${actionMarkup}</td><td><div class="actions"><button class="btn btn-sm" onclick="adminViewBooking('${b.ref}')">View</button>${rejectMarkup}${cancelMarkup}</div></td></tr>`;
+  return `<tr><td data-label="Booking"><strong>${b.ref}</strong><span class="block">${safe(b.pkg)}</span><span class="block text-xs text-base-content/60">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td data-label="Customer">${safe(b.name)}<span class="block text-xs text-base-content/60">${safe(b.phone || "")}</span><span class="block text-xs text-base-content/60">${safe(b.location || "")}</span></td><td data-label="Service date" class="whitespace-nowrap">${safe(b.date)}</td><td data-label="Status"><div class="flex flex-col items-start gap-1"><span class="badge badge-soft badge-sm ${bookingClass(b.booking)}">${safe(b.booking)}</span><span class="badge badge-soft badge-sm ${payClass(b.payment)}">${safe(b.payment)}</span></div></td><td data-label="Amounts"><strong>${money(b.total)}</strong><span class="block text-xs text-base-content/60">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><span class="block text-xs text-base-content/60">Delivery: ${deliveryLabel}</span></td><td data-label="Next step">${actionMarkup}</td><td data-label="Manage"><div class="flex flex-wrap gap-1"><button class="btn btn-xs" onclick="adminViewBooking('${b.ref}')">${icon("eye", "size-3.5")}View</button>${rejectMarkup}${cancelMarkup}</div></td></tr>`;
 }
 function bookingTableHtml() {
   const list = adminServiceBookings.filter(bookingMatches);
-  return `<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Service date</th><th>Status</th><th>Amounts</th><th>Next step</th><th>Manage</th></tr></thead><tbody>${list.length ? list.map(bookingRow).join("") : '<tr><td colspan="7" class="muted">No bookings match your filter.</td></tr>'}</tbody></table></div>`;
+  const rows = list.length
+    ? pageSlice(list, bPage).map(bookingRow).join("")
+    : `<tr><td colspan="7" class="py-10 text-center text-base-content/60">No bookings match your filter.</td></tr>`;
+  return `<div class="overflow-x-auto"><table class="table table-sm data-table"><thead><tr><th>Booking</th><th>Customer</th><th>Service date</th><th>Status</th><th>Amounts</th><th>Next step</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div>${pagerMarkup(list.length, bPage, "setBPage")}`;
 }
 function refreshBookingTable() {
   const h = document.getElementById("bkHost");
@@ -2461,6 +2531,7 @@ function refreshBookingTable() {
 }
 function setBFilter(f) {
   bFilter = f;
+  bPage = 1;
   render();
 }
 function adminBookings() {
@@ -2473,11 +2544,11 @@ function adminBookings() {
     ["closed", "Cancelled / Rejected"],
   ];
   const filters = F.map(bookingFilterButton).join("");
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Approved → Confirmed (when the down payment is verified) → Ongoing → Completed (service done) → balance paid</span></div></div><div class="toolbar"><input class="input w-full" type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
+  return `<section class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">Package bookings</h2><p class="muted text-xs">Approved → Confirmed (when the down payment is verified) → Ongoing → Completed (service done) → balance paid</p></div></div><div class="admin-toolbar">${searchField("Search ref, customer, package, location…", bSearch, "bSearch=this.value;bPage=1;refreshBookingTable()", "Search bookings")}<div role="tablist" class="tabs tabs-box tabs-sm overflow-x-auto" aria-label="Filter bookings">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></section><div class="notice mt-4 flex items-start gap-2">${icon("info", "size-4 mt-0.5 text-primary")}<span>The buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</span></div>`;
 }
 function bookingFilterButton(filter) {
-  const activeClass = bFilter === filter[0] ? "active" : "";
-  return `<button class="${activeClass}" onclick="setBFilter('${filter[0]}')">${filter[1]}</button>`;
+  const active = bFilter === filter[0];
+  return `<button role="tab" class="tab whitespace-nowrap ${active ? "tab-active" : ""}" aria-selected="${active}" onclick="setBFilter('${filter[0]}')">${filter[1]}</button>`;
 }
 const BOOKING_STATUS_PROMPTS = {
   Ongoing: (ref) => `Start the service for booking ${ref}?`,
@@ -2521,7 +2592,7 @@ function openPricing(ref) {
   openModal(
     "Delivery fee",
     `${b.ref} · ${safe(b.name)}`,
-    `<p class="muted" style="margin-top:0">The service is done. Enter the confirmed Lalamove quote (enter 0 if there is no delivery). It is added to the outstanding balance, and the customer can then pay the balance from My Bookings.</p><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not provided")}</strong></div><div class="summary-line"><span>Package and customization</span><strong>${money(base)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="field"><label for="deliveryFeeInput">Lalamove delivery fee (₱)</label><input class="input w-full" id="deliveryFeeInput" type="number" min="0" step="0.01" value="${b.deliveryFee ?? ""}" placeholder="Enter confirmed delivery quote" oninput="pricePreview('${b.ref}')"></div><div class="notice" id="pricePreview">Enter a non-negative delivery fee to preview the new balance.</div>`,
+    `<p class="muted text-sm">The service is done. Enter the confirmed Lalamove quote (enter 0 if there is no delivery). It is added to the outstanding balance, and the customer can then pay the balance from My Bookings.</p><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not provided")}</strong></div><div class="summary-line"><span>Package and customization</span><strong>${money(base)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="field"><label for="deliveryFeeInput">Lalamove delivery fee (₱)</label><input class="input w-full" id="deliveryFeeInput" type="number" min="0" step="0.01" value="${b.deliveryFee ?? ""}" placeholder="Enter confirmed delivery quote" oninput="pricePreview('${b.ref}')"></div><div class="notice mt-4" id="pricePreview" aria-live="polite">Enter a non-negative delivery fee to preview the new balance.</div>`,
     `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="savePricingButton" onclick="savePricing('${b.ref}')">Save & notify customer</button>`,
   );
   pricePreview(ref);
@@ -2567,13 +2638,13 @@ function adminPayments() {
     ),
     owed = adminServiceBookings.filter((b) => customerCanPay(b));
   const waitingMarkup = waiting.length
-    ? waiting.map(pendingPaymentCard).join("")
-    : '<div class="empty"><h3>No payments awaiting verification</h3><p>New receipts appear here with their reference, amount and verification actions.</p></div>';
+    ? `<div class="grid gap-4 p-4 sm:p-5 xl:grid-cols-2">${waiting.map(pendingPaymentCard).join("")}</div>`
+    : `<div class="px-5 py-10 text-center">${icon("circle-check", "size-8 mx-auto mb-2 text-success")}<h3 class="font-semibold">No payments awaiting verification</h3><p class="muted text-sm">New receipts appear here with their reference, amount and verification actions.</p></div>`;
   const owedMarkup = owed.length
     ? owedPaymentTable(owed)
-    : '<p class="muted">No customer payments are currently due.</p>';
+    : '<p class="muted px-5 py-8 text-center text-sm">No customer payments are currently due.</p>';
   const waitingClass = waiting.length ? "badge-warning" : "badge-success";
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Needs verification</h3><p class="muted" style="margin:6px 0 0">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="badge badge-soft ${waitingClass}">${waiting.length} waiting</span></div><div class="callout" style="margin-top:14px"><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</div>${waitingMarkup}</div><div class="panel"><div class="admin-header"><h3 style="margin:0">Waiting on the customer</h3><span class="muted" style="font-size:12px">${owed.length}</span></div>${owedMarkup}</div>`;
+  return `<div class="alert alert-warning alert-soft mb-5 text-sm" role="note">${icon("shield-check", "size-5")}<span><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</span></div><section class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">${icon("receipt", "size-4 text-primary")}Needs verification</h2><p class="muted text-xs">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="badge badge-soft ${waitingClass}">${waiting.length} waiting</span></div>${waitingMarkup}</section><section class="admin-card mt-6"><div class="admin-card-head"><h2 class="admin-card-title">${icon("hourglass", "size-4 text-primary")}Waiting on the customer</h2><span class="badge badge-ghost">${owed.length}</span></div>${owedMarkup}</section>`;
 }
 /** What verifying this payment would do, per the backend's rules. */
 function paymentReviewOutcome(b, payment) {
@@ -2585,22 +2656,22 @@ function paymentReviewOutcome(b, payment) {
 function paymentMismatchMarkup(payment) {
   return !paymentAmountsDiffer(payment)
     ? ""
-    : '<div class="notice" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:10px">The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</div>';
+    : `<div class="alert alert-error alert-soft my-2 text-sm">${icon("triangle-alert", "size-4")}<span>The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</span></div>`;
 }
 function pendingPaymentCard(b) {
   const p = b.pendingPayment;
   const paymentType = p.paymentTarget === "balance" ? "Balance payment" : "50% down payment";
-  return `<div class="tile" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="badge badge-soft badge-warning">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div><div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="reviewPayment('${b.ref}')">Review payment</button><button class="btn" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button></div></div>`;
+  return `<article class="tile p-4"><div class="admin-header"><div class="min-w-0"><p class="muted text-xs">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</p><h3 class="mt-1 font-semibold">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="badge badge-soft badge-warning">${paymentType}</span></div><div class="mt-2"><div class="summary-line"><span>Transaction reference</span><strong class="font-mono">${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div></div><div class="mt-4 flex flex-wrap gap-2"><button class="btn btn-primary btn-sm" onclick="reviewPayment('${b.ref}')">${icon("badge-check")}Review payment</button><button class="btn btn-sm" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">${icon("receipt")}View receipt</button></div></article>`;
 }
 function owedPaymentTable(owed) {
   const rows = owed.map(owedPaymentRow).join("");
-  return `<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment due</th><th>Amount</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="overflow-x-auto"><table class="table table-sm data-table"><thead><tr><th>Booking</th><th>Customer</th><th>Payment due</th><th>Amount</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function owedPaymentRow(b) {
   const isBalance = customerCanPay(b) === "balance";
   const paymentDue = isBalance ? "Outstanding balance" : "50% down payment";
   const amount = isBalance ? b.balance : r2(b.deposit - Number(b.paidAmount || 0));
-  return `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${paymentDue}</td><td>${money(amount)}</td><td><span class="badge badge-soft ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
+  return `<tr><td data-label="Booking"><strong>${b.ref}</strong><span class="block text-xs text-base-content/60">${safe(b.pkg)}</span></td><td data-label="Customer">${safe(b.name)}</td><td data-label="Payment due">${paymentDue}</td><td data-label="Amount" class="font-semibold">${money(amount)}</td><td data-label="Status"><span class="badge badge-soft badge-sm ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
 }
 function paymentAmountsDiffer(payment) {
   return Math.abs(Number(payment.amount) - Number(payment.expectedAmount)) > 0.001;
@@ -2625,7 +2696,7 @@ function paymentReviewBody(b, payment, paymentType) {
   const mismatchConfirmation = paymentAmountsDiffer(payment)
     ? `<label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_mismatch"><span>The submitted amount (${money(payment.amount)}) differs from the required amount (${money(payment.expectedAmount)}). I confirm this is the amount actually received.</span></label>`
     : "";
-  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label>${mismatchConfirmation}<div class="field" style="margin-top:14px"><label for="m_reason">Reason (required to reject; shown to the customer)</label><input class="input w-full" id="m_reason" maxlength="500" placeholder="e.g. Reference number not found in GCash"></div>${FORM_ERROR_MARKUP}`;
+  return `<div class="callout flex items-start gap-2">${icon("shield-check", "size-5 text-warning")}<span>Open your GCash transaction history and confirm the money was actually received before verifying.</span></div><div class="mt-3"><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong class="font-mono">${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line is-highlight"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label>${mismatchConfirmation}<div class="field"><label for="m_reason">Reason (required to reject; shown to the customer)</label><input class="input w-full" id="m_reason" maxlength="500" placeholder="e.g. Reference number not found in GCash"></div>${FORM_ERROR_MARKUP}`;
 }
 /**
  * Verifies or rejects a submitted payment through the backend, which applies
@@ -2689,6 +2760,7 @@ async function verifyPayment(ref, paymentId, valid) {
 /* ----- visitations ----- */
 function setVFilter(f) {
   vFilter = f;
+  vPage = 1;
   render();
 }
 function adminVisits() {
@@ -2708,9 +2780,9 @@ function adminVisits() {
     list = base.filter(matchesVisitFilter).sort((a, b) => a.date.localeCompare(b.date));
   const filters = F.map(visitFilterButton).join("");
   const rows = list.length
-    ? list.map(visitTableRow).join("")
-    : '<tr><td colspan="8" class="muted">No visitation bookings match.</td></tr>';
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Visitation Bookings</h3><p class="muted" style="margin:6px 0 0">Farm visits for 1–5 visitors on weekends, including approved special dates.</p></div></div><div class="toolbar"><div class="filters">${filters}</div></div><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Visitor</th><th>Farm</th><th>Visit date</th><th>Visitors</th><th>Type</th><th>Status</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    ? pageSlice(list, vPage).map(visitTableRow).join("")
+    : '<tr><td colspan="8" class="py-10 text-center text-base-content/60">No visitation bookings match.</td></tr>';
+  return `<section class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">Visitation bookings</h2><p class="muted text-xs">Farm visits for 1–5 visitors on weekends, including approved special dates.</p></div></div><div class="admin-toolbar"><div role="tablist" class="tabs tabs-box tabs-sm" aria-label="Filter visitations">${filters}</div></div><div class="overflow-x-auto"><table class="table table-sm data-table"><thead><tr><th>Reference</th><th>Visitor</th><th>Farm</th><th>Visit date</th><th>Visitors</th><th>Type</th><th>Status</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div>${pagerMarkup(list.length, vPage, "setVPage")}</section>`;
 }
 function matchesVisitFilter(visit) {
   if (vFilter === "upcoming") {
@@ -2721,37 +2793,37 @@ function matchesVisitFilter(visit) {
   return true;
 }
 function visitFilterButton(filter) {
-  const activeClass = vFilter === filter[0] ? "active" : "";
-  return `<button class="${activeClass}" onclick="setVFilter('${filter[0]}')">${filter[1]}</button>`;
+  const active = vFilter === filter[0];
+  return `<button role="tab" class="tab ${active ? "tab-active" : ""}" aria-selected="${active}" onclick="setVFilter('${filter[0]}')">${filter[1]}</button>`;
 }
 function visitTableRow(visit) {
   const typeLabel = visit.type === "Special" ? "Special date" : "Regular";
-  return `<tr><td><strong>${visit.ref}</strong><br><span class="muted">Submitted ${safe(visit.submittedAt)}</span></td><td>${safe(visit.name)}<br><span class="muted">${safe(visit.email)}</span><br><span class="muted">${safe(visit.phone)}</span></td><td>${safe(visit.farm || "—")}</td><td>${fmtDate(visit.date, true)}</td><td>${visit.visitors}</td><td>${typeLabel}</td><td><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></td><td><div class="actions">${visitManageButtons(visit)}</div></td></tr>`;
+  return `<tr><td data-label="Reference"><strong>${visit.ref}</strong><span class="block text-xs text-base-content/60">Submitted ${safe(visit.submittedAt)}</span></td><td data-label="Visitor">${safe(visit.name)}<span class="block text-xs text-base-content/60">${safe(visit.email)}</span><span class="block text-xs text-base-content/60">${safe(visit.phone)}</span></td><td data-label="Farm">${safe(visit.farm || "—")}</td><td data-label="Visit date" class="whitespace-nowrap">${fmtDate(visit.date, true)}</td><td data-label="Visitors">${visit.visitors}</td><td data-label="Type">${typeLabel}</td><td data-label="Status"><span class="badge badge-soft badge-sm ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></td><td data-label="Manage"><div class="flex flex-wrap gap-1">${visitManageButtons(visit)}</div></td></tr>`;
 }
 function visitManageButtons(visit) {
   const statusActions = ["Booked", "Approved"].includes(visit.status)
-    ? `<button class="btn btn-primary btn-sm" onclick="updateVisit('${visit.ref}','Completed')">Mark completed</button><button class="btn btn-soft btn-error btn-sm" onclick="updateVisit('${visit.ref}','Cancelled')">Cancel</button>`
+    ? `<button class="btn btn-primary btn-xs" onclick="updateVisit('${visit.ref}','Completed')">Mark completed</button><button class="btn btn-ghost btn-xs text-error" onclick="updateVisit('${visit.ref}','Cancelled')">Cancel</button>`
     : "";
-  return `<button class="btn btn-sm" onclick="adminViewVisit('${visit.ref}')">View</button>${statusActions}`;
+  return `<button class="btn btn-xs" onclick="adminViewVisit('${visit.ref}')">${icon("eye", "size-3.5")}View</button>${statusActions}`;
 }
 function adminSpecial() {
   const list = adminVisitations.filter((v) => v.type === "Special"),
     pend = list.filter((v) => v.status === "Pending Review").length;
   const statusClass = pend ? "badge-warning" : "badge-success";
   const requests = list.length
-    ? list.map(specialVisitCard).join("")
-    : '<div class="empty"><h3>No special-date requests</h3><p>Requests for dates outside the regular schedule will appear here.</p></div>';
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Special-Date Requests</h3><p class="muted" style="margin:6px 0 0">Visit requests for dates outside the regular weekend schedule. Approve or decline each one.</p></div><span class="badge badge-soft ${statusClass}">${pend} awaiting review</span></div>${requests}</div>`;
+    ? `<div class="grid gap-4 p-4 sm:p-5 xl:grid-cols-2">${list.map(specialVisitCard).join("")}</div>`
+    : `<div class="px-5 py-10 text-center">${icon("calendar-plus", "size-8 mx-auto mb-2 text-base-content/40")}<h3 class="font-semibold">No special-date requests</h3><p class="muted text-sm">Requests for dates outside the regular schedule will appear here.</p></div>`;
+  return `<section class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">Special-date requests</h2><p class="muted text-xs">Visit requests for dates outside the regular weekend schedule. Approve or decline each one.</p></div><span class="badge badge-soft ${statusClass}">${pend} awaiting review</span></div>${requests}</section>`;
 }
 function specialVisitCard(visit) {
   const reviewActions =
     visit.status === "Pending Review"
-      ? `<button class="btn btn-primary" onclick="updateVisit('${visit.ref}','Approved')">Approve special date</button><button class="btn btn-soft btn-error" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
+      ? `<button class="btn btn-primary btn-sm" onclick="updateVisit('${visit.ref}','Approved')">${icon("check")}Approve special date</button><button class="btn btn-soft btn-error btn-sm" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
       : "";
   const reviewed = visit.reviewedAt
     ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(visit.reviewedAt))}${visit.reviewerName ? ` · ${safe(visit.reviewerName)}` : ""}</strong></div>`
     : "";
-  return `<div class="tile" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${visit.ref} · Submitted ${safe(visit.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(visit.date, true)}</h3></div><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}<div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${reviewActions}<button class="btn" onclick="adminViewVisit('${visit.ref}')">View</button></div></div>`;
+  return `<article class="tile p-4"><div class="admin-header"><div class="min-w-0"><p class="muted text-xs">${visit.ref} · Submitted ${safe(visit.submittedAt)}</p><h3 class="mt-1 font-semibold">${fmtDate(visit.date, true)}</h3></div><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="mt-2"><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}</div><div class="mt-4 flex flex-wrap gap-2">${reviewActions}<button class="btn btn-sm" onclick="adminViewVisit('${visit.ref}')">${icon("eye")}View</button></div></article>`;
 }
 const VISIT_STATUS_PROMPTS = {
   Approved: (ref) => `Approve special-date request ${ref}? The customer will see it as approved.`,
@@ -2799,7 +2871,7 @@ async function adminViewVisit(ref) {
         return `<li>${safe(entry.status)}${entry.note ? ` · ${safe(entry.note)}` : ""}${by ? ` · by ${safe(by)}` : ""}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
       })
       .join("");
-    const body = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 style="margin:18px 0 0">Status updates</h4>${history ? `<ul class="updates">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
+    const body = `<div class="mb-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 class="modal-section">Status updates</h4>${history ? `<ul class="updates">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
     openModal("Visitation details", safe(ref), body, close);
   } catch (error) {
     openModal("Visitation details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this visitation.")}</p>`, close);
@@ -2821,23 +2893,22 @@ function customersTableHtml() {
           .toLowerCase()
           .includes(q),
     );
-  return `<div class="table-wrap"><table><thead><tr><th>Customer</th><th>Contact</th><th>Service bookings</th><th>Visits</th><th>Completed</th><th>Type</th><th>Manage</th></tr></thead><tbody>${
-    list.length
-      ? list
-          .map((c) => {
-            const s = custStats(c);
-            return `<tr><td><strong>${safe(c.name)}</strong><br><span class="muted">${c.id} · ${safe(c.address || "No address")}</span></td><td>${safe(c.phone || "—")}<br><span class="muted">${safe(c.email || "No email")}</span></td><td>${s.bs.length}</td><td>${s.vs.length}</td><td>${s.done}</td><td><span class="badge badge-soft ${s.done >= 2 ? "badge-success" : "badge-neutral"}">${s.done >= 2 ? "Repeat customer" : "Regular / new"}</span></td><td><div class="actions"><button class="btn btn-sm" onclick="viewCustomer('${c.id}')">View</button><button class="btn btn-sm" onclick="openCustomerForm('${c.id}')">Edit</button><button class="btn btn-soft btn-error btn-sm" onclick="deleteCustomer('${c.id}')">Delete</button></div></td></tr>`;
-          })
-          .join("")
-      : '<tr><td colspan="7" class="muted">No customers match.</td></tr>'
-  }</tbody></table></div>`;
+  const rows = list.length
+    ? list
+        .map((c) => {
+          const s = custStats(c);
+          return `<tr><td data-label="Customer"><strong>${safe(c.name)}</strong><span class="block text-xs text-base-content/60">${c.id} · ${safe(c.address || "No address")}</span></td><td data-label="Contact">${safe(c.phone || "—")}<span class="block text-xs text-base-content/60">${safe(c.email || "No email")}</span></td><td data-label="Service bookings">${s.bs.length}</td><td data-label="Visits">${s.vs.length}</td><td data-label="Completed">${s.done}</td><td data-label="Type"><span class="badge badge-soft badge-sm ${s.done >= 2 ? "badge-success" : "badge-neutral"}">${s.done >= 2 ? "Repeat customer" : "Regular / new"}</span></td><td data-label="Manage"><div class="flex flex-wrap gap-1"><button class="btn btn-xs" onclick="viewCustomer('${c.id}')">View</button><button class="btn btn-xs" onclick="openCustomerForm('${c.id}')">${icon("pencil", "size-3.5")}Edit</button><button class="btn btn-ghost btn-xs text-error" onclick="deleteCustomer('${c.id}')">${icon("trash", "size-3.5")}Delete</button></div></td></tr>`;
+        })
+        .join("")
+    : '<tr><td colspan="7" class="py-10 text-center text-base-content/60">No customers match.</td></tr>';
+  return `<div class="overflow-x-auto"><table class="table table-sm data-table"><thead><tr><th>Customer</th><th>Contact</th><th>Service bookings</th><th>Visits</th><th>Completed</th><th>Type</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function refreshCustomers() {
   const h = document.getElementById("custHost");
   if (h) h.innerHTML = customersTableHtml();
 }
 function adminCustomers() {
-  return `${sampleDataNotice("These customers and their booking counts are example records kept in this browser. Real customer accounts and bookings are in Package Bookings, Payments and Visitations.")}<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Customers</h3><p class="muted" style="margin:6px 0 0">${customers.length} customers · repeat customer = at least two completed purchases.</p></div><button class="btn btn-primary" onclick="openCustomerForm()">＋ Add customer</button></div><div class="toolbar"><input class="input w-full" type="search" placeholder="Search name, phone, email, address…" value="${safe(cSearch)}" oninput="cSearch=this.value;refreshCustomers()" aria-label="Search customers"></div><div id="custHost">${customersTableHtml()}</div></div>`;
+  return `${sampleDataNotice("These customers and their booking counts are example records kept in this browser. Real customer accounts and bookings are in Package Bookings, Payments and Visitations.")}<section class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">Customers</h2><p class="muted text-xs">${customers.length} customers · repeat customer = at least two completed purchases.</p></div><button class="btn btn-primary btn-sm" onclick="openCustomerForm()">${icon("user-plus")}Add customer</button></div><div class="admin-toolbar">${searchField("Search name, phone, email, address…", cSearch, "cSearch=this.value;refreshCustomers()", "Search customers")}</div><div id="custHost">${customersTableHtml()}</div></section>`;
 }
 function openCustomerForm(id) {
   const c = id ? customers.find((x) => x.id === id) : null;
@@ -2930,7 +3001,7 @@ function viewCustomer(id) {
   const visitMarkup = s.vs.length
     ? s.vs.map(customerVisitSummary).join("")
     : '<p class="muted">None.</p>';
-  const body = `<div class="summary-line"><span>Contact</span><strong>${safe(c.phone || "—")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(c.email || "—")}</strong></div><div class="summary-line"><span>Address</span><strong>${safe(c.address || "—")}</strong></div>${notesMarkup}<h4 style="margin:18px 0 4px">Service bookings (${s.bs.length})</h4>${bookingMarkup}<h4 style="margin:18px 0 4px">Visits (${s.vs.length})</h4>${visitMarkup}`;
+  const body = `<div class="summary-line"><span>Contact</span><strong>${safe(c.phone || "—")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(c.email || "—")}</strong></div><div class="summary-line"><span>Address</span><strong>${safe(c.address || "—")}</strong></div>${notesMarkup}<h4 class="modal-section">Service bookings (${s.bs.length})</h4>${bookingMarkup}<h4 class="modal-section">Visits (${s.vs.length})</h4>${visitMarkup}`;
   openModal(
     safe(c.name),
     c.id,
@@ -3022,31 +3093,39 @@ function packageMatchesFilters(x) {
 function pkgCardAdmin(x) {
   const inactive = !x.active;
   const code = safe(x.id);
-  return `<article class="pkg-card ${inactive ? "is-hidden" : ""}"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ FEATURED</span>' : ""}${inactive ? '<span class="pkg-badge hidden-b" style="left:auto;right:12px">INACTIVE</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="badge badge-soft badge-primary">${safe(x.layers)}</span><span class="badge badge-soft badge-primary">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><div class="mini-actions"><button class="btn btn-sm" onclick="movePackage('${code}','up')" aria-label="Move earlier" title="Move earlier">←</button><button class="btn btn-sm" onclick="movePackage('${code}','down')" aria-label="Move later" title="Move later">→</button></div></div><div class="pkg-actions"><button class="btn btn-sm" onclick="viewPackage('${code}')">Details</button><button class="btn btn-primary btn-sm" onclick="openPackageForm('${code}')">Edit</button><button class="btn btn-sm" onclick="togglePackage('${code}')">${inactive ? "Activate" : "Deactivate"}</button><button class="btn btn-sm" onclick="duplicatePackage('${code}')">Duplicate</button></div></div></article>`;
+  const featured = x.featured ? `<span class="pkg-badge badge badge-secondary badge-sm gap-1">${icon("star", "size-3")}Featured</span>` : "";
+  const status = inactive ? '<span class="badge badge-neutral badge-sm absolute top-3 right-3">Inactive</span>' : '<span class="badge badge-success badge-sm absolute top-3 right-3">Active</span>';
+  return `<article class="pkg-card ${inactive ? "is-hidden" : ""}"><div class="pkg-media h-40">${pkgImg(x)}${featured}${status}</div><div class="pkg-body p-4"><div class="flex items-start justify-between gap-2"><h3>${safe(x.name)}</h3><span class="badge badge-ghost badge-sm font-mono">${code}</span></div><p class="pkg-desc line-clamp-2">${safe(x.description)}</p>${pkgChips(safe(x.layers), safe(x.dimensions))}${inclusionList(x)}<div class="pkg-foot"><div class="price-big text-lg"><small>Package price</small>${money(x.price)}</div><div class="join"><button class="join-item btn btn-sm btn-square" onclick="movePackage('${code}','up')" aria-label="Move earlier" title="Move earlier">${icon("arrow-left")}</button><button class="join-item btn btn-sm btn-square" onclick="movePackage('${code}','down')" aria-label="Move later" title="Move later">${icon("arrow-right")}</button></div></div><div class="pkg-actions"><button class="btn btn-primary btn-sm" onclick="openPackageForm('${code}')">${icon("pencil")}Edit</button><button class="btn btn-sm" onclick="viewPackage('${code}')">Details</button><button class="btn btn-sm" onclick="togglePackage('${code}')">${inactive ? "Activate" : "Deactivate"}</button><button class="btn btn-sm" onclick="duplicatePackage('${code}')">${icon("copy")}Duplicate</button></div></div></article>`;
 }
 function catalogGridMarkup() {
-  if (!adminPackages.length) return '<div class="empty">No packages yet. Add your first package.</div>';
-  return adminPackages.filter(packageMatchesFilters).map(pkgCardAdmin).join("") || '<div class="empty">No packages match.</div>';
+  if (!adminPackages.length) return `<div class="empty col-span-full">${icon("package", "size-8 mx-auto mb-2 text-base-content/40")}No packages yet. Add your first package.</div>`;
+  return adminPackages.filter(packageMatchesFilters).map(pkgCardAdmin).join("") || '<div class="empty col-span-full">No packages match.</div>';
 }
 function pkgFilterButton([value, label]) {
-  return `<button class="${pkgStatusFilter === value ? "active" : ""}" onclick="pkgStatusFilter='${value}';render()">${label}</button>`;
+  const active = pkgStatusFilter === value;
+  return `<button role="tab" class="tab ${active ? "tab-active" : ""}" aria-selected="${active}" onclick="pkgStatusFilter='${value}';render()">${label}</button>`;
 }
 function customPondPricingPanel() {
   const p = adminCustomPondPricing;
   if (!p) return "";
-  return `<div class="panel"><h3 style="margin-top:0">Custom pond pricing</h3><p class="muted" style="margin-top:0">Used by Custom Pond Design: width × length × rate per m² per layer, plus the filtration fee when selected. These rates are fixed on the server.</p><div class="summary-line"><span>Rate per m² per layer</span><strong>${money(p.ratePerSquareMetrePerLayer)}</strong></div><div class="summary-line"><span>Filtration fee</span><strong>${money(p.filtration)}</strong></div><div class="summary-line"><span>Layers · size per side</span><strong>${p.minLayers}–${p.maxLayers} layers · ${p.minDimensionMetres}–${p.maxDimensionMetres} m</strong></div></div>`;
+  return `<section class="admin-card mt-6"><div class="admin-card-head"><div><h2 class="admin-card-title">${icon("ruler", "size-4 text-primary")}Custom pond pricing</h2><p class="muted text-xs">Used by Custom Pond Design: width × length × rate per m² per layer, plus the filtration fee when selected. These rates are fixed on the server.</p></div><span class="badge badge-ghost gap-1">${icon("lock", "size-3")}Server-managed</span></div><div class="grid gap-4 p-5 sm:grid-cols-3"><div><p class="muted text-xs">Rate per m² per layer</p><p class="text-lg font-semibold">${money(p.ratePerSquareMetrePerLayer)}</p></div><div><p class="muted text-xs">Filtration fee</p><p class="text-lg font-semibold">${money(p.filtration)}</p></div><div><p class="muted text-xs">Layers · size per side</p><p class="text-lg font-semibold">${p.minLayers}–${p.maxLayers} layers · ${p.minDimensionMetres}–${p.maxDimensionMetres} m</p></div></div></section>`;
 }
 function adminCatalog() {
   if (adminPackagesState === "error") {
-    return `<div class="panel" role="alert"><h3 style="margin-top:0">Packages could not be loaded</h3><p class="muted">${safe(adminPackagesError)}</p><button class="btn" onclick="reloadAdminPackages()">Try again</button></div>`;
+    return `<div class="alert alert-error alert-soft" role="alert">${icon("circle-alert", "size-5")}<div><h3 class="font-semibold">Packages could not be loaded</h3><p class="text-sm">${safe(adminPackagesError)}</p></div><button class="btn btn-sm" onclick="reloadAdminPackages()">${icon("refresh-cw")}Try again</button></div>`;
   }
   if (adminPackagesState !== "loaded") {
-    return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading packages…</p></div>';
+    return `<div class="pkg-grid" aria-busy="true"><span class="sr-only" role="status">Loading packages…</span>${skeletonCards(3)}</div>`;
   }
   const act = adminPackages.filter((x) => x.active);
   const avg = act.length ? act.reduce((s, x) => s + Number(x.price), 0) / act.length : 0;
   const filters = [["all", "All"], ["active", "Active"], ["inactive", "Inactive"]].map(pkgFilterButton).join("");
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Catalog</h3><p class="muted" style="margin:6px 0 0">Add, edit, activate, deactivate, duplicate and reorder pond packages. Active packages appear on the Shop page and in the booking selector.</p></div><button class="btn btn-primary" onclick="openPackageForm()">＋ Add package</button></div><div class="stat-grid" style="margin-top:16px"><div class="stat"><div class="label">Active packages</div><div class="value">${act.length}</div></div><div class="stat"><div class="label">Inactive</div><div class="value">${adminPackages.length - act.length}</div></div><div class="stat"><div class="label">Average active price</div><div class="value" style="font-size:22px">${money(r2(avg))}</div></div></div></div>${customPondPricingPanel()}<div class="panel"><div class="toolbar" style="margin-top:0"><h3 style="margin:0">Packages (${adminPackages.length})</h3><input class="input w-full" type="search" placeholder="Search packages…" value="${safe(pkgSearch)}" oninput="pkgSearch=this.value;refreshCatalogGrid()" aria-label="Search packages"><div class="filters">${filters}</div></div><div id="pkgHost" class="pkg-grid">${catalogGridMarkup()}</div></div>`;
+  const stats = [
+    statCard("Active packages", act.length, "package", { tone: "success" }),
+    statCard("Inactive", adminPackages.length - act.length, "eye-off", { tone: "info" }),
+    statCard("Average active price", money(r2(avg)), "tag", { money: true }),
+  ].join("");
+  return `<div class="grid gap-4 sm:grid-cols-3">${stats}</div>${customPondPricingPanel()}<section class="admin-card mt-6"><div class="admin-card-head"><div><h2 class="admin-card-title">Packages (${adminPackages.length})</h2><p class="muted text-xs">Add, edit, activate, deactivate, duplicate and reorder pond packages. Active packages appear on the Shop page and in the booking selector.</p></div><button class="btn btn-primary btn-sm" onclick="openPackageForm()">${icon("plus")}Add package</button></div><div class="admin-toolbar">${searchField("Search packages…", pkgSearch, "pkgSearch=this.value;refreshCatalogGrid()", "Search packages")}<div role="tablist" class="tabs tabs-box tabs-sm" aria-label="Filter packages">${filters}</div></div><div id="pkgHost" class="pkg-grid p-4 sm:p-5">${catalogGridMarkup()}</div></section>`;
 }
 function refreshCatalogGrid() {
   const host = document.getElementById("pkgHost");
@@ -3056,9 +3135,9 @@ function viewPackage(code) {
   const x = adminPackageByCode(code);
   if (!x) return;
   const line = (label, value) => `<div class="summary-line"><span>${label}</span><strong>${value}</strong></div>`;
-  const inclusions = x.inclusions.map((item) => `<li>${safe(item)}</li>`).join("");
-  const body = `${packagePhoto(x)}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p>${safe(x.description)}</p><h4 style="margin:12px 0 4px">Inclusions</h4><ul>${inclusions}</ul>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
-  openModal("Package details", safe(x.name), body, `<button class="btn" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="openPackageForm('${safe(x.id)}')">Edit</button>`, true);
+  const inclusions = x.inclusions.map((item) => `<li class="flex items-start gap-2">${icon("gift", "size-4 text-secondary")}<span>${safe(cleanInclusion(item))}</span></li>`).join("");
+  const body = `<div class="overflow-hidden rounded-box">${packagePhoto(x)}</div><div class="my-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p class="mt-3 text-sm">${safe(x.description)}</p><h4 class="modal-section">Inclusions</h4><ul class="space-y-1 text-sm">${inclusions}</ul><h4 class="modal-section">History</h4>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
+  openModal("Package details", safe(x.name), body, `<button class="btn" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="openPackageForm('${safe(x.id)}')">${icon("pencil")}Edit</button>`, true);
 }
 function releasePackageFormPhoto() {
   if (packageFormPhoto?.url) URL.revokeObjectURL(packageFormPhoto.url);
@@ -3071,10 +3150,10 @@ function packagePhotoPreview(x) {
   else if (pending?.url) src = pending.url;
   const hasPhoto = Boolean(src);
   const preview = hasPhoto
-    ? `<img id="m_pprev" src="${safe(src)}" alt="Photo preview" style="width:100%;height:100%;object-fit:cover">`
-    : photoPlaceholder("", "No photo yet");
-  const remove = hasPhoto ? '<button type="button" class="btn btn-soft btn-error btn-sm" onclick="removePackagePhoto()">Remove photo</button>' : "";
-  return `<div class="pkg-media" id="m_pphoto" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px">${preview}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="btn btn-sm" style="cursor:pointer">${hasPhoto ? "Replace photo" : "Upload photo"}<input class="file-input w-full" id="m_pimg" type="file" accept="image/jpeg,image/png,image/webp" onchange="choosePackagePhoto(this)" hidden></label>${remove}</div>`;
+    ? `<img id="m_pprev" src="${safe(src)}" alt="Photo preview" class="size-full object-cover">`
+    : photoPlaceholder("", "No photo yet", "image-plus");
+  const remove = hasPhoto ? `<button type="button" class="btn btn-soft btn-error btn-sm" onclick="removePackagePhoto()">${icon("trash")}Remove photo</button>` : "";
+  return `<div class="mt-2 h-44 overflow-hidden rounded-box border border-base-300" id="m_pphoto">${preview}</div><div class="mt-2 flex flex-wrap gap-2"><label class="btn btn-sm cursor-pointer">${icon("upload")}${hasPhoto ? "Replace photo" : "Upload photo"}<input id="m_pimg" type="file" accept="image/jpeg,image/png,image/webp" onchange="choosePackagePhoto(this)" hidden></label>${remove}</div>`;
 }
 function refreshPackagePhoto(code) {
   const host = document.getElementById("m_pphotoHost");
@@ -3086,9 +3165,9 @@ function openPackageForm(code) {
   releasePackageFormPhoto();
   const inclusions = safe((x?.inclusions || []).join("\n"));
   const statusField = x
-    ? `<p class="muted">Status: <strong>${safe(x.status)}</strong> — use Activate / Deactivate on the package card to change it.</p>`
+    ? `<p class="muted mt-3 text-sm">Status: <strong>${safe(x.status)}</strong> — use Activate / Deactivate on the package card to change it.</p>`
     : '<label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_pact" checked><span>Active (available to customers)</span></label>';
-  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0.01" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="40" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div><div class="field"><label for="m_pincl">Inclusions (one per line, up to 10)</label><textarea class="textarea w-full" id="m_pincl" maxlength="1300" placeholder="e.g. Free starter water-test kit">${inclusions}</textarea></div><div class="field"><label for="m_pdesc">Description</label><textarea class="textarea w-full" id="m_pdesc" maxlength="500">${safe(x?.description || "")}</textarea></div><div class="field"><label>Package photo</label><small class="muted">JPG, PNG or WEBP, up to 8 MB. Large photos are resized to 1,200 px.</small><div id="m_pphotoHost">${packagePhotoPreview(x)}</div></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>${statusField}${FORM_ERROR_MARKUP}`;
+  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0.01" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="40" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div><div class="field"><label for="m_pincl">Inclusions (one per line, up to 10)</label><textarea class="textarea w-full" id="m_pincl" maxlength="1300" placeholder="e.g. Free starter water-test kit">${inclusions}</textarea></div><div class="field"><label for="m_pdesc">Description</label><textarea class="textarea w-full" id="m_pdesc" maxlength="500">${safe(x?.description || "")}</textarea></div><div class="field"><span class="field-label">Package photo</span><p class="muted text-xs">JPG, PNG or WEBP, up to 8 MB. Large photos are resized to 1,200 px.</p><div id="m_pphotoHost">${packagePhotoPreview(x)}</div></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>${statusField}${FORM_ERROR_MARKUP}`;
   openModal(
     x ? "Edit package" : "Add package",
     x ? safe(x.name) : "",
@@ -3319,24 +3398,24 @@ function faqCardMarkup(faq) {
   const statusClass = active ? "badge-success" : "badge-neutral";
   const statusLabel = active ? "Active" : "Inactive";
   const actionLabel = active ? "Deactivate" : "Activate";
-  return `<div class="tile" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(faq.question)}</h3><span class="badge badge-soft ${statusClass}">${statusLabel}</span><div class="chips" style="margin-top:8px">${keywords
-    .map((keyword) => `<span class="badge badge-soft badge-primary">${safe(keyword)}</span>`)
-    .join("")}</div></div><div class="mini-actions"><button class="btn btn-sm" onclick="openFaqForm('${faqId}')">Edit</button><button class="btn btn-sm" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${actionLabel}</button><button class="btn btn-soft btn-error btn-sm" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>Delete</button></div></div><p class="muted" style="margin-bottom:0;white-space:pre-wrap">${safe(faq.answer)}</p></div>`;
+  return `<article class="px-5 py-4"><div class="admin-header"><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="font-semibold">${safe(faq.question)}</h3><span class="badge badge-soft badge-sm ${statusClass}">${statusLabel}</span></div><div class="chips mt-2">${keywords
+    .map((keyword) => `<span class="badge badge-ghost badge-sm">${safe(keyword)}</span>`)
+    .join("")}</div></div><div class="mini-actions"><button class="btn btn-xs" onclick="openFaqForm('${faqId}')">${icon("pencil", "size-3.5")}Edit</button><button class="btn btn-xs" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${actionLabel}</button><button class="btn btn-ghost btn-xs text-error" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>${icon("trash", "size-3.5")}Delete</button></div></div><p class="mt-2 text-sm whitespace-pre-wrap text-base-content/70">${safe(faq.answer)}</p></article>`;
 }
 
 function faqContentMarkup() {
-  if (faqLoading) return '<div class="notice">Loading FAQs...</div>';
+  if (faqLoading) return '<div class="space-y-3 p-5" aria-busy="true"><span class="sr-only" role="status">Loading FAQs…</span><div class="skeleton h-20"></div><div class="skeleton h-20"></div></div>';
   if (faqLoadError) {
-    return `<div class="notice">${safe(faqLoadError)} <button class="btn btn-sm" onclick="loadFaqs(true)">Retry</button></div>`;
+    return `<div class="p-5"><div class="alert alert-error alert-soft" role="alert">${icon("circle-alert", "size-5")}<span>${safe(faqLoadError)}</span><button class="btn btn-sm" onclick="loadFaqs(true)">${icon("refresh-cw")}Retry</button></div></div>`;
   }
   const cards = faqs.map(faqCardMarkup).join("");
-  return cards || '<div class="empty">No FAQs yet.</div>';
+  return cards ? `<div class="divide-y divide-base-300">${cards}</div>` : '<p class="muted px-5 py-10 text-center text-sm">No FAQs yet.</p>';
 }
 
 function adminFaqs() {
   if (!faqsLoaded && !faqLoading && !faqLoadError) void loadFaqs();
   const faqContent = faqContentMarkup();
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Assistant FAQs</h3><p class="muted" style="margin:6px 0 0">The assistant matches customer questions to active, administrator-maintained FAQ answers.</p></div><div class="mini-actions"><button class="btn" onclick="loadFaqs(true)" ${faqLoading ? "disabled" : ""}>Refresh</button><button class="btn btn-primary" onclick="openFaqForm()">＋ Add FAQ</button></div></div><div class="tile" style="margin-top:16px"><h3 style="margin-top:0">Test the assistant</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input w-full" id="faqTestInput" placeholder="Type a customer question…" style="flex:1;min-width:200px;padding:10px;border:1px solid #cfd9d0;border-radius:9px" onkeydown="if(event.key==='Enter')testFaq()"><button class="btn" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice" style="margin-top:10px">The answer will appear here.</div></div>${faqContent}</div>`;
+  return `<section class="admin-card"><div class="admin-card-head"><div><h2 class="admin-card-title">${icon("message-circle", "size-4 text-primary")}Test the assistant</h2><p class="muted text-xs">Type a customer question to see which active FAQ answer the assistant returns.</p></div></div><div class="p-5"><div class="join w-full"><label class="input join-item w-full">${icon("search", "size-4 text-base-content/45")}<input id="faqTestInput" class="grow" placeholder="Type a customer question…" aria-label="Customer question to test" onkeydown="if(event.key==='Enter')testFaq()"></label><button class="btn btn-primary join-item" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice mt-3 whitespace-pre-line" aria-live="polite">The answer will appear here.</div></div></section><section class="admin-card mt-6"><div class="admin-card-head"><div><h2 class="admin-card-title">Assistant FAQs</h2><p class="muted text-xs">The assistant matches customer questions to active, administrator-maintained FAQ answers.</p></div><div class="mini-actions"><button class="btn btn-sm" onclick="loadFaqs(true)" ${faqLoading ? "disabled" : ""}>${icon("refresh-cw")}Refresh</button><button class="btn btn-primary btn-sm" onclick="openFaqForm()">${icon("plus")}Add FAQ</button></div></div>${faqContent}</section>`;
 }
 
 async function testFaq() {
@@ -3464,29 +3543,34 @@ function adminSales() {
   // Both totals come from the backend and must agree; flag it if they ever do not.
   const integrityNotice =
     Math.abs(paidOnBookings - figures.received) > 0.001
-      ? `<div class="notice" role="alert" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:12px">Verified payments (${money(figures.received)}) do not match the paid amounts recorded on bookings (${money(paidOnBookings)}). Review the payment records before relying on these totals.</div>`
+      ? `<div class="alert alert-error alert-soft mb-5 text-sm" role="alert">${icon("triangle-alert", "size-5")}<span>Verified payments (${money(figures.received)}) do not match the paid amounts recorded on bookings (${money(paidOnBookings)}). Review the payment records before relying on these totals.</span></div>`
       : "";
   const bookingRows = adminServiceBookings.length
     ? adminServiceBookings.map(salesBookingRow).join("")
-    : '<tr><td colspan="7" class="muted">No bookings yet.</td></tr>';
+    : '<tr><td colspan="7" class="py-10 text-center text-base-content/60">No bookings yet.</td></tr>';
   const paymentRows = history.length
     ? history.map(salesPaymentRow).join("")
-    : '<tr><td colspan="8" class="muted">No verified transactions yet.</td></tr>';
-  return `<div class="stat-grid"><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(figures.received)}</div></div><div class="stat"><div class="label">Booked value (confirmed bookings)</div><div class="value" style="font-size:22px">${money(figures.bookedValue)}</div></div><div class="stat"><div class="label">Still to collect (confirmed bookings)</div><div class="value" style="font-size:22px">${money(figures.toCollect)}</div>${awaitingDepositNote(figures)}</div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Sales & transaction records</h3><span class="muted" style="font-size:12px">Verified transactions only</span></div><div class="notice" style="margin-top:12px">A submitted receipt is not counted as a sale until you verify the actual GCash transaction. Pending and rejected payments are never included.</div>${integrityNotice}<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Booking status</th><th>Total (with delivery)</th><th>Payment status</th><th>Verified received</th><th>Still to collect</th></tr></thead><tbody>${bookingRows}</tbody></table></div><h3 style="margin-top:24px">Verified payment history</h3><div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment type</th><th>Amount</th><th>GCash reference</th><th>Receipt file</th><th>Verified</th><th>Status</th></tr></thead><tbody>${paymentRows}</tbody></table></div></div>`;
+    : '<tr><td colspan="8" class="py-10 text-center text-base-content/60">No verified transactions yet.</td></tr>';
+  const stats = [
+    statCard("Verified money received", money(figures.received), "banknote", { tone: "success", money: true }),
+    statCard("Booked value (confirmed bookings)", money(figures.bookedValue), "clipboard-list", { tone: "info", money: true }),
+    statCard("Still to collect (confirmed bookings)", money(figures.toCollect), "hourglass", { money: true, desc: awaitingDepositNote(figures) }),
+  ].join("");
+  return `<div class="grid gap-4 sm:grid-cols-3">${stats}</div><div class="notice my-5 flex items-start gap-2">${icon("info", "size-4 mt-0.5 text-primary")}<span>A submitted receipt is not counted as a sale until you verify the actual GCash transaction. Pending and rejected payments are never included.</span></div>${integrityNotice}<section class="admin-card"><div class="admin-card-head"><h2 class="admin-card-title">Sales & transaction records</h2><span class="badge badge-ghost">Verified transactions only</span></div><div class="overflow-x-auto"><table class="table table-sm data-table"><thead><tr><th>Booking</th><th>Customer</th><th>Booking status</th><th>Total (with delivery)</th><th>Payment status</th><th>Verified received</th><th>Still to collect</th></tr></thead><tbody>${bookingRows}</tbody></table></div></section><section class="admin-card mt-6"><div class="admin-card-head"><h2 class="admin-card-title">Verified payment history</h2><span class="badge badge-ghost">${history.length}</span></div><div class="overflow-x-auto"><table class="table table-sm data-table"><thead><tr><th>Booking</th><th>Customer</th><th>Payment type</th><th>Amount</th><th>GCash reference</th><th>Receipt file</th><th>Verified</th><th>Status</th></tr></thead><tbody>${paymentRows}</tbody></table></div></section>`;
 }
 function salesBookingRow(booking) {
   let outstanding = money(booking.balance);
   if (["Rejected", "Cancelled"].includes(booking.booking)) outstanding = "—";
   else if (!COMMITTED_BOOKING_STATUSES.has(booking.booking)) {
-    outstanding = '<span class="muted">Awaiting deposit</span>';
+    outstanding = '<span class="text-base-content/60">Awaiting deposit</span>';
   }
-  return `<tr><td>${safe(booking.ref)}</td><td>${safe(booking.name)}</td><td>${safe(booking.booking)}</td><td>${money(booking.total)}</td><td>${safe(booking.payment)}</td><td>${money(booking.paidAmount || 0)}</td><td>${outstanding}</td></tr>`;
+  return `<tr><td data-label="Booking" class="font-semibold">${safe(booking.ref)}</td><td data-label="Customer">${safe(booking.name)}</td><td data-label="Booking status"><span class="badge badge-soft badge-sm ${bookingClass(booking.booking)}">${safe(booking.booking)}</span></td><td data-label="Total">${money(booking.total)}</td><td data-label="Payment status"><span class="badge badge-soft badge-sm ${payClass(booking.payment)}">${safe(booking.payment)}</span></td><td data-label="Verified received">${money(booking.paidAmount || 0)}</td><td data-label="Still to collect">${outstanding}</td></tr>`;
 }
 function salesPaymentRow({ booking, payment }) {
   const paymentType =
     payment.paymentTarget === "deposit" ? "50% down payment" : "Remaining balance";
   const verifier = staffName(payment.verifiedBy);
-  return `<tr><td>${safe(booking.ref)}</td><td>${safe(booking.name)}</td><td>${paymentType}</td><td>${money(payment.amount)}</td><td>${safe(payment.gcashReference || "—")}</td><td>${safe(payment.receiptFileName)}</td><td>${safe(serverTime(payment.verifiedAt))}${verifier ? `<br><span class="muted">by ${safe(verifier)}</span>` : ""}<br><span class="muted">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td><span class="badge badge-soft badge-success">${safe(payment.status)}</span></td></tr>`;
+  return `<tr><td data-label="Booking" class="font-semibold">${safe(booking.ref)}</td><td data-label="Customer">${safe(booking.name)}</td><td data-label="Payment type">${paymentType}</td><td data-label="Amount">${money(payment.amount)}</td><td data-label="GCash reference" class="font-mono text-xs">${safe(payment.gcashReference || "—")}</td><td data-label="Receipt file">${safe(payment.receiptFileName)}</td><td data-label="Verified">${safe(serverTime(payment.verifiedAt))}${verifier ? `<span class="block text-xs text-base-content/60">by ${safe(verifier)}</span>` : ""}<span class="block text-xs text-base-content/60">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td data-label="Status"><span class="badge badge-soft badge-sm badge-success">${safe(payment.status)}</span></td></tr>`;
 }
 
 /* ----- render ----- */

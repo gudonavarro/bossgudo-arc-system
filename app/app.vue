@@ -26,13 +26,17 @@ const standalonePages = new Set([
   "reset-password",
 ]);
 const legacyPageVisible = computed(() => legacyPages.has(currentPage.value));
+const isAdminPage = computed(() => currentPage.value === "admin");
 const headerVisible = computed(
   () =>
-    currentPage.value === "home" ||
-    legacyPageVisible.value ||
-    authPages.has(currentPage.value),
+    !isAdminPage.value &&
+    (currentPage.value === "home" ||
+      legacyPageVisible.value ||
+      authPages.has(currentPage.value)),
 );
-const footerVisible = computed(() => !standalonePages.has(currentPage.value));
+const footerVisible = computed(
+  () => !standalonePages.has(currentPage.value) && !isAdminPage.value,
+);
 const chatVisible = computed(() => currentPage.value !== "admin-login");
 const isAdminArea = computed(() =>
   ["admin", "admin-login"].includes(currentPage.value),
@@ -48,12 +52,14 @@ useHead(() => ({
   <a href="#content" class="btn btn-primary btn-sm fixed top-2 left-2 z-100 -translate-y-20 focus:translate-y-0">Skip to content</a>
 
   <SiteHeader v-if="headerVisible" :overlay="currentPage === 'home'" />
+  <AdminTopbar v-if="isAdminPage" />
 
   <div id="content" class="min-h-[60vh]">
     <main
       id="app"
       v-show="legacyPageVisible"
-      class="legacy-view mx-auto w-full max-w-7xl px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8"
+      class="legacy-view w-full"
+      :class="isAdminPage ? '' : 'mx-auto max-w-7xl px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8'"
     />
     <div v-show="!legacyPageVisible"><NuxtPage /></div>
   </div>
