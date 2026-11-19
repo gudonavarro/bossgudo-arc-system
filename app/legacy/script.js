@@ -585,7 +585,7 @@ function bookingTimeline(server, payments) {
     time: new Date(entry.changedAt).getTime() || 0,
     at: serverTime(entry.changedAt),
     // changedBy is only populated in admin responses; customers never get it.
-    text: `Booking ${String(entry.status).toLowerCase()}${entry.note ? ` · ${entry.note}` : ""}${staffName(entry.changedBy) ? ` · by ${staffName(entry.changedBy)}` : ""}`,
+    text: `Booking ${String(entry.status).toLowerCase()}${optionalText(" · ", entry.note)}${optionalText(" · by ", staffName(entry.changedBy))}`,
   }));
   payments.forEach((payment) => {
     const label =
@@ -602,7 +602,7 @@ function bookingTimeline(server, payments) {
         text:
           payment.status === "Verified"
             ? `Your ${label} of ${money(payment.amount)} was verified.`
-            : `Your ${label} receipt was not verified${payment.rejectionReason ? `: ${payment.rejectionReason}` : "."}`,
+            : `Your ${label} receipt was not verified${optionalText(": ", payment.rejectionReason) || "."}`,
       });
     }
   });
@@ -620,6 +620,8 @@ function toCustomerBooking(server) {
   // catalog, so later catalog edits cannot change past bookings.
   const preset = server.packageSnapshot || null;
   const custom = server.customConfiguration;
+  let filtration = "";
+  if (custom) filtration = custom.filtration ? "Yes" : "No";
   return {
     server: true,
     id: server._id,
@@ -633,10 +635,10 @@ function toCustomerBooking(server) {
     freebie: (preset?.inclusions || []).map(cleanInclusion).join(" · "),
     packageLayers: preset && !custom ? preset.layers : "",
     packageDimensions: preset && !custom ? preset.dimensions : "",
-    layers: custom ? `${custom.layers} ${custom.layers === 1 ? "layer" : "layers"}` : "",
+    layers: custom ? countLabel(custom.layers, "layer") : "",
     pondWidth: custom ? custom.width : null,
     pondHeight: custom ? custom.length : null,
-    filtration: custom ? (custom.filtration ? "Yes" : "No") : "",
+    filtration,
     date: isoDate ? fmtDate(isoDate) : "",
     isoDate,
     booking: server.bookingStatus,
@@ -741,29 +743,39 @@ function customerCanPay(b) {
     return "balance";
   return null;
 }
-function customerMessage(b) {
-  if (b.booking === "Rejected")
-    return "The owner could not accept this booking. Please contact the farm for details.";
-  if (b.booking === "Cancelled")
-    return "This booking was cancelled. The 50% down payment is non-refundable under the booking policy.";
+/** Messages for bookings that are closed; these take priority over payments. */
+const CLOSED_BOOKING_MESSAGES = new Map([
+  ["Rejected", "The owner could not accept this booking. Please contact the farm for details."],
+  ["Cancelled", "This booking was cancelled. The 50% down payment is non-refundable under the booking policy."],
+]);
+/** Messages for open bookings with no receipt under review. */
+const OPEN_BOOKING_MESSAGES = new Map([
+  ["Approved", "Your booking has been accepted. Pay the 50% down payment to reserve your date."],
+  ["Confirmed", "Your booking is confirmed and your date is reserved. After the service is done, the owner will add any delivery fee and you can pay the remaining balance here."],
+  ["Ongoing", "Your service is in progress."],
+]);
+function receiptReviewMessage(b) {
   if (b.payment === "Verification Pending")
     return b.proof?.target === "balance"
       ? "Your balance receipt is being checked against the GCash transaction. You will get an update here once it is verified."
       : "Your 50% down payment receipt is being checked against the GCash transaction. Your booking is confirmed once the owner verifies it.";
   if (b.payment === "Rejected")
-    return `The owner could not verify your last receipt${b.proof?.rejectionReason ? `: ${b.proof.rejectionReason}` : ""}. Please check the details and resubmit.`;
-  if (b.booking === "Approved")
-    return "Your booking has been accepted. Pay the 50% down payment to reserve your date.";
-  if (b.booking === "Confirmed")
-    return "Your booking is confirmed and your date is reserved. After the service is done, the owner will add any delivery fee and you can pay the remaining balance here.";
-  if (b.booking === "Ongoing") return "Your service is in progress.";
-  if (b.booking === "Completed" && b.payment === "Paid")
-    return "Service completed and fully paid. Thank you!";
-  if (b.booking === "Completed" && b.deliveryFee == null)
-    return "Service completed. The owner will confirm the delivery fee next, then you can pay your remaining balance here.";
-  if (b.booking === "Completed")
-    return "The delivery fee has been added. Please pay your outstanding balance to finish.";
+    return `The owner could not verify your last receipt${optionalText(": ", b.proof?.rejectionReason)}. Please check the details and resubmit.`;
   return "";
+}
+function completedBookingMessage(b) {
+  if (b.payment === "Paid") return "Service completed and fully paid. Thank you!";
+  if (b.deliveryFee == null)
+    return "Service completed. The owner will confirm the delivery fee next, then you can pay your remaining balance here.";
+  return "The delivery fee has been added. Please pay your outstanding balance to finish.";
+}
+function customerMessage(b) {
+  const message =
+    CLOSED_BOOKING_MESSAGES.get(b.booking) ||
+    receiptReviewMessage(b) ||
+    OPEN_BOOKING_MESSAGES.get(b.booking);
+  if (message) return message;
+  return b.booking === "Completed" ? completedBookingMessage(b) : "";
 }
 
 function receiptContentType(file) {
@@ -950,7 +962,7 @@ function updateNavBadge() {
   document.querySelectorAll("[data-nav-badge]").forEach((badge) => {
     badge.textContent = n ? String(n) : "";
     badge.hidden = !n;
-    badge.setAttribute("aria-label", n ? `${n} new update${n === 1 ? "" : "s"}` : "");
+    badge.setAttribute("aria-label", n ? countLabel(n, "new update") : "");
   });
 }
 
@@ -970,6 +982,25 @@ function safe(s) {
         c
       ],
   );
+}
+/** `prefix` followed by the formatted value, or "" when the value is empty. */
+function optionalText(prefix, value, format = String) {
+  return value ? prefix + format(value) : "";
+}
+/** A count with its noun, e.g. "1 layer" or "2 layers". */
+function countLabel(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+/** Summary line for the customer account linked to a booking or visit. */
+function accountSummaryLine(account) {
+  if (!account) return "";
+  const inactive = account.active ? "" : " (inactive)";
+  return `<div class="summary-line"><span>Customer account</span><strong>${safe(account.name)} · ${safe(account.email || "—")}${inactive}</strong></div>`;
+}
+/** Summary line for when a record was reviewed and by whom. */
+function reviewedSummaryLine(label, reviewedAt, reviewerName) {
+  if (!reviewedAt) return "";
+  return `<div class="summary-line"><span>${label}</span><strong>${safe(serverTime(reviewedAt))}${optionalText(" · ", reviewerName, safe)}</strong></div>`;
 }
 function money(n) {
   return (
@@ -1024,14 +1055,14 @@ document.addEventListener("keydown", (event) => {
   const focusable = [...box.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])")]
     .filter((element) => element.offsetParent !== null);
   if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  const activeIndex = focusable.indexOf(document.activeElement);
+  const lastIndex = focusable.length - 1;
+  if (event.shiftKey && activeIndex === 0) {
     event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
+    focusable.at(-1).focus();
+  } else if (!event.shiftKey && (activeIndex === lastIndex || !box.contains(document.activeElement))) {
     event.preventDefault();
-    first.focus();
+    focusable[0].focus();
   }
 });
 function pkgChips(layers, dimensions) {
@@ -1214,7 +1245,105 @@ function calendarBlock(kind, mode = "select") {
 function register() {
   return `<div class="panel auth-card"><div style="text-align:center"><h1 class="page-title">Create an account</h1><p class="muted">Register to submit and track bookings.</p></div><form id="registerForm"><div class="field"><label>Full name</label><input class="input w-full" id="regName" required placeholder="Your full name"></div><div class="field"><label>Email address</label><input class="input w-full" type="email" required placeholder="you@example.com"></div><div class="field"><label>Password</label><input class="input w-full" type="password" required minlength="6" placeholder="At least 6 characters"></div><button class="btn btn-primary">Create Account</button></form></div>`;
 }
+/** Section heading shared by the About page sections. */
+function aboutHeading(id, eyebrow, title, sub = "") {
+  const subtitle = sub ? `<p class="muted mt-3 leading-relaxed">${sub}</p>` : "";
+  return `<div class="max-w-3xl"><p class="eyebrow">${eyebrow}</p><h2 id="${id}" class="section-title mt-1">${title}</h2>${subtitle}</div>`;
+}
+/**
+ * Documentation photo for the About page. The photos are collages with
+ * dates and labels printed on them, so they are shown uncropped and open in
+ * the photo lightbox for closer reading. The link still points at the file,
+ * so modified clicks open it in a new tab.
+ */
+function aboutPhoto({ src, alt, width, height, title, caption = "", className = "", framed = false }) {
+  const figcaption = caption ? `<figcaption class="border-t border-base-300 p-5">${caption}</figcaption>` : "";
+  // Side-by-side photos share a 16:9 frame so their captions line up.
+  const fit = framed ? "aspect-video object-contain" : "h-auto";
+  return `<figure class="flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 ${className}"><a href="${src}" target="_blank" rel="noopener" data-lightbox data-lightbox-title="${title}" aria-haspopup="dialog" class="group relative block cursor-pointer bg-base-200" aria-label="${alt} (opens a larger view)"><img src="${src}" alt="${alt}" width="${width}" height="${height}" loading="lazy" class="block w-full ${fit} transition-opacity group-hover:opacity-90"><span class="badge pointer-events-none absolute right-3 bottom-3 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("eye", "size-3")}View larger</span></a>${figcaption}</figure>`;
+}
+/* ----- About page photo lightbox (styles: .lightbox in main.css) ----- */
+let lightboxPhotos = [];
+let lightboxIndex = 0;
+let lightboxTrigger = null;
+function lightboxDialog() {
+  let box = document.getElementById("photoLightbox");
+  if (box) return box;
+  const button = "lightbox-btn btn btn-circle border-0 bg-white/10 text-white shadow-none hover:bg-white/20";
+  box = document.createElement("dialog");
+  box.id = "photoLightbox";
+  box.className = "lightbox";
+  box.setAttribute("aria-labelledby", "lightboxTitle");
+  box.innerHTML = `<div class="lightbox-frame" data-lightbox-dismiss><button type="button" class="${button} lightbox-close" data-lightbox-close aria-label="Close photo">${icon("x", "size-5")}</button><figure class="lightbox-figure"><img id="lightboxImage" class="lightbox-image" alt=""><figcaption class="lightbox-caption"><span id="lightboxTitle" class="font-semibold"></span><span id="lightboxCount" class="lightbox-count"></span></figcaption></figure><button type="button" class="${button} lightbox-prev" data-lightbox-step="-1" aria-label="Previous photo">${icon("chevron-left", "size-5")}</button><button type="button" class="${button} lightbox-next" data-lightbox-step="1" aria-label="Next photo">${icon("chevron-right", "size-5")}</button></div>`;
+  box.addEventListener("click", (event) => {
+    const step = event.target.closest("[data-lightbox-step]");
+    if (step) {
+      showLightboxPhoto(lightboxIndex + Number(step.dataset.lightboxStep));
+    } else if (event.target === box || event.target.closest("[data-lightbox-close]") || event.target.hasAttribute("data-lightbox-dismiss")) {
+      // The close button, or a click on the backdrop around the photo.
+      box.close();
+    }
+  });
+  box.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") showLightboxPhoto(lightboxIndex - 1);
+    else if (event.key === "ArrowRight") showLightboxPhoto(lightboxIndex + 1);
+  });
+  box.addEventListener("close", () => {
+    lightboxTrigger?.focus();
+    lightboxTrigger = null;
+  });
+  document.body.append(box);
+  return box;
+}
+function showLightboxPhoto(index) {
+  const count = lightboxPhotos.length;
+  if (!count) return;
+  lightboxIndex = (index + count) % count;
+  const link = lightboxPhotos[lightboxIndex];
+  const source = link.querySelector("img");
+  const image = document.getElementById("lightboxImage");
+  image.src = link.getAttribute("href");
+  image.alt = source?.alt || "";
+  document.getElementById("lightboxTitle").textContent = link.dataset.lightboxTitle || "";
+  document.getElementById("lightboxCount").textContent = count > 1 ? `Photo ${lightboxIndex + 1} of ${count}` : "";
+  document.querySelectorAll("#photoLightbox [data-lightbox-step]").forEach((button) => {
+    button.hidden = count < 2;
+  });
+}
+function openLightbox(link) {
+  lightboxPhotos = [...document.querySelectorAll("#app a[data-lightbox]")];
+  lightboxTrigger = link;
+  const box = lightboxDialog();
+  showLightboxPhoto(Math.max(0, lightboxPhotos.indexOf(link)));
+  if (!box.open) box.showModal();
+}
+document.addEventListener("click", (event) => {
+  const link = event.target.closest?.("a[data-lightbox]");
+  // Let modified clicks open the file in a new tab as a normal link.
+  if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  openLightbox(link);
+});
+/** Caption for an About page photo: a title, short text and detail badges. */
+function aboutCaption(title, text, details = []) {
+  const body = text ? `<p class="muted mt-1.5 text-sm leading-relaxed">${text}</p>` : "";
+  const badges = details
+    .map(([name, label]) => `<span class="badge badge-ghost gap-1">${icon(name, "size-3")}${label}</span>`)
+    .join("");
+  const badgeRow = badges ? `<div class="mt-3 flex flex-wrap gap-2">${badges}</div>` : "";
+  return `<h3 class="font-semibold text-base-content">${title}</h3>${body}${badgeRow}`;
+}
 function about() {
+  const focusAreas = [
+    ["sprout", "Seedstock production"],
+    ["shrimp", "Hatchery management"],
+    ["waves", "Commercial grow-out"],
+  ];
+  const objectives = [
+    ["shield-check", "Reliable local supply", "Establish a clean, sustainable, and biosecure commercial source of Australian Redclaw Crayfish as an alternative high-value food source and aquaculture commodity."],
+    ["store", "Market expansion", "Raise consumer and commercial awareness of ARC as a prime crustacean alternative comparable to traditional shrimp and crabs."],
+    ["handshake", "Industry mentorship & network building", "Mentor new entrants, hobbyists, and outgrower partners to build a robust supply chain, widen distribution networks, and stabilize market pricing."],
+  ];
   const offers = [
     ["shrimp", "Crayfish supply", "Australian Red Claw stock for new and growing crayfish farms."],
     ["wrench", "Pond setup assistance", "Pond packages, manufacturing, installation and custom pond design."],
@@ -1226,13 +1355,72 @@ function about() {
     ["graduation-cap", "Training & support", "Ask the owner about training requirements and available support."],
     ["calendar-check", "Bookings & visits", "Book a service or schedule a farm visit on an available weekend."],
   ];
+  const focusMarkup = focusAreas
+    .map(([name, label]) => `<li class="flex items-center gap-3 font-medium">${icon(name, "size-5 text-primary")}${label}</li>`)
+    .join("");
+  const objectiveMarkup = objectives
+    .map(([name, title, text]) => `<article class="tile flex flex-col"><span class="icon-chip">${icon(name, "size-5")}</span><h3 class="mt-4 text-lg">${title}</h3><p class="muted mt-2 text-sm leading-relaxed">${text}</p></article>`)
+    .join("");
   const offerMarkup = offers
     .map(([name, title, text]) => `<div>${icon(name, "size-6 text-primary")}<h3 class="mt-3 font-semibold">${title}</h3><p class="muted mt-1.5 text-sm leading-relaxed">${text}</p></div>`)
     .join("");
   const askMarkup = asks
     .map(([name, title, text]) => `<div class="tile flex gap-4"><span class="icon-chip shrink-0">${icon(name, "size-5")}</span><div><h3>${title}</h3><p class="muted mt-1 text-sm leading-relaxed">${text}</p></div></div>`)
     .join("");
-  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Learn about the business and its services.")}<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2"><img src="/images/aquaculture-ponds.jpg" alt="Aerated aquaculture ponds with a farm building beside them" class="h-60 w-full object-cover lg:h-full" width="1280" height="720"><div class="p-6 sm:p-10"><p class="eyebrow">About the farm</p><h2 class="section-title">Supporting new and growing crayfish enthusiasts</h2><p class="mt-4 leading-relaxed text-base-content/75">BOSSGUDO A.R.C. AQUA FARM provides Australian Red Claw crayfish supply, pond setup assistance, training, and after-sales support. The farm aims to help customers understand the basics of raising crayfish and setting up suitable ponds.</p><p class="mt-3 leading-relaxed text-base-content/75">Use the booking page to book a pond service or schedule a farm visit.</p><div class="mt-6 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section><h2 class="section-title mt-12">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
+  const overview = `<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2" aria-labelledby="about-overview-title"><img src="/images/redclaw-crayfish.jpg" alt="An Australian Red Claw crayfish showing the red patch on its claw" class="h-60 w-full object-cover object-[90%_center] sm:h-72 lg:h-full" width="1280" height="750"><div class="p-6 sm:p-10"><p class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">${icon("map-pin")}General Trias, Cavite</p><p class="eyebrow mt-5">Overview</p><h2 id="about-overview-title" class="section-title mt-1">Australian Redclaw Crayfish Farming Initiative</h2><p class="mt-4 leading-relaxed text-base-content/75">The Australian Redclaw Crayfish (ARC) (<em>Cherax quadricarinatus</em>) farming initiative represents a high-potential aquaculture enterprise in the Philippines focused on sustainable seedstock production, hatchery management, and commercial grow-out operations.</p><p class="mt-3 leading-relaxed text-base-content/75">Based in General Trias, Cavite, BOSSGUDO A.R.C. AQUA FARM addresses the growing domestic and international demand for premium, high-protein freshwater crustaceans.</p><ul class="mt-6 grid gap-3 border-t border-base-300 pt-6 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3" aria-label="Focus areas">${focusMarkup}</ul><div class="mt-7 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section>`;
+  const objectivesSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-objectives-title">${aboutHeading("about-objectives-title", "Core objectives & vision", "What the initiative works toward")}<div class="mt-6 grid gap-4 md:grid-cols-3">${objectiveMarkup}</div></section>`;
+  const originSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-origin-title">${aboutHeading("about-origin-title", "Crayfish origin", "Where our crayfish come from", "The documented origin and development of the farm’s Australian Redclaw Crayfish stock.")}${aboutPhoto({ src: "/images/bossgudo-arc-about-origin.png", alt: "Crayfish origin chart linking partner crayfish farms with dated stock records, including trios, a quadro and kilo orders", width: 1868, height: 914, title: "Crayfish origin", className: "mt-6" })}</section>`;
+  const seminarPhotos = [
+    aboutPhoto({
+      src: "/images/bossgudo-arc-about-seminar-1.png",
+      alt: "Screenshots of 2025 webinar sessions showing participants on video calls",
+      width: 1907,
+      height: 1063,
+      title: "2025 webinar sessions",
+      framed: true,
+      caption: aboutCaption("2025 webinar sessions", "Online webinar sessions held throughout 2025.", [["calendar-days", "2025"], ["users", "Online"]]),
+    }),
+    aboutPhoto({
+      src: "/images/bossgudo-arc-about-seminar-2.png",
+      alt: "ARC Breeding Quick Guide (BFAR Guidelines) webinar with participants on a video call",
+      width: 1826,
+      height: 1067,
+      title: "ARC Breeding Quick Guide (BFAR Guidelines) · March 14, 2026",
+      framed: true,
+      caption: aboutCaption("ARC Breeding Quick Guide (BFAR Guidelines)", "Navigating BFAR Administrative Circular No. 001, Series of 2025.", [["calendar-days", "March 14, 2026"], ["clock", "9:00 AM – 12:40 PM"], ["users", "Online"]]),
+    }),
+  ].join("");
+  const seminarSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-seminars-title">${aboutHeading("about-seminars-title", "Seminars", "Webinars and educational activities", "Webinar participation and educational sessions on Australian Redclaw Crayfish.")}<div class="mt-6 grid gap-6 lg:grid-cols-2">${seminarPhotos}</div></section>`;
+  const communityPhotos = [
+    aboutPhoto({
+      src: "/images/bossgudo-arc-community-service-1.png",
+      alt: "Community service session at Barangay 14, Caloocan, with a talk about ARC and attendees seated in the hall",
+      width: 1896,
+      height: 1058,
+      title: "Community service · Caloocan, January 10, 2026",
+      framed: true,
+      caption: aboutCaption("Caloocan", "", [["calendar-days", "January 10, 2026"]]),
+    }),
+    aboutPhoto({
+      src: "/images/bossgudo-arc-community-service-2.png",
+      alt: "Community service session in Cavite City with a live crayfish demonstration, group photos and a certificate of appreciation",
+      width: 1907,
+      height: 1061,
+      title: "Community service · Cavite City, February 13, 2026",
+      framed: true,
+      caption: aboutCaption("Cavite City", "", [["calendar-days", "February 13, 2026"]]),
+    }),
+  ].join("");
+  const communitySection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-community-title">${aboutHeading("about-community-title", "Community service", "Community service sessions", "Documented community service activities by the farm.")}<div class="mt-6 grid gap-6 lg:grid-cols-2">${communityPhotos}</div></section>`;
+  const assemblyDetails = [
+    ["users", "Event", "COPI – Region 3 General Assembly"],
+    ["calendar-days", "Date", "February 26, 2026"],
+    ["map-pin", "Venue", "City of San Fernando, Pampanga"],
+  ]
+    .map(([name, label, value]) => `<li class="flex gap-3">${icon(name, "size-5 mt-0.5 shrink-0 text-primary")}<div><p class="text-xs text-base-content/60">${label}</p><p class="font-medium">${value}</p></div></li>`)
+    .join("");
+  const organizationSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-organization-title">${aboutHeading("about-organization-title", "Organization – Member", "Crayfish Organization of the Philippines")}<div class="mt-6 grid items-start gap-6 lg:grid-cols-3">${aboutPhoto({ src: "/images/bossgudo-arc-organization-member.png", alt: "Members gathered at the Crayfish Organization of the Philippines, Inc. (COPI) Region 3 General Assembly", width: 1906, height: 1057, title: "COPI – Region 3 General Assembly · February 26, 2026", className: "lg:col-span-2" })}<div class="tile sm:p-7"><span class="icon-chip">${icon("badge-check", "size-5")}</span><h3 class="mt-4 text-lg">Organization member</h3><p class="muted mt-2 text-sm leading-relaxed">BOSSGUDO A.R.C. AQUA FARM is a member of the Crayfish Organization of the Philippines, Inc. (COPI).</p><ul class="mt-5 space-y-4 border-t border-base-300 pt-5">${assemblyDetails}</ul></div></div></section>`;
+  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}${originSection}${seminarSection}${communitySection}${organizationSection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-14 flex sm:mt-16 flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
 }
 /* Receipt preview for admins. The file is fetched from the admin-protected
    receipt endpoint with the session cookie and shown through a temporary
@@ -1301,12 +1489,18 @@ async function viewPaymentReceipt(ref, paymentId) {
   const actions = `${close}<a class="btn" href="${url}" target="_blank" rel="noopener">Open in new tab</a>`;
   openModal(title, safe(ref), body, actions, true);
 }
+function choicePointsMarkup(points) {
+  return points.map((p) => `<li>${icon("check", "size-4 text-primary")}<span>${p}</span></li>`).join("");
+}
+function changeBookingTypeButton() {
+  return `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`;
+}
 function bookingChooser() {
   const loginHint = loggedIn
     ? ""
     : `<div class="notice mt-6 flex items-center gap-3">${icon("lock", "size-5 text-primary")}<span>You’ll be asked to log in or create an account before completing a booking.</span></div>`;
   const choice = (iconName, title, text, points, action, label) =>
-    `<article class="tile choice"><span class="service-icon">${icon(iconName, "size-7")}</span><h2>${title}</h2><p class="muted">${text}</p><ul class="choice-points">${points.map((p) => `<li>${icon("check", "size-4 text-primary")}<span>${p}</span></li>`).join("")}</ul><button class="btn btn-primary btn-block mt-auto" onclick="chooseBookingType('${action}')">${label}${icon("arrow-right")}</button></article>`;
+    `<article class="tile choice"><span class="service-icon">${icon(iconName, "size-7")}</span><h2>${title}</h2><p class="muted">${text}</p><ul class="choice-points">${choicePointsMarkup(points)}</ul><button class="btn btn-primary btn-block mt-auto" onclick="chooseBookingType('${action}')">${label}${icon("arrow-right")}</button></article>`;
   return `${pageHead(["Home", "Bookings"], "Booking", "What would you like to book today?")}<div class="choice-grid">${choice("waves", "Book a Service", "Pond packages, manufacturing, installation, and custom pond design.", ["Choose a package or design a custom pond", "Pick an open weekend service date", "Pay a 50% down payment through GCash"], "service", "Select Service")}${choice("trees", "Book a Visitation", "Schedule a farm visit for 1–5 visitors on available weekends.", ["1–5 visitors per visit", "Available Saturdays and Sundays", "Special dates can be requested for review"], "visit", "Select Visitation")}</div>${loginHint}`;
 }
 function chooseBookingType(t) {
@@ -1408,7 +1602,7 @@ function visitBooking() {
   let stepContent = visitReviewStep();
   if (visitStep === 1) stepContent = visitDateStep();
   else if (visitStep === 2) stepContent = visitDetailsStep();
-  return `${pageHead(["Home", "Bookings", "Book a Visitation"], "Book a Visitation", "Visit the farm with 1–5 visitors on an available Saturday or Sunday.", `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`)}${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel mt-0">${stepContent}</div>`;
+  return `${pageHead(["Home", "Bookings", "Book a Visitation"], "Book a Visitation", "Visit the farm with 1–5 visitors on an available Saturday or Sunday.", changeBookingTypeButton())}${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel mt-0">${stepContent}</div>`;
 }
 function visitDateStep() {
   if (visitMode === "special")
@@ -1840,7 +2034,7 @@ function serviceBooking() {
   else if (wizardStep === 2) stepContent = dateStep();
   else if (wizardStep === 3) stepContent = detailsStep();
   else if (wizardStep === 4) stepContent = reviewStep();
-  return `${pageHead(["Home", "Bookings", "Book a Service"], "Book a Service", "Choose a package, pick your date, enter your details, review, then pay the 50% down payment.", `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`)}${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel mt-0">${stepContent}</div>`;
+  return `${pageHead(["Home", "Bookings", "Book a Service"], "Book a Service", "Choose a package, pick your date, enter your details, review, then pay the 50% down payment.", changeBookingTypeButton())}${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel mt-0">${stepContent}</div>`;
 }
 
 function success() {
@@ -1936,15 +2130,25 @@ function mybookings() {
   return `${header}<div class="flex flex-wrap items-center gap-2"><span class="badge badge-ghost gap-1.5 py-3">${icon("user", "size-3.5")}Signed in as ${safe(sessionCustomerName())}</span><span class="badge badge-ghost py-3">${mine.length} service booking${mine.length === 1 ? "" : "s"}</span><span class="badge badge-ghost py-3">${myVisits.length} visitation${myVisits.length === 1 ? "" : "s"}</span></div>${freshUpdatesMarkup(fresh)}<section aria-labelledby="serviceBookingsTitle"><h2 id="serviceBookingsTitle" class="section-title mt-10 mb-4 text-2xl">Service bookings</h2><div class="space-y-4">${bookingMarkup}</div></section><section aria-labelledby="visitsTitle"><h2 id="visitsTitle" class="section-title mt-10 mb-4 text-2xl">Farm visitations</h2><div class="space-y-4">${visitMarkup}</div></section><div class="notice mt-8 flex items-start gap-2">${icon("shield-check", "size-4 mt-0.5 text-primary")}<span>GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</span></div>`;
 }
 
+function pondDetailsText(b) {
+  if (b.packageLayers) return `${safe(b.packageLayers)} · ${safe(b.packageDimensions)}`;
+  if (b.pondWidth) return `${b.pondWidth} m × ${b.pondHeight} m · ${safe(b.layers)}`;
+  return safe(b.layers || "—");
+}
+function verifiedPaymentsMarkup(b) {
+  const payments = (b.paymentHistory || [])
+    .map((payment) => {
+      const targetLabel =
+        payment.target === "deposit" ? "50% down payment" : "Remaining balance";
+      return `<div class="summary-line"><span>${targetLabel} · ${safe(payment.verifiedAt)}</span><strong>${money(payment.amount)} · ${safe(payment.reference)}</strong></div>`;
+    })
+    .join("");
+  return payments ? `<h4 class="modal-section">Verified payments</h4>${payments}` : "";
+}
 function viewBooking(ref, admin, record = null) {
   const b = record || (admin ? adminBookingByRef(ref) : customerBookingByRef(ref));
   if (!b) return;
-  let pondDetails = safe(b.layers || "—");
-  if (b.packageLayers) {
-    pondDetails = `${safe(b.packageLayers)} · ${safe(b.packageDimensions)}`;
-  } else if (b.pondWidth) {
-    pondDetails = `${b.pondWidth} m × ${b.pondHeight} m · ${safe(b.layers)}`;
-  }
+  const pondDetails = pondDetailsText(b);
   const noticeMarkup = admin
     ? ""
     : `<div class="notice">${safe(customerMessage(b))}</div>`;
@@ -1961,22 +2165,9 @@ function viewBooking(ref, admin, record = null) {
     : "";
   const deliveryFee =
     b.deliveryFee != null ? money(b.deliveryFee) : "Not set yet";
-  const payments = (b.paymentHistory || [])
-    .map((payment) => {
-      const targetLabel =
-        payment.target === "deposit" ? "50% down payment" : "Remaining balance";
-      return `<div class="summary-line"><span>${targetLabel} · ${safe(payment.verifiedAt)}</span><strong>${money(payment.amount)} · ${safe(payment.reference)}</strong></div>`;
-    })
-    .join("");
-  let paymentHistoryMarkup = payments
-    ? `<h4 class="modal-section">Verified payments</h4>${payments}`
-    : "";
-  if (admin) {
-    const account = b.account
-      ? `<div class="summary-line"><span>Customer account</span><strong>${safe(b.account.name)} · ${safe(b.account.email || "—")}${b.account.active ? "" : " (inactive)"}</strong></div>`
-      : "";
-    paymentHistoryMarkup = `${account}<h4 class="modal-section">Payment records</h4>${adminPaymentRecordsMarkup(b)}`;
-  }
+  const paymentHistoryMarkup = admin
+    ? `${accountSummaryLine(b.account)}<h4 class="modal-section">Payment records</h4>${adminPaymentRecordsMarkup(b)}`
+    : verifiedPaymentsMarkup(b);
   const body = `<div class="flex flex-wrap gap-1.5"><span class="badge badge-soft ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="badge badge-soft ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div>${trackerMarkup}${noticeMarkup}<h4 class="modal-section">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${contactEmail}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pondDetails}${filtrationMarkup}</strong></div>${freebieMarkup}${notesMarkup}<h4 class="modal-section">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line is-highlight"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${paymentHistoryMarkup}<h4 class="modal-section">Status updates</h4>${timelineHtml(b, !admin)}`;
   const actions = `<button class="btn" onclick="closeModal()">Close</button>`;
   openModal(
@@ -2021,7 +2212,9 @@ function customerPaymentPage() {
   const paymentDetails = isBalancePayment
     ? `<div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${money(b.deliveryFee || 0)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount)}</strong></div>`
     : `<div class="summary-line"><span>Total service price</span><strong>${money(b.total)}</strong></div>`;
-  return `<div class="mx-auto max-w-4xl">${pageHead(["Customer Portal", "My Bookings", "GCash Payment"], pageTitle, `Booking ${safe(b.ref)} · ${safe(b.pkg)}`, `<span class="badge badge-soft badge-success">${paymentType}</span>`)}${gcashDetailsMarkup(paymentDetails, amount, "Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.")}<div class="panel">${receiptUploadMarkup("The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.")}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="setPage('mybookings')">Cancel</button><button class="btn btn-primary" id="submitPaymentButton" onclick="submitPaymentProof('${b.ref}','${target}')">${icon("upload")}I’ve Paid — Submit Receipt</button></div></div></div>`;
+  const bookingSubtitle = `Booking ${safe(b.ref)} · ${safe(b.pkg)}`;
+  const paymentBadge = `<span class="badge badge-soft badge-success">${paymentType}</span>`;
+  return `<div class="mx-auto max-w-4xl">${pageHead(["Customer Portal", "My Bookings", "GCash Payment"], pageTitle, bookingSubtitle, paymentBadge)}${gcashDetailsMarkup(paymentDetails, amount, "Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.")}<div class="panel">${receiptUploadMarkup("The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.")}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="setPage('mybookings')">Cancel</button><button class="btn btn-primary" id="submitPaymentButton" onclick="submitPaymentProof('${b.ref}','${target}')">${icon("upload")}I’ve Paid — Submit Receipt</button></div></div></div>`;
 }
 async function submitPaymentProof(ref, target) {
   if (submitting) return;
@@ -2212,10 +2405,8 @@ function adminPaymentRecordsMarkup(b) {
       let statusClass = "badge-warning";
       if (payment.status === "Verified") statusClass = "badge-success";
       else if (payment.status === "Rejected") statusClass = "badge-error";
-      const reviewer = staffName(payment.verifiedBy);
-      const reviewed = payment.verifiedAt
-        ? `<div class="summary-line"><span>${payment.status === "Verified" ? "Verified" : "Reviewed"}</span><strong>${safe(serverTime(payment.verifiedAt))}${reviewer ? ` · ${safe(reviewer)}` : ""}</strong></div>`
-        : "";
+      const reviewLabel = payment.status === "Verified" ? "Verified" : "Reviewed";
+      const reviewed = reviewedSummaryLine(reviewLabel, payment.verifiedAt, staffName(payment.verifiedBy));
       const reason = payment.rejectionReason
         ? `<div class="summary-line"><span>Rejection reason</span><strong>${safe(payment.rejectionReason)}</strong></div>`
         : "";
@@ -2281,7 +2472,7 @@ function admin() {
   const tabMarkup = tabs.map(adminTabMarkup).join("");
   const content =
     (ADMIN_DATA_TABS.has(adminTab) && adminDataStatusPanel()) || views[adminTab]();
-  return `<div class="drawer lg:drawer-open"><input id="adminDrawer" type="checkbox" class="drawer-toggle" aria-label="Toggle admin navigation"><div class="drawer-content min-w-0 bg-base-200"><div class="mx-auto w-full max-w-[90rem] px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:pt-7">${crumbs(["Admin", cur[1]])}<div class="mt-1 mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="admin-title">${cur[1]}</h1><p class="muted mt-1 text-sm">${descriptions[adminTab] || ""}</p></div><button class="btn btn-sm" onclick="reloadAdminData();adminPackagesState='idle';render()" ${adminDataState === "loading" ? "disabled" : ""}>${icon("refresh-cw")}Refresh</button></div>${content}</div></div><div class="drawer-side z-50 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)]"><label for="adminDrawer" aria-label="Close admin navigation" class="drawer-overlay"></label><aside class="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 lg:min-h-0 lg:h-full lg:w-64"><div class="flex h-16 items-center justify-between border-b border-base-300 px-4 lg:hidden"><span class="font-semibold">Admin menu</span><label for="adminDrawer" class="btn btn-ghost btn-sm btn-square" aria-label="Close admin navigation">${icon("x", "size-5")}</label></div><nav aria-label="Admin sections" class="flex-1 overflow-y-auto"><ul class="menu w-full gap-0.5 p-3">${tabMarkup}</ul></nav></aside></div></div>`;
+  return `<div class="drawer lg:drawer-open"><input id="adminDrawer" type="checkbox" class="drawer-toggle" aria-label="Toggle admin navigation"><div class="drawer-content min-w-0 bg-base-200"><div class="mx-auto w-full max-w-360 px-4 pt-5 pb-24 sm:px-6 lg:px-8 lg:pt-7">${crumbs(["Admin", cur[1]])}<div class="mt-1 mb-6 flex flex-wrap items-end justify-between gap-3"><div><h1 class="admin-title">${cur[1]}</h1><p class="muted mt-1 text-sm">${descriptions[adminTab] || ""}</p></div><button class="btn btn-sm" onclick="reloadAdminData();adminPackagesState='idle';render()" ${adminDataState === "loading" ? "disabled" : ""}>${icon("refresh-cw")}Refresh</button></div>${content}</div></div><div class="drawer-side z-50 lg:sticky lg:top-16 lg:z-auto lg:h-[calc(100dvh-4rem)]"><label for="adminDrawer" aria-label="Close admin navigation" class="drawer-overlay"></label><aside class="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 lg:min-h-0 lg:h-full lg:w-64"><div class="flex h-16 items-center justify-between border-b border-base-300 px-4 lg:hidden"><span class="font-semibold">Admin menu</span><label for="adminDrawer" class="btn btn-ghost btn-sm btn-square" aria-label="Close admin navigation">${icon("x", "size-5")}</label></div><nav aria-label="Admin sections" class="flex-1 overflow-y-auto"><ul class="menu w-full gap-0.5 p-3">${tabMarkup}</ul></nav></aside></div></div>`;
 }
 /** Banner for admin sections that are not connected to the database yet. */
 function sampleDataNotice(detail) {
@@ -2318,7 +2509,7 @@ function pagerMarkup(total, current, onPage) {
   const to = Math.min(total, page * ADMIN_PAGE_SIZE);
   const btn = (target, label, disabled, extra = "") =>
     `<button class="join-item btn btn-sm ${extra}" ${disabled ? "disabled" : ""} onclick="${onPage}(${target})">${label}</button>`;
-  return `<div class="admin-card-foot"><span>Showing ${from}–${to} of ${total}</span><nav class="join" aria-label="Pagination">${btn(page - 1, `${icon("chevron-left")}<span class="sr-only">Previous page</span>`, page <= 1)}<button class="join-item btn btn-sm btn-active pointer-events-none" aria-current="page">Page ${page} of ${pages}</button>${btn(page + 1, `<span class="sr-only">Next page</span>${icon("chevron-right")}`, page >= pages)}</nav></div>`;
+  return `<div class="admin-card-foot"><span>Showing ${from}–${to} of ${total}</span><nav class="join" aria-label="Pagination">${btn(page - 1, icon("chevron-left") + '<span class="sr-only">Previous page</span>', page <= 1)}<button class="join-item btn btn-sm btn-active pointer-events-none" aria-current="page">Page ${page} of ${pages}</button>${btn(page + 1, '<span class="sr-only">Next page</span>' + icon("chevron-right"), page >= pages)}</nav></div>`;
 }
 function pageSlice(list, current) {
   const pages = Math.max(1, Math.ceil(list.length / ADMIN_PAGE_SIZE));
@@ -2702,6 +2893,29 @@ function paymentReviewBody(b, payment, paymentType) {
  * Verifies or rejects a submitted payment through the backend, which applies
  * the amount, deposit and status rules and is the final authority.
  */
+/**
+ * Reads the verify/reject form for a payment. Returns the request body, or
+ * null after showing the form error when the input is incomplete.
+ */
+function paymentDecisionBody(payment, valid) {
+  if (valid) {
+    if (!document.getElementById("m_checked")?.checked) {
+      showFormError("Tick the box to confirm you checked the actual GCash transaction first.");
+      return null;
+    }
+    if (paymentAmountsDiffer(payment) && !document.getElementById("m_mismatch")?.checked) {
+      showFormError("Confirm the amount difference before verifying this payment.");
+      return null;
+    }
+    return { decision: "approve" };
+  }
+  const reason = (document.getElementById("m_reason")?.value || "").trim();
+  if (!reason || reason.length > 500) {
+    showFormError("Enter a rejection reason (up to 500 characters). The customer will see it.");
+    return null;
+  }
+  return { decision: "reject", rejectionReason: reason };
+}
 async function verifyPayment(ref, paymentId, valid) {
   if (adminActionPending) return;
   const b = adminBookingByRef(ref);
@@ -2711,25 +2925,8 @@ async function verifyPayment(ref, paymentId, valid) {
     return;
   }
   clearFormError();
-  let body;
-  if (valid) {
-    if (!document.getElementById("m_checked")?.checked) {
-      showFormError("Tick the box to confirm you checked the actual GCash transaction first.");
-      return;
-    }
-    if (paymentAmountsDiffer(p) && !document.getElementById("m_mismatch")?.checked) {
-      showFormError("Confirm the amount difference before verifying this payment.");
-      return;
-    }
-    body = { decision: "approve" };
-  } else {
-    const reason = (document.getElementById("m_reason")?.value || "").trim();
-    if (!reason || reason.length > 500) {
-      showFormError("Enter a rejection reason (up to 500 characters). The customer will see it.");
-      return;
-    }
-    body = { decision: "reject", rejectionReason: reason };
-  }
+  const body = paymentDecisionBody(p, valid);
+  if (!body) return;
 
   const activeId = valid ? "verifyPaymentButton" : "rejectPaymentButton";
   const otherButton = document.getElementById(valid ? "rejectPaymentButton" : "verifyPaymentButton");
@@ -2820,9 +3017,7 @@ function specialVisitCard(visit) {
     visit.status === "Pending Review"
       ? `<button class="btn btn-primary btn-sm" onclick="updateVisit('${visit.ref}','Approved')">${icon("check")}Approve special date</button><button class="btn btn-soft btn-error btn-sm" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
       : "";
-  const reviewed = visit.reviewedAt
-    ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(visit.reviewedAt))}${visit.reviewerName ? ` · ${safe(visit.reviewerName)}` : ""}</strong></div>`
-    : "";
+  const reviewed = reviewedSummaryLine("Reviewed", visit.reviewedAt, visit.reviewerName);
   return `<article class="tile p-4"><div class="admin-header"><div class="min-w-0"><p class="muted text-xs">${visit.ref} · Submitted ${safe(visit.submittedAt)}</p><h3 class="mt-1 font-semibold">${fmtDate(visit.date, true)}</h3></div><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="mt-2"><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}</div><div class="mt-4 flex flex-wrap gap-2">${reviewActions}<button class="btn btn-sm" onclick="adminViewVisit('${visit.ref}')">${icon("eye")}View</button></div></article>`;
 }
 const VISIT_STATUS_PROMPTS = {
@@ -2854,24 +3049,23 @@ async function adminViewVisit(ref) {
       `/api/admin/visitation-bookings/${encodeURIComponent(ref)}`,
     );
     const v = toAdminVisit(server);
-    const account = v.account
-      ? `<div class="summary-line"><span>Customer account</span><strong>${safe(v.account.name)} · ${safe(v.account.email || "—")}${v.account.active ? "" : " (inactive)"}</strong></div>`
-      : "";
+    const account = accountSummaryLine(v.account);
     const reason = v.reason
       ? `<div class="summary-line"><span>Reason for special date</span><strong>${safe(v.reason)}</strong></div>`
       : "";
-    const reviewed = v.reviewedAt
-      ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(v.reviewedAt))}${v.reviewerName ? ` · ${safe(v.reviewerName)}` : ""}</strong></div>`
-      : "";
+    const reviewed = reviewedSummaryLine("Reviewed", v.reviewedAt, v.reviewerName);
     const history = (server.statusHistory || [])
       .slice()
       .reverse()
       .map((entry) => {
         const by = staffName(entry.changedBy);
-        return `<li>${safe(entry.status)}${entry.note ? ` · ${safe(entry.note)}` : ""}${by ? ` · by ${safe(by)}` : ""}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
+        return `<li>${safe(entry.status)}${optionalText(" · ", entry.note, safe)}${optionalText(" · by ", by, safe)}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
       })
       .join("");
-    const body = `<div class="mb-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 class="modal-section">Status updates</h4>${history ? `<ul class="updates">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
+    const historyMarkup = history
+      ? `<ul class="updates">${history}</ul>`
+      : '<p class="muted">No updates yet.</p>';
+    const body = `<div class="mb-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 class="modal-section">Status updates</h4>${historyMarkup}`;
     openModal("Visitation details", safe(ref), body, close);
   } catch (error) {
     openModal("Visitation details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this visitation.")}</p>`, close);
@@ -3136,7 +3330,7 @@ function viewPackage(code) {
   if (!x) return;
   const line = (label, value) => `<div class="summary-line"><span>${label}</span><strong>${value}</strong></div>`;
   const inclusions = x.inclusions.map((item) => `<li class="flex items-start gap-2">${icon("gift", "size-4 text-secondary")}<span>${safe(cleanInclusion(item))}</span></li>`).join("");
-  const body = `<div class="overflow-hidden rounded-box">${packagePhoto(x)}</div><div class="my-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p class="mt-3 text-sm">${safe(x.description)}</p><h4 class="modal-section">Inclusions</h4><ul class="space-y-1 text-sm">${inclusions}</ul><h4 class="modal-section">History</h4>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
+  const body = `<div class="overflow-hidden rounded-box">${packagePhoto(x)}</div><div class="my-3 flex flex-wrap gap-1.5"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p class="mt-3 text-sm">${safe(x.description)}</p><h4 class="modal-section">Inclusions</h4><ul class="space-y-1 text-sm">${inclusions}</ul><h4 class="modal-section">History</h4>${line("Created", safe(serverTime(x.createdAt)) + optionalText(" · ", x.createdBy, safe))}${line("Last updated", safe(serverTime(x.updatedAt)) + optionalText(" · ", x.updatedBy, safe))}`;
   openModal("Package details", safe(x.name), body, `<button class="btn" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="openPackageForm('${safe(x.id)}')">${icon("pencil")}Edit</button>`, true);
 }
 function releasePackageFormPhoto() {
@@ -3570,7 +3764,10 @@ function salesPaymentRow({ booking, payment }) {
   const paymentType =
     payment.paymentTarget === "deposit" ? "50% down payment" : "Remaining balance";
   const verifier = staffName(payment.verifiedBy);
-  return `<tr><td data-label="Booking" class="font-semibold">${safe(booking.ref)}</td><td data-label="Customer">${safe(booking.name)}</td><td data-label="Payment type">${paymentType}</td><td data-label="Amount">${money(payment.amount)}</td><td data-label="GCash reference" class="font-mono text-xs">${safe(payment.gcashReference || "—")}</td><td data-label="Receipt file">${safe(payment.receiptFileName)}</td><td data-label="Verified">${safe(serverTime(payment.verifiedAt))}${verifier ? `<span class="block text-xs text-base-content/60">by ${safe(verifier)}</span>` : ""}<span class="block text-xs text-base-content/60">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td data-label="Status"><span class="badge badge-soft badge-sm badge-success">${safe(payment.status)}</span></td></tr>`;
+  const verifierMarkup = verifier
+    ? `<span class="block text-xs text-base-content/60">by ${safe(verifier)}</span>`
+    : "";
+  return `<tr><td data-label="Booking" class="font-semibold">${safe(booking.ref)}</td><td data-label="Customer">${safe(booking.name)}</td><td data-label="Payment type">${paymentType}</td><td data-label="Amount">${money(payment.amount)}</td><td data-label="GCash reference" class="font-mono text-xs">${safe(payment.gcashReference || "—")}</td><td data-label="Receipt file">${safe(payment.receiptFileName)}</td><td data-label="Verified">${safe(serverTime(payment.verifiedAt))}${verifierMarkup}<span class="block text-xs text-base-content/60">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td data-label="Status"><span class="badge badge-soft badge-sm badge-success">${safe(payment.status)}</span></td></tr>`;
 }
 
 /* ----- render ----- */
@@ -3693,14 +3890,14 @@ const chatForm = document.getElementById("chatForm");
 
 if (chatLaunch && chatBox) {
   chatLaunch.onclick = () => {
-    chatBox.style.display = "block";
+    if (!chatBox.open) chatBox.show();
     chatLaunch.setAttribute("aria-expanded", "true");
     document.getElementById("chatText")?.focus();
   };
 }
 if (chatClose && chatBox) {
   chatClose.onclick = () => {
-    chatBox.style.display = "none";
+    chatBox.close();
     chatLaunch?.setAttribute("aria-expanded", "false");
     chatLaunch?.focus();
   };

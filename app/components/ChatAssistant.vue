@@ -17,10 +17,10 @@
       <span class="hidden sm:inline">Ask ARC Assistant</span>
     </button>
 
-    <section
+    <!-- Opened non-modally with show() so the page stays usable. -->
+    <dialog
       id="chatBox"
-      class="chat-panel fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-2xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-96"
-      role="dialog"
+      class="fixed inset-x-3 top-auto bottom-3 z-50 w-auto max-w-none max-h-none overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-2xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-96"
       aria-labelledby="chatTitle"
     >
       <div class="flex h-full max-h-[min(36rem,calc(100dvh-1.5rem))] flex-col">
@@ -60,12 +60,6 @@
           </button>
         </form>
       </div>
-    </section>
+    </dialog>
   </div>
 </template>
-
-<style scoped>
-.chat-panel {
-  display: none;
-}
-</style>
