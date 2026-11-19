@@ -839,25 +839,6 @@ function payClass(p) {
   if (p === "Awaiting Deposit" || p === "Unpaid") return "gray";
   return "";
 }
-function canPay(b) {
-  if (b.payment === "Pending Verification") return null;
-  if (["Rejected", "Cancelled"].includes(b.booking)) return null;
-  if (
-    b.booking === "Pending" &&
-    Number(b.paidAmount || 0) <= 0 &&
-    ["Awaiting Deposit", "Rejected"].includes(b.payment)
-  )
-    return "deposit";
-  if (
-    b.booking === "Completed" &&
-    b.deliveryFee != null &&
-    b.balance > 0 &&
-    b.paidAmount > 0 &&
-    ["Partially Paid", "Rejected"].includes(b.payment)
-  )
-    return "balance";
-  return null;
-}
 /**
  * The owner's next step for a server booking. Actions map to backend
  * transitions: Approved -> Confirmed happens when the deposit is verified,
@@ -1935,7 +1916,7 @@ let adminServiceBookings = [],
   adminDataState = "idle",
   adminDataError = "",
   adminActionPending = false;
-const ADMIN_DATA_TABS = new Set(["bookings", "visits", "special"]);
+const ADMIN_DATA_TABS = new Set(["bookings", "payments", "visits", "special"]);
 
 async function fetchAllPages(path, key) {
   const items = [];
@@ -2083,8 +2064,8 @@ function adminPaymentRecordsMarkup(b) {
 function adminCounts() {
   return {
     bookings: adminServiceBookings.filter((b) => nextAction(b).fn).length,
-    payments: bookings.filter(
-      (b) => b.payment === "Pending Verification" && b.proof,
+    payments: adminServiceBookings.filter(
+      (b) => b.payment === "Verification Pending" && b.pendingPayment,
     ).length,
     special: adminVisitations.filter(
       (v) => v.type === "Special" && v.status === "Pending Review",
@@ -2382,10 +2363,10 @@ async function savePricing(ref) {
 
 /* ----- payments ----- */
 function adminPayments() {
-  const waiting = bookings.filter(
-      (b) => b.payment === "Pending Verification" && b.proof,
+  const waiting = adminServiceBookings.filter(
+      (b) => b.payment === "Verification Pending" && b.pendingPayment,
     ),
-    owed = bookings.filter((b) => canPay(b));
+    owed = adminServiceBookings.filter((b) => customerCanPay(b));
   const waitingMarkup = waiting.length
     ? waiting.map(pendingPaymentCard).join("")
     : '<div class="empty"><h3>No payments awaiting verification</h3><p>New receipts appear here with their reference, amount and verification actions.</p></div>';
@@ -2395,158 +2376,52 @@ function adminPayments() {
   const waitingClass = waiting.length ? "" : "green";
   return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Needs verification</h3><p class="muted" style="margin:6px 0 0">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="status ${waitingClass}">${waiting.length} waiting</span></div><div class="callout" style="margin-top:14px"><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</div>${waitingMarkup}</div><div class="panel"><div class="admin-header"><h3 style="margin:0">Waiting on the customer</h3><span class="muted" style="font-size:12px">${owed.length}</span></div>${owedMarkup}</div>`;
 }
-function pendingPaymentCard(b) {
-  const isBalance = b.proof.target === "balance";
-  const paymentType = isBalance ? "Balance payment" : "50% down payment";
-  const requiredAmount = isBalance ? b.balance : b.deposit;
-  const result = isBalance
+/** What verifying this payment would do, per the backend's rules. */
+function paymentReviewOutcome(b, payment) {
+  if (payment.paymentTarget !== "balance") return "Booking becomes Confirmed";
+  return Number(payment.amount) >= Number(b.balance)
     ? "Payment becomes Paid"
-    : "Booking becomes Confirmed";
-  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(b.proof.submittedAt || "")}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(b.proof.reference)}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(b.proof.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(requiredAmount)}</strong></div><div class="summary-line"><span>If verified</span><strong>${result}</strong></div><div style="margin-top:14px"><button class="primary" onclick="reviewPayment('${b.ref}')">Review & verify</button></div></div>`;
+    : "Payment stays Partially Paid";
+}
+function paymentMismatchMarkup(payment) {
+  return Math.abs(Number(payment.amount) - Number(payment.expectedAmount)) <= 0.001
+    ? ""
+    : '<div class="notice" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:10px">The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</div>';
+}
+function pendingPaymentCard(b) {
+  const p = b.pendingPayment;
+  const paymentType = p.paymentTarget === "balance" ? "Balance payment" : "50% down payment";
+  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div><div style="margin-top:14px"><button class="primary" onclick="reviewPayment('${b.ref}')">Review payment</button></div></div>`;
 }
 function owedPaymentTable(owed) {
   const rows = owed.map(owedPaymentRow).join("");
   return `<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Payment due</th><th>Amount</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function owedPaymentRow(b) {
-  const isBalance = canPay(b) === "balance";
+  const isBalance = customerCanPay(b) === "balance";
   const paymentDue = isBalance ? "Outstanding balance" : "50% down payment";
-  const amount = isBalance ? b.balance : b.deposit;
+  const amount = isBalance ? b.balance : r2(b.deposit - Number(b.paidAmount || 0));
   return `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${paymentDue}</td><td>${money(amount)}</td><td><span class="status ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
 }
 function reviewPayment(ref) {
-  const b = bookings.find((x) => x.ref === ref);
-  if (!b?.proof || b.payment !== "Pending Verification") {
+  const b = adminBookingByRef(ref);
+  const p = b?.pendingPayment;
+  if (!p || b.payment !== "Verification Pending") {
     toast("No receipt is waiting for this booking.");
     return;
   }
-  const p = b.proof,
-    exp = p.target === "balance" ? b.balance : b.deposit,
-    ok = Math.abs(Number(p.amount) - Number(exp)) <= 0.01;
-  const isBalance = p.target === "balance";
-  const paymentType = isBalance ? "Outstanding balance" : "50% down payment";
-  const result = isBalance
-    ? "Payment status becomes Paid"
-    : "Booking becomes Confirmed and the customer is notified";
-  const mismatchMarkup = ok
-    ? ""
-    : '<div class="notice" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:10px">The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</div>';
-  const receiptAction = p.dataUrl
-    ? `<button class="secondary" onclick="viewPaymentProof('${b.ref}')">View receipt</button>`
-    : "";
-  const body = paymentReviewBody(p, exp, paymentType, result, mismatchMarkup);
-  const actions = `<button class="secondary" onclick="closeModal()">Close</button>${receiptAction}<button class="danger" onclick="verifyPayment('${b.ref}',false)">Reject proof</button><button class="primary" onclick="verifyPayment('${b.ref}',true)">Verify payment</button>`;
+  const paymentType = p.paymentTarget === "balance" ? "Outstanding balance" : "50% down payment";
+  const body = paymentReviewBody(b, p, paymentType);
   openModal(
-    "Verify GCash payment",
-    `${b.ref} · ${safe(b.name)} · ${safe(b.pkg)}`,
+    "Review GCash payment",
+    `${safe(b.ref)} · ${safe(b.name)} · ${safe(b.pkg)}`,
     body,
-    actions,
+    '<button class="secondary" onclick="closeModal()">Close</button>',
   );
 }
-function paymentReviewBody(proof, expectedAmount, paymentType, result, mismatchMarkup) {
-  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(proof.reference)}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(proof.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(expectedAmount)}</strong></div>${mismatchMarkup}<div class="summary-line"><span>Receipt file</span><strong>${safe(proof.fileName)}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${result}</strong></div><label class="check-row"><input type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label><div class="field" style="margin-top:14px"><label for="m_reason">Reason (shown to the customer if you reject)</label><input id="m_reason" placeholder="e.g. Reference number not found in GCash"></div>`;
+function paymentReviewBody(b, payment, paymentType) {
+  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div><div class="notice" style="margin-top:14px">Verify and reject actions are not available on this page yet.</div>`;
 }
-function verifyPayment(ref, valid) {
-  try {
-    const b = bookings.find((x) => x.ref === ref);
-    if (!b?.proof || b.payment !== "Pending Verification") {
-      alert("This booking has no receipt awaiting verification.");
-      return false;
-    }
-    const target = b.pendingPaymentTarget || b.proof.target;
-    if (!valid) {
-      rejectPaymentProof(b, target);
-      return false;
-    }
-    if (!document.getElementById("m_checked")?.checked) {
-      alert(
-        "Tick the box to confirm you checked the actual GCash transaction first.",
-      );
-      return false;
-    }
-    const amount = validatedPaymentAmount(b, target);
-    if (amount === null) return false;
-    recordVerifiedPayment(b, target, amount);
-    return true;
-  } catch (err) {
-    console.error(err);
-    alert(
-      "The payment could not be verified: " +
-        (err?.message || "Unknown error"),
-    );
-    return false;
-  }
-}
-function rejectPaymentProof(b, target) {
-  const reason = V("m_reason"),
-    label = target === "balance" ? "outstanding balance" : "50% down payment";
-  b.payment = "Rejected";
-  b.lastRejectedProof = { ...b.proof };
-  b.proof = null;
-  b.pendingPaymentTarget = null;
-  addUpdate(
-    b,
-    `Your ${label} receipt could not be verified${reason ? ": " + reason : ""}. Please check the details and resubmit.`,
-  );
-  closeModal();
-  toast("Proof rejected — customer notified. No money recorded.");
-  render();
-}
-function validatedPaymentAmount(b, target) {
-  const amount = Number(b.proof.amount),
-    expected = Number(target === "balance" ? b.balance : b.deposit);
-  if (!Number.isFinite(amount) || !Number.isFinite(expected) || expected <= 0) {
-    alert("The required payment amount is missing or invalid.");
-    return null;
-  }
-  if (Math.abs(amount - expected) > 0.01) {
-    alert(
-      "The submitted amount (" +
-        money(amount) +
-        ") does not match the required amount (" +
-        money(expected) +
-        "). Nothing was recorded.",
-    );
-    return null;
-  }
-  return amount;
-}
-function recordVerifiedPayment(b, target, amount) {
-  b.paidAmount = Math.min(
-    Number(b.paidAmount || 0) + amount,
-    Number(b.total || 0),
-  );
-  recalc(b);
-  b.payment = b.balance <= 0 ? "Paid" : "Partially Paid";
-  b.paymentHistory = b.paymentHistory || [];
-  b.paymentHistory.push({
-    target,
-    amount,
-    reference: b.proof.reference,
-    fileName: b.proof.fileName,
-    verifiedAt: ts(),
-    status: "Verified",
-  });
-  b.proof = null;
-  b.pendingPaymentTarget = null;
-  if (target === "deposit") {
-    if (b.booking === "Pending") b.booking = "Confirmed";
-    addUpdate(
-      b,
-      "Your 50% down payment was verified. Your booking is now confirmed and your date is reserved.",
-    );
-    toast("Down payment verified — booking confirmed and customer notified.");
-  } else {
-    addUpdate(
-      b,
-      "Your outstanding balance was verified. Your booking is fully paid. Thank you!",
-    );
-    toast("Balance verified — booking fully paid, customer notified.");
-  }
-  closeModal();
-  render();
-}
-window.verifyPayment = verifyPayment;
 
 /* ----- visitations ----- */
 function setVFilter(f) {
