@@ -5,7 +5,7 @@ import {
   PAYMENT_STATUSES,
   SERVICE_TYPES,
 } from "../models/service-booking.js";
-import { depositFor, fromCents, parseAmountInput } from "./money.js";
+import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
 import {
   HttpError,
   OBJECT_ID_PATTERN,
@@ -17,6 +17,7 @@ import {
   parsePagination,
   serializeBooking,
   serializePayment,
+  withTransaction,
 } from "./service-booking.js";
 
 const require = createRequire(import.meta.url);
@@ -248,6 +249,68 @@ function applyDeliveryFee(booking, deliveryFeeCents) {
   }
 }
 
+function validateVerificationInput(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Provide the verification decision." };
+  }
+  if (body.decision === "approve") {
+    return { value: { decision: "approve" } };
+  }
+  if (body.decision !== "reject") {
+    return { error: "Decision must be approve or reject." };
+  }
+  const reason =
+    typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
+  if (!reason || reason.length > 500) {
+    return {
+      error: "A rejection reason of at most 500 characters is required.",
+    };
+  }
+  return { value: { decision: "reject", rejectionReason: reason } };
+}
+
+function assertPaymentApprovable(booking, payment) {
+  if (CLOSING_STATUSES.has(booking.bookingStatus)) {
+    throw new HttpError(
+      409,
+      `Payments cannot be approved on a ${booking.bookingStatus} booking.`,
+    );
+  }
+  if (toCents(payment.amount) > bookingCents(booking).balance) {
+    throw new HttpError(
+      409,
+      "This payment exceeds the outstanding balance. Reject it instead.",
+    );
+  }
+}
+
+/**
+ * Applies a reviewed payment to its booking. Only verified payments add to
+ * the paid amount; a booking becomes Confirmed once its initial deposit is
+ * verified, while fulfilment statuses remain under administrator control.
+ */
+function applyPaymentReview(booking, payment, { decision, adminId, now }) {
+  const cents = bookingCents(booking);
+  if (decision === "reject") {
+    booking.paymentStatus = "Rejected";
+    return;
+  }
+
+  const paid = cents.paid + toCents(payment.amount);
+  booking.paidAmount = fromCents(paid);
+  booking.balanceAmount = fromCents(cents.total - paid);
+  booking.paymentStatus = derivePaymentStatus(paid, cents.total);
+  if (booking.bookingStatus === "Approved" && paid >= cents.deposit) {
+    booking.bookingStatus = "Confirmed";
+    booking.statusHistory.push({
+      status: "Confirmed",
+      changedBy: adminId,
+      changedAt: now,
+      note: "Initial deposit verified.",
+    });
+  }
+}
+
 function createAdminServiceBookingRouter() {
   const router = express.Router();
   const authenticateAdmin = createAuthenticationMiddleware({
@@ -396,6 +459,88 @@ function createAdminServiceBookingRouter() {
       return response.status(200).json({ booking: serializeBooking(booking) });
     } catch (error) {
       return handleRouteError(response, error, "Delivery fee update");
+    }
+  });
+
+  router.patch("/:identifier/payments/:paymentId", async (request, response) => {
+    const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+    if (!identifierFilter) {
+      return response.status(400).json({ error: "Invalid booking id or reference." });
+    }
+    if (!OBJECT_ID_PATTERN.test(request.params.paymentId)) {
+      return response.status(400).json({ error: "Invalid payment id." });
+    }
+    const validation = validateVerificationInput(request.body);
+    if (validation.error) {
+      return response.status(400).json({ error: validation.error });
+    }
+
+    const { connection, ServiceBooking, Payment } = request.bookingModels;
+    const { decision, rejectionReason } = validation.value;
+    const adminId = request.authUser.id;
+    try {
+      const result = await withTransaction(connection, async (session) => {
+        const booking = await ServiceBooking.findOne(identifierFilter).session(session);
+        if (!booking) {
+          throw new HttpError(404, "Booking not found.");
+        }
+        const pendingPayment = await Payment.findOne({
+          _id: request.params.paymentId,
+          service_booking_id: booking._id,
+        }).session(session);
+        if (!pendingPayment) {
+          throw new HttpError(404, "Payment not found.");
+        }
+        if (pendingPayment.status !== "Pending") {
+          throw new HttpError(409, "This payment has already been reviewed.");
+        }
+        if (decision === "approve") {
+          assertPaymentApprovable(booking, pendingPayment);
+        }
+
+        // Claim the payment atomically: only a still-pending payment can be
+        // reviewed, so concurrent or repeated requests cannot verify it twice.
+        const now = new Date();
+        const payment = await Payment.findOneAndUpdate(
+          { _id: pendingPayment._id, status: "Pending" },
+          {
+            $set: {
+              status: decision === "approve" ? "Verified" : "Rejected",
+              verifiedBy: adminId,
+              verifiedAt: now,
+              ...(decision === "reject" ? { rejectionReason } : {}),
+            },
+          },
+          { new: true, runValidators: true, session },
+        );
+        if (!payment) {
+          throw new HttpError(409, "This payment has already been reviewed.");
+        }
+
+        try {
+          applyPaymentReview(booking, payment, { decision, adminId, now });
+          await booking.save({ session });
+        } catch (error) {
+          if (!session) {
+            await Payment.updateOne(
+              { _id: payment._id, status: payment.status },
+              {
+                $set: { status: "Pending" },
+                $unset: { verifiedBy: 1, verifiedAt: 1, rejectionReason: 1 },
+              },
+            );
+          }
+          throw error;
+        }
+        return { booking, payment };
+      });
+
+      return response.status(200).json({
+        payment: serializePayment(result.payment, { includeAudit: true }),
+        booking: serializeBooking(result.booking),
+      });
+    } catch (error) {
+      return handleRouteError(response, error, "Payment verification");
     }
   });
 
