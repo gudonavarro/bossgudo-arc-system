@@ -106,6 +106,7 @@ function openModal(title, sub, body, foot, wide) {
 function closeModal() {
   document.getElementById("modalHost").innerHTML = "";
   document.body.style.overflow = "";
+  releaseReceiptUrl();
 }
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
@@ -1128,54 +1129,72 @@ function register() {
 function about() {
   return `<div class="breadcrumbs">Home / About</div><h1 class="page-title">About BOSSGUDO A.R.C. AQUA FARM</h1><p class="muted">Learn about the business and its services.</p><div class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:25px;align-items:center"><div><div class="eyebrow" style="color:var(--green)">About the farm</div><h2>Supporting new and growing crayfish enthusiasts</h2><p class="muted" style="line-height:1.8">BOSSGUDO A.R.C. AQUA FARM provides Australian Red Claw crayfish supply, pond setup assistance, training, and after-sales support. The farm aims to help customers understand the basics of raising crayfish and setting up suitable ponds.</p><p class="muted" style="line-height:1.8">Use the booking page to book a pond service or schedule a farm visit.</p><button class="primary" onclick="startBooking()">Book Now</button></div><div style="border-radius:18px;background:linear-gradient(145deg,#e3eee2,#a9c9ad);padding:35px;text-align:center;font-size:95px">🦞<div style="font-size:14px;font-weight:800;color:var(--green)">Australian Red Claw (ARC)</div></div></div><div class="section-head"><div><h2>What you can ask about</h2><p>Use the assistant for predefined FAQs or contact the owner for special requests.</p></div></div><div class="grid3"><div class="card"><h3>Packages & services</h3><p>Ask about supply, pond setup, and combined options.</p></div><div class="card"><h3>Training & support</h3><p>Ask the owner about training requirements and available support.</p></div><div class="card"><h3>Bookings & visits</h3><p>Book a service or schedule a farm visit on an available weekend.</p></div></div>`;
 }
-function viewPaymentProof(ref) {
-  let b = bookings.find((x) => x.ref === ref);
-  if (!b?.proof?.dataUrl) {
-    alert(
-      "No receipt file is available for this booking. Ask the customer to resubmit the proof.",
+/* Receipt preview for admins. The file is fetched from the admin-protected
+   receipt endpoint with the session cookie and shown through a temporary
+   object URL, which is released when the preview closes or is replaced. */
+const PREVIEWABLE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+let activeReceiptUrl = null,
+  receiptRequestId = 0;
+function releaseReceiptUrl() {
+  if (activeReceiptUrl) URL.revokeObjectURL(activeReceiptUrl);
+  activeReceiptUrl = null;
+}
+function receiptFileNameFrom(response, fallback) {
+  const match = /filename\*=UTF-8''([^;]+)/i.exec(response.headers.get("content-disposition") || "");
+  if (match) {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+async function viewPaymentReceipt(ref, paymentId) {
+  const requestId = ++receiptRequestId;
+  const title = "Payment receipt";
+  const close = '<button class="secondary" onclick="closeModal()">Close</button>';
+  releaseReceiptUrl();
+  openModal(title, safe(ref), '<p class="muted" aria-busy="true">Loading receipt…</p>', close, true);
+  let response;
+  try {
+    response = await fetch(
+      `${adminBookingPath(ref)}/payments/${encodeURIComponent(paymentId)}/receipt`,
+      { credentials: "same-origin", cache: "no-store" },
     );
+  } catch {
+    response = null;
+  }
+  // Ignore a response that arrives after the preview was closed or replaced.
+  if (requestId !== receiptRequestId || !document.querySelector("#modalHost .modal")) return;
+  if (!response?.ok) {
+    let message = "The receipt could not be loaded. Please try again.";
+    if (response?.status === 401) message = "Your session has ended. Please log in again.";
+    else if (response?.status === 404) message = "No receipt file was found for this payment.";
+    else if (response) {
+      const result = await response.json().catch(() => null);
+      if (typeof result?.error === "string") message = result.error;
+    }
+    openModal(title, safe(ref), `<p role="alert">${safe(message)}</p>`, close);
     return;
   }
-  let w = window.open();
-  if (!w) {
-    alert(
-      "Your browser blocked the receipt preview. Allow pop-ups for this page and try again.",
-    );
-    return;
-  }
-  const receiptDocument = w.document;
-  receiptDocument.title = `Payment receipt — ${b.ref}`;
-  const receiptBody = receiptDocument.body;
-  receiptBody.style.cssText = "font-family:Arial,sans-serif;padding:20px;color:#243129";
-  const heading = receiptDocument.createElement("h2");
-  heading.textContent = `Payment receipt — ${b.ref}`;
-  receiptBody.replaceChildren(
-    heading,
-    ...[
-      `Customer: ${b.name}`,
-      `GCash reference: ${b.proof.reference}`,
-      `Submitted amount: ${money(b.proof.amount)}`,
-      `File: ${b.proof.fileName}`,
-    ].map((text) => {
-      const paragraph = receiptDocument.createElement("p");
-      paragraph.textContent = text;
-      return paragraph;
-    }),
-    receiptDocument.createElement("hr"),
-  );
-  if (b.proof.dataUrl.startsWith("data:application/pdf")) {
-    const preview = receiptDocument.createElement("iframe");
-    preview.src = b.proof.dataUrl;
-    preview.title = `Payment receipt PDF for ${b.ref}`;
-    preview.style.cssText = "width:100%;height:80vh;border:0";
-    receiptBody.append(preview);
+  const blob = await response.blob();
+  if (requestId !== receiptRequestId) return;
+  const contentType = (response.headers.get("content-type") || blob.type || "").split(";")[0].trim();
+  const fileName = receiptFileNameFrom(response, "receipt");
+  activeReceiptUrl = URL.createObjectURL(blob);
+  const url = activeReceiptUrl;
+  let preview;
+  if (PREVIEWABLE_IMAGE_TYPES.has(contentType)) {
+    preview = `<img id="receiptPreview" src="${url}" alt="Uploaded payment receipt" style="max-width:100%;height:auto;display:block;margin:0 auto">`;
+  } else if (contentType === "application/pdf") {
+    preview = `<iframe id="receiptPreview" src="${url}" title="Payment receipt PDF for ${safe(ref)}" style="width:100%;height:70vh;border:0"></iframe>`;
   } else {
-    const preview = receiptDocument.createElement("img");
-    preview.src = b.proof.dataUrl;
-    preview.alt = "Uploaded payment receipt";
-    preview.style.cssText = "max-width:100%;height:auto";
-    receiptBody.append(preview);
+    preview = `<div class="notice" id="receiptPreview">This file type (${safe(contentType || "unknown")}) can't be previewed in the browser. Download it to view the receipt.</div><p style="margin-top:12px"><a class="primary" href="${url}" download="${safe(fileName)}">Download receipt</a></p>`;
   }
+  const body = `<div class="summary-line"><span>File</span><strong>${safe(fileName)}</strong></div><div class="summary-line"><span>Size</span><strong>${(blob.size / 1024).toFixed(1)} KB</strong></div><div style="margin-top:12px">${preview}</div>`;
+  const actions = `${close}<a class="secondary" href="${url}" target="_blank" rel="noopener">Open in new tab</a>`;
+  openModal(title, safe(ref), body, actions, true);
 }
 function bookingChooser() {
   return `<div class="breadcrumbs">Home / Bookings</div><h1 class="page-title">Booking</h1><h2 style="margin:6px 0 0;font-size:20px">What would you like to book today?</h2><div class="choice-grid"><div class="card choice"><div class="service-icon">🌊</div><h3>Book a Service</h3><p>Pond packages, manufacturing, installation, and custom pond design.</p><button class="primary" onclick="chooseBookingType('service')">Select Service</button></div><div class="card choice"><div class="service-icon">🏡</div><h3>Book a Visitation</h3><p>Schedule a farm visit for 1–5 visitors on available weekends.</p><button class="primary" onclick="chooseBookingType('visit')">Select Visitation</button></div></div>`;
@@ -2057,7 +2076,7 @@ function adminPaymentRecordsMarkup(b) {
       const reason = payment.rejectionReason
         ? `<div class="summary-line"><span>Rejection reason</span><strong>${safe(payment.rejectionReason)}</strong></div>`
         : "";
-      return `<div class="card" style="margin:10px 0"><div class="admin-header"><strong>${label}</strong><span class="status ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}</div>`;
+      return `<div class="card" style="margin:10px 0"><div class="admin-header"><strong>${label}</strong><span class="status ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}<div style="margin-top:10px"><button class="secondary small" onclick="viewPaymentReceipt('${b.ref}','${payment._id}')">View receipt</button></div></div>`;
     })
     .join("");
 }
@@ -2391,7 +2410,7 @@ function paymentMismatchMarkup(payment) {
 function pendingPaymentCard(b) {
   const p = b.pendingPayment;
   const paymentType = p.paymentTarget === "balance" ? "Balance payment" : "50% down payment";
-  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div><div style="margin-top:14px"><button class="primary" onclick="reviewPayment('${b.ref}')">Review payment</button></div></div>`;
+  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div><div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="primary" onclick="reviewPayment('${b.ref}')">Review payment</button><button class="secondary" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button></div></div>`;
 }
 function owedPaymentTable(owed) {
   const rows = owed.map(owedPaymentRow).join("");
@@ -2416,7 +2435,7 @@ function reviewPayment(ref) {
     "Review GCash payment",
     `${safe(b.ref)} · ${safe(b.name)} · ${safe(b.pkg)}`,
     body,
-    '<button class="secondary" onclick="closeModal()">Close</button>',
+    `<button class="secondary" onclick="closeModal()">Close</button><button class="secondary" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button>`,
   );
 }
 function paymentReviewBody(b, payment, paymentType) {

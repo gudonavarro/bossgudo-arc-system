@@ -308,6 +308,10 @@ function serializeBooking(document, { includeAudit = false } = {}) {
   return serialized;
 }
 
+/**
+ * Shapes a payment for API responses. The receipt's storage key is never
+ * returned; admins fetch the file through the payment's receipt endpoint.
+ */
 function serializePayment(document, { includeAudit = false } = {}) {
   const payment = toPlain(document);
   const serialized = {
@@ -319,7 +323,6 @@ function serializePayment(document, { includeAudit = false } = {}) {
     method: payment.method,
     gcashReference: payment.gcashReference ?? null,
     receiptFileName: payment.receiptFileName,
-    receiptStorageKey: payment.receiptStorageKey,
     status: payment.status,
     submittedAt: payment.submittedAt,
     verifiedAt: payment.verifiedAt ?? null,
