@@ -7,6 +7,7 @@ import {
 } from "../models/service-booking.js";
 import {
   OBJECT_ID_PATTERN,
+  bookingIdentifierFilter,
   handleRouteError,
   paginationMeta,
   parsePagination,
@@ -23,6 +24,7 @@ const { createAuthenticationMiddleware } = require(
 );
 
 const CUSTOMER_FIELDS = "firstName lastName email phoneNumber isActive";
+const STAFF_FIELDS = "firstName lastName role";
 const MAX_SEARCH_LENGTH = 100;
 
 function parseCalendarDate(value) {
@@ -172,6 +174,37 @@ function createAdminServiceBookingRouter() {
       });
     } catch (error) {
       return handleRouteError(response, error, "Admin service booking list");
+    }
+  });
+
+  router.get("/:identifier", async (request, response) => {
+    const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+    if (!identifierFilter) {
+      return response.status(400).json({ error: "Invalid booking id or reference." });
+    }
+
+    const { ServiceBooking, Payment } = request.bookingModels;
+    try {
+      const booking = await ServiceBooking.findOne(identifierFilter)
+        .populate("customer_id", CUSTOMER_FIELDS)
+        .populate("deliveryFeeSetBy", STAFF_FIELDS)
+        .populate("statusHistory.changedBy", STAFF_FIELDS)
+        .lean();
+      if (!booking) {
+        return response.status(404).json({ error: "Booking not found." });
+      }
+      const payments = await Payment.find({ service_booking_id: booking._id })
+        .sort({ submittedAt: -1, _id: -1 })
+        .populate("verifiedBy", STAFF_FIELDS)
+        .lean();
+      return response.status(200).json({
+        booking: serializeBooking(booking),
+        payments: payments.map((payment) =>
+          serializePayment(payment, { includeAudit: true }),
+        ),
+      });
+    } catch (error) {
+      return handleRouteError(response, error, "Admin service booking lookup");
     }
   });
 
