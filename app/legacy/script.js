@@ -1935,7 +1935,7 @@ let adminServiceBookings = [],
   adminDataState = "idle",
   adminDataError = "",
   adminActionPending = false;
-const ADMIN_DATA_TABS = new Set(["bookings", "payments", "visits", "special"]);
+const ADMIN_DATA_TABS = new Set(["overview", "bookings", "payments", "visits", "special"]);
 
 async function fetchAllPages(path, key) {
   const items = [];
@@ -2135,29 +2135,66 @@ function adminTabMarkup(tab) {
   return `<button class="${activeClass}" onclick="adminTab='${tab[0]}';render()">${tab[1]}${countMarkup}</button>`;
 }
 
+/* Dashboard figures from the real records. Definitions:
+   - received: sum of Verified payments only (pending/rejected never count);
+   - committed: bookings Confirmed or later (deposit verified);
+   - still to collect: outstanding balance of committed bookings;
+   - awaiting deposit: unpaid Approved bookings, reported separately;
+   - active: not Rejected/Cancelled and not both Completed and fully paid. */
+const COMMITTED_BOOKING_STATUSES = new Set(["Confirmed", "Ongoing", "Completed"]);
+function verifiedPaymentRows() {
+  return adminServiceBookings.flatMap((b) =>
+    (b.payments || [])
+      .filter((p) => p.status === "Verified")
+      .map((p) => ({ booking: b, payment: p })),
+  );
+}
+function sumMoney(values) {
+  return r2(values.reduce((sum, value) => sum + Number(value || 0), 0));
+}
+function adminMoneyFigures() {
+  const committed = adminServiceBookings.filter((b) => COMMITTED_BOOKING_STATUSES.has(b.booking));
+  const awaitingDeposit = adminServiceBookings.filter(
+    (b) => ["Pending", "Approved"].includes(b.booking) && Number(b.paidAmount || 0) < Number(b.deposit),
+  );
+  return {
+    received: sumMoney(verifiedPaymentRows().map((row) => row.payment.amount)),
+    committed,
+    bookedValue: sumMoney(committed.map((b) => b.total)),
+    toCollect: sumMoney(committed.map((b) => b.balance)),
+    awaitingDeposit,
+    awaitingDepositValue: sumMoney(awaitingDeposit.map((b) => r2(b.deposit - Number(b.paidAmount || 0)))),
+  };
+}
+function isActiveBooking(b) {
+  if (["Rejected", "Cancelled"].includes(b.booking)) return false;
+  return !(b.booking === "Completed" && b.payment === "Paid");
+}
+function awaitingDepositNote(figures) {
+  const count = figures.awaitingDeposit.length;
+  if (!count) return "";
+  return `<div class="muted" style="font-size:12px;margin-top:4px">Excludes ${count} awaiting deposit (${money(figures.awaitingDepositValue)} due)</div>`;
+}
 function adminOverview() {
-  const live = bookings.filter(
-      (b) => !["Rejected", "Cancelled"].includes(b.booking),
-    ),
-    received = bookings.reduce((s, b) => s + Number(b.paidAmount || 0), 0),
-    toCollect = live.reduce(
-      (s, b) =>
-        s + Math.max(0, Number(b.total || 0) - Number(b.paidAmount || 0)),
-      0,
-    ),
+  const figures = adminMoneyFigures(),
+    live = adminServiceBookings.filter(isActiveBooking),
     c = adminCounts(),
-    todo = bookings.filter((b) => nextAction(b).fn),
-    spec = visits.filter(
+    todo = adminServiceBookings.filter((b) => nextAction(b).fn),
+    spec = adminVisitations.filter(
       (v) => v.type === "Special" && v.status === "Pending Review",
     ),
-    upcomingV = visits.filter((v) => ["Booked", "Approved"].includes(v.status)),
-    upcomingB = bookings.filter(
-      (b) => b.booking === "Confirmed" && b.isoDate >= TODAY_ISO,
+    upcomingV = adminVisitations.filter(
+      (v) => ["Booked", "Approved"].includes(v.status) && v.date >= TODAY_ISO,
+    ),
+    // Confirmed services from today on, plus services already in progress.
+    upcomingB = adminServiceBookings.filter(
+      (b) =>
+        (b.booking === "Confirmed" && b.isoDate >= TODAY_ISO) || b.booking === "Ongoing",
     );
   const coming = [
     ...upcomingB.map((b) => ({
       d: b.isoDate,
-      t: "Service",
+      t: b.booking === "Ongoing" ? "Service · ongoing" : "Service",
       l: `${b.ref} · ${b.name} · ${b.pkg}`,
     })),
     ...upcomingV.map((v) => ({
@@ -2170,7 +2207,7 @@ function adminOverview() {
   const actionMarkup = adminActionMarkup(todo, spec);
   const comingMarkup = comingUpMarkup(coming);
   const actionLabel = actionCount === 1 ? "item" : "items";
-  return `<div class="stat-grid"><div class="stat"><div class="label">Needs your action</div><div class="value">${actionCount}</div></div><div class="stat" role="button" style="cursor:pointer" onclick="adminTab='payments';render()"><div class="label">Payments to verify</div><div class="value">${c.payments}</div></div><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(received)}</div></div></div><div class="stat-grid" style="margin-top:12px"><div class="stat"><div class="label">Active package bookings</div><div class="value">${live.length}</div></div><div class="stat"><div class="label">Upcoming visits</div><div class="value">${upcomingV.length}</div></div><div class="stat"><div class="label">Still to collect</div><div class="value" style="font-size:22px">${money(toCollect)}</div></div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Action needed</h3><span class="muted" style="font-size:12px">${actionCount} ${actionLabel}</span></div>${actionMarkup}</div><div class="panel"><h3 style="margin-top:0">Coming up</h3>${comingMarkup}</div><div class="notice" style="margin-top:15px"><strong>How a booking flows:</strong> customer pays the 50% down payment → you verify it in GCash → the booking is <strong>Confirmed</strong> automatically and the customer sees an update → after the service you mark it <strong>Completed</strong> and add the delivery fee → the customer pays the outstanding balance → you verify it → <strong>Paid</strong>.</div>`;
+  return `<div class="stat-grid"><div class="stat"><div class="label">Needs your action</div><div class="value">${actionCount}</div></div><div class="stat" role="button" style="cursor:pointer" onclick="adminTab='payments';render()"><div class="label">Payments to verify</div><div class="value">${c.payments}</div></div><div class="stat"><div class="label">Verified money received</div><div class="value" style="font-size:22px">${money(figures.received)}</div></div></div><div class="stat-grid" style="margin-top:12px"><div class="stat"><div class="label">Active package bookings</div><div class="value">${live.length}</div></div><div class="stat"><div class="label">Upcoming visits</div><div class="value">${upcomingV.length}</div></div><div class="stat"><div class="label">Still to collect (confirmed bookings)</div><div class="value" style="font-size:22px">${money(figures.toCollect)}</div>${awaitingDepositNote(figures)}</div></div><div class="panel"><div class="admin-header"><h3 style="margin:0">Action needed</h3><span class="muted" style="font-size:12px">${actionCount} ${actionLabel}</span></div>${actionMarkup}</div><div class="panel"><h3 style="margin-top:0">Coming up</h3>${comingMarkup}</div><div class="notice" style="margin-top:15px"><strong>How a booking flows:</strong> the customer books and pays the 50% down payment → you verify it in GCash → the booking is <strong>Confirmed</strong> automatically and the customer sees an update → on the day you <strong>Start service</strong>, then mark it <strong>Completed</strong> and add the delivery fee → the customer pays the outstanding balance → you verify it → <strong>Paid</strong>.</div>`;
 }
 function adminActionMarkup(todo, specialVisits) {
   const bookingItems = todo
