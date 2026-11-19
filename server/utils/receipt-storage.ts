@@ -15,6 +15,8 @@ const RECEIPT_CONTENT_TYPES: readonly string[] = Object.freeze([
   "application/pdf",
 ]);
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+// Path separators and control characters are rejected in receipt names.
+// eslint-disable-next-line no-control-regex -- matching control characters is the purpose
 const UNSAFE_FILE_NAME_PATTERN = /[\\/\u0000-\u001f\u007f]/;
 
 /** The booking and customer a receipt must belong to (ids or id strings). */
