@@ -532,6 +532,13 @@
   [data-theme="bossgudo"] .muted {
     @apply text-base-content/70;
   }
+  [data-theme="bossgudo"] .eyebrow {
+    @apply tracking-normal normal-case;
+  }
+  /* Borders instead of drop shadows on hover. */
+  [data-theme="bossgudo"] .pkg-card:hover {
+    @apply border-primary/40 shadow-none;
+  }
   /* Flat placeholders instead of gradients for packages without photos. */
   [data-theme="bossgudo"] .pkg-media,
   [data-theme="bossgudo"] .pkg-placeholder {
