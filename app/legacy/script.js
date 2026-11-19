@@ -557,7 +557,8 @@ function bookingTimeline(server, payments) {
   const events = (server.statusHistory || []).map((entry) => ({
     time: new Date(entry.changedAt).getTime() || 0,
     at: serverTime(entry.changedAt),
-    text: `Booking ${String(entry.status).toLowerCase()}${entry.note ? ` · ${entry.note}` : ""}`,
+    // changedBy is only populated in admin responses; customers never get it.
+    text: `Booking ${String(entry.status).toLowerCase()}${entry.note ? ` · ${entry.note}` : ""}${staffName(entry.changedBy) ? ` · by ${staffName(entry.changedBy)}` : ""}`,
   }));
   payments.forEach((payment) => {
     const label =
@@ -857,19 +858,30 @@ function canPay(b) {
     return "balance";
   return null;
 }
+/**
+ * The owner's next step for a server booking. Actions map to backend
+ * transitions: Approved -> Confirmed happens when the deposit is verified,
+ * Confirmed -> Ongoing -> Completed are owner steps, then the delivery fee.
+ */
 function nextAction(b) {
   if (["Rejected", "Cancelled"].includes(b.booking))
     return { done: true, label: "Closed" };
-  if (b.payment === "Pending Verification")
+  if (b.payment === "Verification Pending")
     return {
       label:
-        b.proof?.target === "balance"
+        b.pendingPayment?.paymentTarget === "balance" || b.proof?.target === "balance"
           ? "Verify balance payment"
           : "Verify down payment",
       fn: `reviewPayment('${b.ref}')`,
       cls: "primary",
     };
   if (b.booking === "Confirmed")
+    return {
+      label: "Start service",
+      fn: `updateBooking('${b.ref}','Ongoing')`,
+      cls: "primary",
+    };
+  if (b.booking === "Ongoing")
     return {
       label: "Mark service completed",
       fn: `updateBooking('${b.ref}','Completed')`,
@@ -892,7 +904,7 @@ function nextAction(b) {
           ? "Waiting for corrected balance receipt"
           : "Waiting for customer to pay balance",
     };
-  if (b.booking === "Pending")
+  if (["Pending", "Approved"].includes(b.booking))
     return {
       wait:
         b.payment === "Rejected"
@@ -999,6 +1011,9 @@ function syncPageChrome(nextPage) {
   // Opening My Bookings always refreshes the records from the server.
   if (nextPage === "mybookings" && customerBookingsState !== "loading") {
     customerBookingsState = "idle";
+  }
+  if (nextPage === "admin" && adminDataState !== "loading") {
+    adminDataState = "idle";
   }
   document.body.dataset.page = nextPage;
   document.title = nextPage === "shop"
@@ -1803,10 +1818,8 @@ function mybookings() {
   return `${header}<div class="panel"><div class="pill-row"><span class="pill">Signed in as ${safe(sessionCustomerName())}</span></div></div>${freshUpdatesMarkup(fresh)}<h2 style="margin-top:28px">Service bookings</h2>${bookingMarkup}<h2 style="margin-top:28px">Farm visitations</h2>${visitMarkup}<div class="notice" style="margin-top:16px">GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</div>`;
 }
 
-function viewBooking(ref, admin) {
-  const b = admin
-    ? bookings.find((x) => x.ref === ref)
-    : customerBookingByRef(ref);
+function viewBooking(ref, admin, record = null) {
+  const b = record || (admin ? adminBookingByRef(ref) : customerBookingByRef(ref));
   if (!b) return;
   let pondDetails = safe(b.layers || "—");
   if (b.packageLayers) {
@@ -1817,7 +1830,7 @@ function viewBooking(ref, admin) {
   const noticeMarkup = admin
     ? ""
     : `<div class="notice" style="margin:8px 0 12px">${safe(customerMessage(b))}</div>`;
-  const trackerMarkup = admin ? tracker(b) : tracker(b, customerStage(b));
+  const trackerMarkup = tracker(b, customerStage(b));
   const contactEmail = b.email ? " · " + safe(b.email) : "";
   const filtrationMarkup = b.pondWidth
     ? " · Filtration: " + safe(b.filtration)
@@ -1837,13 +1850,17 @@ function viewBooking(ref, admin) {
       return `<div class="summary-line"><span>${targetLabel} · ${safe(payment.verifiedAt)}</span><strong>${money(payment.amount)} · ${safe(payment.reference)}</strong></div>`;
     })
     .join("");
-  const paymentHistoryMarkup = payments
+  let paymentHistoryMarkup = payments
     ? `<h4 style="margin:18px 0 4px">Verified payments</h4>${payments}`
     : "";
+  if (admin) {
+    const account = b.account
+      ? `<div class="summary-line"><span>Customer account</span><strong>${safe(b.account.name)} · ${safe(b.account.email || "—")}${b.account.active ? "" : " (inactive)"}</strong></div>`
+      : "";
+    paymentHistoryMarkup = `${account}<h4 style="margin:18px 0 4px">Payment records</h4>${adminPaymentRecordsMarkup(b)}`;
+  }
   const body = `${trackerMarkup}${noticeMarkup}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div><h4 style="margin:16px 0 4px">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${contactEmail}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pondDetails}${filtrationMarkup}</strong></div>${freebieMarkup}${notesMarkup}<h4 style="margin:18px 0 4px">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${paymentHistoryMarkup}<h4 style="margin:18px 0 0">Status updates</h4>${timelineHtml(b, !admin)}`;
-  const actions = admin
-    ? `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openBookingForm('${b.ref}')">Edit booking</button>`
-    : `<button class="secondary" onclick="closeModal()">Close</button>`;
+  const actions = `<button class="secondary" onclick="closeModal()">Close</button>`;
   openModal(
     safe(b.pkg),
     `${b.ref}`,
@@ -1935,9 +1952,136 @@ async function submitPaymentProof(ref, target) {
 }
 
 /* =================== ADMIN =================== */
+/* ---------- admin booking API ----------
+   Booking, payment and visitation tabs read real records from the admin
+   endpoints. Every change goes through the backend, then the data reloads. */
+let adminServiceBookings = [],
+  adminDataState = "idle",
+  adminDataError = "",
+  adminActionPending = false;
+const ADMIN_DATA_TABS = new Set(["bookings"]);
+
+async function fetchAllPages(path, key) {
+  const items = [];
+  for (let pageNumber = 1; ; pageNumber += 1) {
+    const separator = path.includes("?") ? "&" : "?";
+    const result = await bookingApiRequest(
+      `${path}${separator}limit=50&page=${pageNumber}`,
+    );
+    items.push(...(result[key] || []));
+    if (pageNumber >= (result.pagination?.totalPages || 1)) return items;
+  }
+}
+function staffName(user) {
+  return user && typeof user === "object"
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+    : "";
+}
+/** Maps an admin API booking onto the fields the dashboard views use. */
+function toAdminBooking(server) {
+  const summary =
+    server.payments && !Array.isArray(server.payments) ? server.payments : null;
+  let records = [];
+  if (Array.isArray(server.paymentRecords)) records = server.paymentRecords;
+  else if (summary?.latestPayment) records = [summary.latestPayment];
+  const booking = toCustomerBooking({ ...server, payments: records });
+  const account =
+    server.customer_id && typeof server.customer_id === "object"
+      ? server.customer_id
+      : null;
+  booking.account = account
+    ? {
+        name: staffName(account),
+        email: account.email,
+        phone: account.phoneNumber,
+        active: account.isActive !== false,
+      }
+    : null;
+  booking.payments = records;
+  booking.pendingPayment = records.find((p) => p.status === "Pending") || null;
+  return booking;
+}
+async function loadAdminData() {
+  if (adminDataState === "loading") return;
+  adminDataState = "loading";
+  adminDataError = "";
+  try {
+    const bookingRecords = await fetchAllPages("/api/admin/service-bookings", "bookings");
+    adminServiceBookings = bookingRecords.map(toAdminBooking);
+    adminDataState = "loaded";
+  } catch (error) {
+    adminDataState = "error";
+    adminDataError =
+      error instanceof Error ? error.message : "Unable to load booking records.";
+  }
+  if (page === "admin") render();
+}
+function reloadAdminData() {
+  adminDataState = "idle";
+  return loadAdminData();
+}
+function adminBookingByRef(ref) {
+  return adminServiceBookings.find((x) => x.ref === ref) || null;
+}
+/** Loading or error panel for tabs that depend on booking records. */
+function adminDataStatusPanel() {
+  if (adminDataState === "error") {
+    return `<div class="panel" role="alert"><h3 style="margin-top:0">Booking records could not be loaded</h3><p class="muted">${safe(adminDataError)}</p><button class="secondary" onclick="reloadAdminData()">Try again</button></div>`;
+  }
+  if (adminDataState !== "loaded") {
+    return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading booking records…</p></div>';
+  }
+  return "";
+}
+async function runAdminAction(action, successMessage) {
+  if (adminActionPending) return false;
+  adminActionPending = true;
+  try {
+    await action();
+    if (successMessage) toast(successMessage);
+    return true;
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "The request could not be completed.");
+    return false;
+  } finally {
+    adminActionPending = false;
+    await reloadAdminData();
+  }
+}
+function adminBookingPath(ref) {
+  return `/api/admin/service-bookings/${encodeURIComponent(ref)}`;
+}
+async function adminViewBooking(ref) {
+  openModal("Booking details", safe(ref), '<p class="muted" aria-busy="true">Loading booking…</p>', '<button class="secondary" onclick="closeModal()">Close</button>', true);
+  try {
+    const { booking, payments } = await bookingApiRequest(adminBookingPath(ref));
+    viewBooking(ref, true, toAdminBooking({ ...booking, paymentRecords: payments }));
+  } catch (error) {
+    openModal("Booking details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this booking.")}</p>`, '<button class="secondary" onclick="closeModal()">Close</button>');
+  }
+}
+function adminPaymentRecordsMarkup(b) {
+  if (!b.payments?.length) return '<p class="muted">No payments submitted yet.</p>';
+  return b.payments
+    .map((payment) => {
+      const label = payment.paymentTarget === "deposit" ? "50% down payment" : "Balance payment";
+      let statusClass = "";
+      if (payment.status === "Verified") statusClass = "green";
+      else if (payment.status === "Rejected") statusClass = "red";
+      const reviewer = staffName(payment.verifiedBy);
+      const reviewed = payment.verifiedAt
+        ? `<div class="summary-line"><span>${payment.status === "Verified" ? "Verified" : "Reviewed"}</span><strong>${safe(serverTime(payment.verifiedAt))}${reviewer ? ` · ${safe(reviewer)}` : ""}</strong></div>`
+        : "";
+      const reason = payment.rejectionReason
+        ? `<div class="summary-line"><span>Rejection reason</span><strong>${safe(payment.rejectionReason)}</strong></div>`
+        : "";
+      return `<div class="card" style="margin:10px 0"><div class="admin-header"><strong>${label}</strong><span class="status ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}</div>`;
+    })
+    .join("");
+}
 function adminCounts() {
   return {
-    bookings: bookings.filter((b) => nextAction(b).fn).length,
+    bookings: adminServiceBookings.filter((b) => nextAction(b).fn).length,
     payments: bookings.filter(
       (b) => b.payment === "Pending Verification" && b.proof,
     ).length,
@@ -1979,7 +2123,9 @@ function admin() {
   };
   const cur = tabs.find((t) => t[0] === adminTab) || ["", "Dashboard"];
   const tabMarkup = tabs.map(adminTabMarkup).join("");
-  return `<div class="breadcrumbs">Admin Portal / ${cur[1]}</div><div class="admin-header"><div><h1 class="page-title">Admin Dashboard</h1><p class="muted">Manage bookings, payments, visits, the calendar, packages, customers and assistant answers.</p></div></div><div class="layout" style="margin-top:20px"><aside class="sidebar">${tabMarkup}</aside><section style="min-width:0">${views[adminTab]()}</section></div>`;
+  const content =
+    (ADMIN_DATA_TABS.has(adminTab) && adminDataStatusPanel()) || views[adminTab]();
+  return `<div class="breadcrumbs">Admin Portal / ${cur[1]}</div><div class="admin-header"><div><h1 class="page-title">Admin Dashboard</h1><p class="muted">Manage bookings, payments, visits, the calendar, packages, customers and assistant answers.</p></div></div><div class="layout" style="margin-top:20px"><aside class="sidebar">${tabMarkup}</aside><section style="min-width:0">${content}</section></div>`;
 }
 function adminTabMarkup(tab) {
   if (tab[0] === "g") return `<div class="group">${tab[1]}</div>`;
@@ -2080,9 +2226,9 @@ function bookingMatches(b) {
     case "action":
       return !!nextAction(b).fn;
     case "pending":
-      return b.booking === "Pending";
+      return ["Pending", "Approved"].includes(b.booking);
     case "confirmed":
-      return b.booking === "Confirmed";
+      return ["Confirmed", "Ongoing"].includes(b.booking);
     case "completed":
       return b.booking === "Completed";
     case "closed":
@@ -2111,13 +2257,21 @@ function bookingRow(b) {
     : "";
   const deliveryLabel =
     b.deliveryFee == null ? "not set" : money(b.deliveryFee);
-  const cancelMarkup = closed
-    ? ""
-    : `<button class="danger small" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`;
-  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="status ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="status ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${deliveryLabel}</span></td><td>${actionMarkup}</td><td><div class="actions"><button class="secondary small" onclick="viewBooking('${b.ref}',true)">View</button><button class="secondary small" onclick="openBookingForm('${b.ref}')">Edit</button>${cancelMarkup}<button class="danger small" onclick="deleteBooking('${b.ref}')">Delete</button></div></td></tr>`;
+  // Only offer the transitions the backend allows; a booking with a receipt
+  // awaiting verification must have that payment reviewed first.
+  const awaitingReview = b.payment === "Verification Pending";
+  const rejectMarkup =
+    !awaitingReview && ["Pending", "Approved"].includes(b.booking)
+      ? `<button class="danger small" onclick="updateBooking('${b.ref}','Rejected')">Reject</button>`
+      : "";
+  const cancelMarkup =
+    !closed && !awaitingReview && ["Pending", "Approved", "Confirmed"].includes(b.booking)
+      ? `<button class="danger small" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`
+      : "";
+  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="status ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="status ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${deliveryLabel}</span></td><td>${actionMarkup}</td><td><div class="actions"><button class="secondary small" onclick="adminViewBooking('${b.ref}')">View</button>${rejectMarkup}${cancelMarkup}</div></td></tr>`;
 }
 function bookingTableHtml() {
-  const list = bookings.filter(bookingMatches);
+  const list = adminServiceBookings.filter(bookingMatches);
   return `<div class="table-wrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Service date</th><th>Status</th><th>Amounts</th><th>Next step</th><th>Manage</th></tr></thead><tbody>${list.length ? list.map(bookingRow).join("") : '<tr><td colspan="7" class="muted">No bookings match your filter.</td></tr>'}</tbody></table></div>`;
 }
 function refreshBookingTable() {
@@ -2132,280 +2286,50 @@ function adminBookings() {
   const F = [
     ["all", "All"],
     ["action", "Needs action"],
-    ["pending", "Pending"],
-    ["confirmed", "Confirmed"],
+    ["pending", "Awaiting deposit"],
+    ["confirmed", "Confirmed / Ongoing"],
     ["completed", "Completed"],
     ["closed", "Cancelled / Rejected"],
   ];
   const filters = F.map(bookingFilterButton).join("");
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Pending → Confirmed (when the down payment is verified) → Completed (service done) → balance paid</span></div><button class="primary" onclick="openBookingForm()">＋ New booking</button></div><div class="toolbar"><input type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Approved → Confirmed (when the down payment is verified) → Ongoing → Completed (service done) → balance paid</span></div></div><div class="toolbar"><input type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
 }
 function bookingFilterButton(filter) {
   const activeClass = bFilter === filter[0] ? "active" : "";
   return `<button class="${activeClass}" onclick="setBFilter('${filter[0]}')">${filter[1]}</button>`;
 }
-function bfToggleCustom() {
-  const s = document.getElementById("m_pkg"),
-    box = document.getElementById("m_customBox");
-  if (s && box)
-    box.classList.toggle("hidden", s.value !== "Custom Pond Design");
-}
-function openBookingForm(ref) {
-  const b = ref ? bookings.find((x) => x.ref === ref) : null;
-  if (ref && !b) return;
-  const locked =
-    !!b && (b.paidAmount > 0 || b.payment === "Pending Verification");
-  const names = activePackages().map((x) => x.name);
-  if (b && b.pkg !== "Custom Pond Design" && !names.includes(b.pkg))
-    names.push(b.pkg);
-  const opts = [...names, "Custom Pond Design"],
-    cur = b ? b.pkg : opts[0],
-    dis = locked ? "disabled" : "";
-  const body = bookingFormBody(b, opts, cur, dis, locked);
-  openModal(
-    b ? "Edit booking" : "New booking",
-    b ? b.ref : "Create a booking for a walk-in or phone customer",
-    body,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveBooking('${b ? b.ref : ""}')">${b ? "Save changes" : "Create booking"}</button>`,
-    true,
+const BOOKING_STATUS_PROMPTS = {
+  Ongoing: (ref) => `Start the service for booking ${ref}?`,
+  Completed: (ref) =>
+    `Mark booking ${ref} as completed? The customer will be notified, then you can add the delivery fee.`,
+  Rejected: (ref) =>
+    `Reject booking ${ref}? The customer will see that the booking could not be accepted.`,
+  Cancelled: (ref) =>
+    `Cancel booking ${ref}? Any down payment already paid is non-refundable.`,
+};
+/** Changes a booking status through the backend's allowed transitions. */
+async function updateBooking(ref, status) {
+  const b = adminBookingByRef(ref);
+  const prompt = BOOKING_STATUS_PROMPTS[status];
+  if (!b || !prompt || adminActionPending) return;
+  if (!confirm(prompt(ref))) return;
+  const done = await runAdminAction(
+    () =>
+      bookingApiRequest(`${adminBookingPath(ref)}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    `Booking ${ref} is now ${status}.`,
   );
-}
-function bookingFormBody(b, opts, currentPackage, disabled, locked) {
-  const basicFields =
-    fld("m_name", "Customer name", b?.name, "text", 'list="custList"') +
-    fld("m_phone", "Contact number", b?.phone) +
-    fld("m_email", "Email (optional)", b?.email, "email") +
-    fld("m_location", "Service location", b?.location) +
-    fld("m_date", "Service date", b?.isoDate || "", "date") +
-    sel(
-      "m_pkg",
-      "Package / service",
-      opts,
-      currentPackage,
-      `onchange="bfToggleCustom()" ${disabled}`,
-    );
-  const customerOptions = customers
-    .map((customer) => `<option value="${safe(customer.name)}">`)
-    .join("");
-  const customClass =
-    currentPackage === "Custom Pond Design" ? "" : "hidden";
-  const filtration = b?.filtration === "No" ? "No" : "Yes";
-  const customFields =
-    sel(
-      "m_layers",
-      "Layers",
-      ["1 layer", "2 layers", "3 layers"],
-      b?.layers || "2 layers",
-      disabled,
-    ) +
-    sel("m_filt", "Filtration", ["Yes", "No"], filtration, disabled) +
-    fld(
-      "m_w",
-      "Width (m)",
-      b?.pondWidth || 2,
-      "number",
-      'min="1" max="10" step="0.5" ' + disabled,
-    ) +
-    fld(
-      "m_h",
-      "Length (m)",
-      b?.pondHeight || 3,
-      "number",
-      'min="1" max="10" step="0.5" ' + disabled,
-    );
-  const lockMarkup = locked
-    ? '<div class="notice">Package and pricing are locked because a payment has been verified or is awaiting verification.</div>'
-    : "";
-  const statusMarkup = b
-    ? sel(
-        "m_status",
-        "Booking status (owner override)",
-        ["Pending", "Confirmed", "Completed", "Rejected", "Cancelled"],
-        b.booking,
-      ) +
-        '<p class="muted" style="font-size:12px;margin:0">Normally the status updates by itself: a verified down payment confirms the booking, and “Mark service completed” completes it.</p>'
-    : '<label class="check-row"><input type="checkbox" id="m_deposit"><span>Walk-in: 50% down payment already received and checked (booking becomes Confirmed)</span></label>';
-  return `<div class="field-grid">${basicFields}</div><datalist id="custList">${customerOptions}</datalist><div id="m_customBox" class="${customClass}"><div class="field-grid">${customFields}</div></div>${lockMarkup}<div class="field"><label for="m_notes">Notes</label><textarea id="m_notes">${safe(b?.notes || "")}</textarea></div>${statusMarkup}`;
-}
-function saveBooking(ref) {
-  const b = ref ? bookings.find((x) => x.ref === ref) : null;
-  const name = V("m_name"),
-    phone = V("m_phone"),
-    email = V("m_email"),
-    location = V("m_location"),
-    iso = V("m_date"),
-    notes = V("m_notes"),
-    pkgName = document.getElementById("m_pkg").value;
-  if (!name || !phone || !location || !iso) {
-    toast("Please complete name, phone, location and date.");
-    return;
-  }
-  const locked =
-    !!b && (b.paidAmount > 0 || b.payment === "Pending Verification");
-  const custom = pkgName === "Custom Pond Design",
-    pre = pondPackageCatalog.find((x) => x.name === pkgName);
-  const layers = document.getElementById("m_layers").value,
-    filt = document.getElementById("m_filt").value,
-    w = Number(V("m_w")) || 1,
-    h = Number(V("m_h")) || 1;
-  const packageLayers = pre ? pre.layers : "Not applicable";
-  const apply = (o) => {
-    if (locked) return;
-    o.pkg = pkgName;
-    o.freebie = pre ? pre.freebie : "";
-    o.packageLayers = pre ? pre.layers : "";
-    o.packageDimensions = pre ? pre.dimensions : "";
-    o.servicePrice = pre ? pre.price : 0;
-    o.customizationFee = custom ? customPrice(layers, w, h, filt) : 0;
-    o.deposit = r2((o.servicePrice + o.customizationFee) / 2);
-    o.layers = custom ? layers : packageLayers;
-    o.pondWidth = custom ? w : null;
-    o.pondHeight = custom ? h : null;
-    o.pondArea = custom ? w * h : null;
-    o.filtration = custom ? filt : "Included in package / not applicable";
-  };
-  if (b) {
-    Object.assign(b, {
-      name,
-      phone,
-      email,
-      location,
-      notes,
-      isoDate: iso,
-      date: fmtDate(iso),
-    });
-    apply(b);
-    recalc(b);
-    const st = V("m_status");
-    if (st && st !== b.booking) {
-      b.booking = st;
-      addUpdate(b, "Booking status updated to " + st + " by the owner.");
-    }
-    upsertCustomer({ name, phone, email, location });
-    closeModal();
-    toast("Booking updated.");
-  } else {
-    const o = {
-      ref: nextRef("BG-2026-", bookings),
-      name,
-      phone,
-      email,
-      location,
-      notes,
-      isoDate: iso,
-      date: fmtDate(iso),
-      booking: "Pending",
-      payment: "Awaiting Deposit",
-      deliveryFee: null,
-      proof: null,
-      pendingPaymentTarget: null,
-      paidAmount: 0,
-      paymentHistory: [],
-      timeline: [],
-    };
-    apply(o);
-    o.total = r2(o.servicePrice + o.customizationFee);
-    o.balance = r2(o.total - o.deposit);
-    addUpdate(
-      o,
-      "Booking created by the owner. Pay the 50% down payment (" +
-        money(o.deposit) +
-        ") to reserve your date.",
-    );
-    if (document.getElementById("m_deposit")?.checked) {
-      o.paidAmount = o.deposit;
-      o.payment = "Partially Paid";
-      o.booking = "Confirmed";
-      o.paymentHistory.push({
-        target: "deposit",
-        amount: o.deposit,
-        reference: "Walk-in / manual entry",
-        fileName: "—",
-        verifiedAt: ts(),
-        status: "Verified",
-      });
-      addUpdate(
-        o,
-        "Your 50% down payment was recorded. Your booking is confirmed and your date is reserved.",
-      );
-    }
-    recalc(o);
-    bookings.unshift(o);
-    upsertCustomer({ name, phone, email, location });
-    closeModal();
-    toast("Booking " + o.ref + " created.");
-  }
-  render();
-}
-function deleteBooking(ref) {
-  const b = bookings.find((x) => x.ref === ref);
-  if (!b) return;
-  if (
-    !confirm(
-      "Permanently delete booking " +
-        ref +
-        " (" +
-        b.name +
-        ")? Its payment records will be removed too. Use Cancel instead if you want to keep a record.",
-    )
-  )
-    return;
-  bookings = bookings.filter((x) => x.ref !== ref);
-  toast("Booking " + ref + " deleted.");
-  render();
-}
-function updateBooking(ref, status) {
-  const b = bookings.find((x) => x.ref === ref);
-  if (!b) return;
-  if (status === "Completed") {
-    if (b.booking !== "Confirmed") {
-      alert(
-        "Only a confirmed booking can be marked completed. Verify the down payment first.",
-      );
-      return;
-    }
-    if (
-      !confirm(
-        "Mark this service as completed? The customer will be notified, then you can add the delivery fee.",
-      )
-    )
-      return;
-    b.booking = "Completed";
-    addUpdate(
-      b,
-      "Your service is complete. The owner will confirm the delivery fee next, then you can pay your remaining balance here.",
-    );
-    render();
-    toast("Service completed — customer notified. Next: set the delivery fee.");
-    openPricing(ref);
-    return;
-  }
-  if (status === "Cancelled") {
-    if (!["Pending", "Confirmed"].includes(b.booking)) {
-      alert("Only a pending or confirmed booking can be cancelled.");
-      return;
-    }
-    if (
-      !confirm(
-        "Cancel booking " +
-          ref +
-          "? Any down payment already paid is non-refundable.",
-      )
-    )
-      return;
-    b.booking = "Cancelled";
-    addUpdate(b, "Your booking was cancelled by the owner.");
-    toast("Booking cancelled.");
-  }
-  render();
+  if (done && status === "Completed") openPricing(ref);
 }
 function openPricing(ref) {
-  const b = bookings.find((x) => x.ref === ref);
+  const b = adminBookingByRef(ref);
   if (!b) return;
   if (
     b.booking !== "Completed" ||
     b.payment === "Paid" ||
-    b.payment === "Pending Verification"
+    b.payment === "Verification Pending"
   ) {
     alert(
       "The delivery fee can be set once the service is completed, before the balance is paid, and while no receipt is waiting for verification.",
@@ -2417,12 +2341,12 @@ function openPricing(ref) {
     "Delivery fee",
     `${b.ref} · ${safe(b.name)}`,
     `<p class="muted" style="margin-top:0">The service is done. Enter the confirmed Lalamove quote (enter 0 if there is no delivery). It is added to the outstanding balance, and the customer can then pay the balance from My Bookings.</p><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not provided")}</strong></div><div class="summary-line"><span>Package and customization</span><strong>${money(base)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="field"><label for="deliveryFeeInput">Lalamove delivery fee (₱)</label><input id="deliveryFeeInput" type="number" min="0" step="0.01" value="${b.deliveryFee ?? ""}" placeholder="Enter confirmed delivery quote" oninput="pricePreview('${b.ref}')"></div><div class="notice" id="pricePreview">Enter a non-negative delivery fee to preview the new balance.</div>`,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="savePricing('${b.ref}')">Save & notify customer</button>`,
+    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" id="savePricingButton" onclick="savePricing('${b.ref}')">Save & notify customer</button>`,
   );
   pricePreview(ref);
 }
 function pricePreview(ref) {
-  const b = bookings.find((x) => x.ref === ref),
+  const b = adminBookingByRef(ref),
     el = document.getElementById("pricePreview"),
     raw = document.getElementById("deliveryFeeInput")?.value;
   if (!b || !el) return;
@@ -2433,33 +2357,26 @@ function pricePreview(ref) {
       ? `New total: <strong>${money(base + d)}</strong><br>Outstanding balance the customer pays: <strong>${money(Math.max(0, r2(base + d - (b.paidAmount || 0))))}</strong>`
       : "Enter a non-negative delivery fee to preview the new balance.";
 }
-function savePricing(ref) {
-  const b = bookings.find((x) => x.ref === ref);
+/** Saves the delivery fee; the backend recalculates total and balance. */
+async function savePricing(ref) {
+  const b = adminBookingByRef(ref);
   if (!b) return;
-  const raw = document.getElementById("deliveryFeeInput")?.value;
-  if (
-    raw === undefined ||
-    raw === "" ||
-    !Number.isFinite(Number(raw)) ||
-    Number(raw) < 0
-  ) {
-    alert("Enter the confirmed delivery fee (0 if none).");
+  const raw = document.getElementById("deliveryFeeInput")?.value?.trim();
+  if (!raw || !/^\d+(?:\.\d{1,2})?$/.test(raw)) {
+    alert("Enter the confirmed delivery fee (0 if none), with at most two decimals.");
     return;
   }
-  b.deliveryFee = r2(Number(raw));
-  recalc(b);
-  if (b.balance <= 0) {
-    b.payment = "Paid";
-  }
-  addUpdate(
-    b,
-    b.balance > 0
-      ? `The delivery fee of ${money(b.deliveryFee)} was added. Your outstanding balance is ${money(b.balance)} — you can pay it now in My Bookings.`
-      : "No further balance is due. Your payment is complete.",
+  setButtonBusy("savePricingButton", true, "Saving…");
+  const done = await runAdminAction(
+    () =>
+      bookingApiRequest(`${adminBookingPath(ref)}/delivery-fee`, {
+        method: "PATCH",
+        body: JSON.stringify({ deliveryFee: raw }),
+      }),
+    "Delivery fee saved — customer notified.",
   );
-  closeModal();
-  toast("Delivery fee saved — customer notified.");
-  render();
+  if (done) closeModal();
+  else setButtonBusy("savePricingButton", false);
 }
 
 /* ----- payments ----- */
@@ -3365,6 +3282,9 @@ function render() {
   }
   if (page === "mybookings" && customerBookingsState === "idle") {
     void loadCustomerBookings();
+  }
+  if (page === "admin" && adminDataState === "idle") {
+    void loadAdminData();
   }
   renderCurrentPage();
   syncNavigationLinks();
