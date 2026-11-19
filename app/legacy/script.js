@@ -3823,14 +3823,14 @@ const chatForm = document.getElementById("chatForm");
 
 if (chatLaunch && chatBox) {
   chatLaunch.onclick = () => {
-    chatBox.style.display = "block";
+    if (!chatBox.open) chatBox.show();
     chatLaunch.setAttribute("aria-expanded", "true");
     document.getElementById("chatText")?.focus();
   };
 }
 if (chatClose && chatBox) {
   chatClose.onclick = () => {
-    chatBox.style.display = "none";
+    chatBox.close();
     chatLaunch?.setAttribute("aria-expanded", "false");
     chatLaunch?.focus();
   };
