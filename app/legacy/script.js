@@ -1252,15 +1252,78 @@ function aboutHeading(id, eyebrow, title, sub = "") {
 }
 /**
  * Documentation photo for the About page. The photos are collages with
- * dates and labels printed on them, so they are shown uncropped and link to
- * the full-size file for closer reading.
+ * dates and labels printed on them, so they are shown uncropped and open in
+ * the photo lightbox for closer reading. The link still points at the file,
+ * so modified clicks open it in a new tab.
  */
-function aboutPhoto({ src, alt, width, height, caption = "", className = "", framed = false }) {
+function aboutPhoto({ src, alt, width, height, title, caption = "", className = "", framed = false }) {
   const figcaption = caption ? `<figcaption class="border-t border-base-300 p-5">${caption}</figcaption>` : "";
   // Side-by-side photos share a 16:9 frame so their captions line up.
   const fit = framed ? "aspect-video object-contain" : "h-auto";
-  return `<figure class="flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 ${className}"><a href="${src}" target="_blank" rel="noopener" class="group relative block bg-base-200" aria-label="${alt} (opens full-size photo)"><img src="${src}" alt="${alt}" width="${width}" height="${height}" loading="lazy" class="block w-full ${fit} transition-opacity group-hover:opacity-90"><span class="badge pointer-events-none absolute right-3 bottom-3 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("external-link", "size-3")}View full size</span></a>${figcaption}</figure>`;
+  return `<figure class="flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 ${className}"><a href="${src}" target="_blank" rel="noopener" data-lightbox data-lightbox-title="${title}" aria-haspopup="dialog" class="group relative block cursor-zoom-in bg-base-200" aria-label="${alt} (opens a larger view)"><img src="${src}" alt="${alt}" width="${width}" height="${height}" loading="lazy" class="block w-full ${fit} transition-opacity group-hover:opacity-90"><span class="badge pointer-events-none absolute right-3 bottom-3 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("eye", "size-3")}View larger</span></a>${figcaption}</figure>`;
 }
+/* ----- About page photo lightbox (styles: .lightbox in main.css) ----- */
+let lightboxPhotos = [];
+let lightboxIndex = 0;
+let lightboxTrigger = null;
+function lightboxDialog() {
+  let box = document.getElementById("photoLightbox");
+  if (box) return box;
+  const button = "lightbox-btn btn btn-circle border-0 bg-white/10 text-white shadow-none hover:bg-white/20";
+  box = document.createElement("dialog");
+  box.id = "photoLightbox";
+  box.className = "lightbox";
+  box.setAttribute("aria-labelledby", "lightboxTitle");
+  box.innerHTML = `<div class="lightbox-frame" data-lightbox-dismiss><button type="button" class="${button} lightbox-close" data-lightbox-close aria-label="Close photo">${icon("x", "size-5")}</button><figure class="lightbox-figure"><img id="lightboxImage" class="lightbox-image" alt=""><figcaption class="lightbox-caption"><span id="lightboxTitle" class="font-semibold"></span><span id="lightboxCount" class="lightbox-count"></span></figcaption></figure><button type="button" class="${button} lightbox-prev" data-lightbox-step="-1" aria-label="Previous photo">${icon("chevron-left", "size-5")}</button><button type="button" class="${button} lightbox-next" data-lightbox-step="1" aria-label="Next photo">${icon("chevron-right", "size-5")}</button></div>`;
+  box.addEventListener("click", (event) => {
+    const step = event.target.closest("[data-lightbox-step]");
+    if (step) {
+      showLightboxPhoto(lightboxIndex + Number(step.dataset.lightboxStep));
+    } else if (event.target === box || event.target.closest("[data-lightbox-close]") || event.target.hasAttribute("data-lightbox-dismiss")) {
+      // The close button, or a click on the backdrop around the photo.
+      box.close();
+    }
+  });
+  box.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") showLightboxPhoto(lightboxIndex - 1);
+    else if (event.key === "ArrowRight") showLightboxPhoto(lightboxIndex + 1);
+  });
+  box.addEventListener("close", () => {
+    lightboxTrigger?.focus();
+    lightboxTrigger = null;
+  });
+  document.body.append(box);
+  return box;
+}
+function showLightboxPhoto(index) {
+  const count = lightboxPhotos.length;
+  if (!count) return;
+  lightboxIndex = (index + count) % count;
+  const link = lightboxPhotos[lightboxIndex];
+  const source = link.querySelector("img");
+  const image = document.getElementById("lightboxImage");
+  image.src = link.getAttribute("href");
+  image.alt = source?.alt || "";
+  document.getElementById("lightboxTitle").textContent = link.dataset.lightboxTitle || "";
+  document.getElementById("lightboxCount").textContent = count > 1 ? `Photo ${lightboxIndex + 1} of ${count}` : "";
+  document.querySelectorAll("#photoLightbox [data-lightbox-step]").forEach((button) => {
+    button.hidden = count < 2;
+  });
+}
+function openLightbox(link) {
+  lightboxPhotos = [...document.querySelectorAll("#app a[data-lightbox]")];
+  lightboxTrigger = link;
+  const box = lightboxDialog();
+  showLightboxPhoto(Math.max(0, lightboxPhotos.indexOf(link)));
+  if (!box.open) box.showModal();
+}
+document.addEventListener("click", (event) => {
+  const link = event.target.closest?.("a[data-lightbox]");
+  // Let modified clicks open the file in a new tab as a normal link.
+  if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  openLightbox(link);
+});
 /** Caption for an About page photo: a title, short text and detail badges. */
 function aboutCaption(title, text, details = []) {
   const body = text ? `<p class="muted mt-1.5 text-sm leading-relaxed">${text}</p>` : "";
@@ -1306,13 +1369,14 @@ function about() {
     .join("");
   const overview = `<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2" aria-labelledby="about-overview-title"><img src="/images/redclaw-crayfish.jpg" alt="An Australian Red Claw crayfish showing the red patch on its claw" class="h-60 w-full object-cover object-[90%_center] sm:h-72 lg:h-full" width="1280" height="750"><div class="p-6 sm:p-10"><p class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">${icon("map-pin")}General Trias, Cavite</p><p class="eyebrow mt-5">Overview</p><h2 id="about-overview-title" class="section-title mt-1">Australian Redclaw Crayfish Farming Initiative</h2><p class="mt-4 leading-relaxed text-base-content/75">The Australian Redclaw Crayfish (ARC) (<em>Cherax quadricarinatus</em>) farming initiative represents a high-potential aquaculture enterprise in the Philippines focused on sustainable seedstock production, hatchery management, and commercial grow-out operations.</p><p class="mt-3 leading-relaxed text-base-content/75">Based in General Trias, Cavite, BOSSGUDO A.R.C. AQUA FARM addresses the growing domestic and international demand for premium, high-protein freshwater crustaceans.</p><ul class="mt-6 grid gap-3 border-t border-base-300 pt-6 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3" aria-label="Focus areas">${focusMarkup}</ul><div class="mt-7 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section>`;
   const objectivesSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-objectives-title">${aboutHeading("about-objectives-title", "Core objectives & vision", "What the initiative works toward")}<div class="mt-6 grid gap-4 md:grid-cols-3">${objectiveMarkup}</div></section>`;
-  const originSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-origin-title">${aboutHeading("about-origin-title", "Crayfish origin", "Where our crayfish come from", "The documented origin and development of the farm’s Australian Redclaw Crayfish stock.")}${aboutPhoto({ src: "/images/bossgudo-arc-about-origin.png", alt: "Crayfish origin chart linking partner crayfish farms with dated stock records, including trios, a quadro and kilo orders", width: 1868, height: 914, className: "mt-6" })}</section>`;
+  const originSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-origin-title">${aboutHeading("about-origin-title", "Crayfish origin", "Where our crayfish come from", "The documented origin and development of the farm’s Australian Redclaw Crayfish stock.")}${aboutPhoto({ src: "/images/bossgudo-arc-about-origin.png", alt: "Crayfish origin chart linking partner crayfish farms with dated stock records, including trios, a quadro and kilo orders", width: 1868, height: 914, title: "Crayfish origin", className: "mt-6" })}</section>`;
   const seminarPhotos = [
     aboutPhoto({
       src: "/images/bossgudo-arc-about-seminar-1.png",
       alt: "Screenshots of 2025 webinar sessions showing participants on video calls",
       width: 1907,
       height: 1063,
+      title: "2025 webinar sessions",
       framed: true,
       caption: aboutCaption("2025 webinar sessions", "Online webinar sessions held throughout 2025.", [["calendar-days", "2025"], ["users", "Online"]]),
     }),
@@ -1321,6 +1385,7 @@ function about() {
       alt: "ARC Breeding Quick Guide (BFAR Guidelines) webinar with participants on a video call",
       width: 1826,
       height: 1067,
+      title: "ARC Breeding Quick Guide (BFAR Guidelines) · March 14, 2026",
       framed: true,
       caption: aboutCaption("ARC Breeding Quick Guide (BFAR Guidelines)", "Navigating BFAR Administrative Circular No. 001, Series of 2025.", [["calendar-days", "March 14, 2026"], ["clock", "9:00 AM – 12:40 PM"], ["users", "Online"]]),
     }),
@@ -1332,6 +1397,7 @@ function about() {
       alt: "Community service session at Barangay 14, Caloocan, with a talk about ARC and attendees seated in the hall",
       width: 1896,
       height: 1058,
+      title: "Community service · Caloocan, January 10, 2026",
       framed: true,
       caption: aboutCaption("Caloocan", "", [["calendar-days", "January 10, 2026"]]),
     }),
@@ -1340,6 +1406,7 @@ function about() {
       alt: "Community service session in Cavite City with a live crayfish demonstration, group photos and a certificate of appreciation",
       width: 1907,
       height: 1061,
+      title: "Community service · Cavite City, February 13, 2026",
       framed: true,
       caption: aboutCaption("Cavite City", "", [["calendar-days", "February 13, 2026"]]),
     }),
@@ -1352,7 +1419,7 @@ function about() {
   ]
     .map(([name, label, value]) => `<li class="flex gap-3">${icon(name, "size-5 mt-0.5 shrink-0 text-primary")}<div><p class="text-xs text-base-content/60">${label}</p><p class="font-medium">${value}</p></div></li>`)
     .join("");
-  const organizationSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-organization-title">${aboutHeading("about-organization-title", "Organization – Member", "Crayfish Organization of the Philippines")}<div class="mt-6 grid items-start gap-6 lg:grid-cols-3">${aboutPhoto({ src: "/images/bossgudo-arc-organization-member.png", alt: "Members gathered at the Crayfish Organization of the Philippines, Inc. (COPI) Region 3 General Assembly", width: 1906, height: 1057, className: "lg:col-span-2" })}<div class="tile sm:p-7"><span class="icon-chip">${icon("badge-check", "size-5")}</span><h3 class="mt-4 text-lg">Organization member</h3><p class="muted mt-2 text-sm leading-relaxed">BOSSGUDO A.R.C. AQUA FARM is a member of the Crayfish Organization of the Philippines, Inc. (COPI).</p><ul class="mt-5 space-y-4 border-t border-base-300 pt-5">${assemblyDetails}</ul></div></div></section>`;
+  const organizationSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-organization-title">${aboutHeading("about-organization-title", "Organization – Member", "Crayfish Organization of the Philippines")}<div class="mt-6 grid items-start gap-6 lg:grid-cols-3">${aboutPhoto({ src: "/images/bossgudo-arc-organization-member.png", alt: "Members gathered at the Crayfish Organization of the Philippines, Inc. (COPI) Region 3 General Assembly", width: 1906, height: 1057, title: "COPI – Region 3 General Assembly · February 26, 2026", className: "lg:col-span-2" })}<div class="tile sm:p-7"><span class="icon-chip">${icon("badge-check", "size-5")}</span><h3 class="mt-4 text-lg">Organization member</h3><p class="muted mt-2 text-sm leading-relaxed">BOSSGUDO A.R.C. AQUA FARM is a member of the Crayfish Organization of the Philippines, Inc. (COPI).</p><ul class="mt-5 space-y-4 border-t border-base-300 pt-5">${assemblyDetails}</ul></div></div></section>`;
   return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}${originSection}${seminarSection}${communitySection}${organizationSection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-14 flex sm:mt-16 flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
 }
 /* Receipt preview for admins. The file is fetched from the admin-protected

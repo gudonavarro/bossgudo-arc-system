@@ -546,3 +546,147 @@
     @apply bg-base-200 text-primary/30;
   }
 }
+
+/*
+ * Photo lightbox for the About page (openLightbox in app/legacy/script.js).
+ * A modal <dialog>: the browser supplies Escape, focus trapping and an inert
+ * page; these rules add the backdrop, the fade/scale transitions (open and
+ * close, where supported) and the scroll lock.
+ */
+@layer components {
+  html:has(.lightbox[open]) {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    opacity: 0;
+    transition:
+      opacity 0.2s ease,
+      overlay 0.2s ease allow-discrete,
+      display 0.2s ease allow-discrete;
+  }
+  .lightbox[open] {
+    opacity: 1;
+  }
+  .lightbox::backdrop {
+    background: color-mix(in oklab, var(--color-neutral) 0%, transparent);
+    transition:
+      background-color 0.2s ease,
+      overlay 0.2s ease allow-discrete,
+      display 0.2s ease allow-discrete;
+  }
+  .lightbox[open]::backdrop {
+    background: color-mix(in oklab, var(--color-neutral) 90%, transparent);
+  }
+  .lightbox-frame {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 1rem 5.5rem;
+  }
+  .lightbox-figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    transform: scale(0.97);
+    transition: transform 0.2s ease;
+  }
+  .lightbox[open] .lightbox-figure {
+    transform: none;
+  }
+  .lightbox-image {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: calc(100vw - 2rem);
+    max-height: calc(100dvh - 12rem);
+    object-fit: contain;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+  }
+  .lightbox-caption {
+    max-width: 40rem;
+    text-align: center;
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+  .lightbox-count {
+    display: block;
+    margin-top: 0.125rem;
+    color: rgb(255 255 255 / 0.7);
+  }
+  .lightbox-btn {
+    position: absolute;
+  }
+  .lightbox-close {
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+  /* Phones: previous/next sit below the photo, clear of the image. */
+  .lightbox-prev,
+  .lightbox-next {
+    bottom: 1rem;
+  }
+  .lightbox-prev {
+    left: 1rem;
+  }
+  .lightbox-next {
+    right: 1rem;
+  }
+  @media (min-width: 640px) {
+    .lightbox-frame {
+      padding: 4rem 5.5rem 2rem;
+    }
+    .lightbox-image {
+      max-width: min(calc(100vw - 11rem), 80rem);
+      max-height: calc(100dvh - 9rem);
+    }
+    .lightbox-close {
+      top: 1rem;
+      right: 1rem;
+    }
+    .lightbox-prev,
+    .lightbox-next {
+      top: 50%;
+      bottom: auto;
+      translate: 0 -50%;
+    }
+    .lightbox-prev {
+      left: 1.25rem;
+    }
+    .lightbox-next {
+      right: 1.25rem;
+    }
+  }
+  @starting-style {
+    .lightbox[open] {
+      opacity: 0;
+    }
+    .lightbox[open]::backdrop {
+      background: color-mix(in oklab, var(--color-neutral) 0%, transparent);
+    }
+    .lightbox[open] .lightbox-figure {
+      transform: scale(0.97);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lightbox,
+    .lightbox::backdrop,
+    .lightbox-figure {
+      transition: none;
+    }
+  }
+}
