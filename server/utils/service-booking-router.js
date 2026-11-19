@@ -1,6 +1,15 @@
 import express from "express";
+import mongoose from "mongoose";
 import { createRequire } from "node:module";
 import { depositFor, fromCents, parseAmountInput } from "./money.js";
+import {
+  MAX_RECEIPT_BYTES,
+  RECEIPT_CONTENT_TYPES,
+  contentMatchesType,
+  findOwnedReceipt,
+  normalizeReceiptFileName,
+  storeReceipt,
+} from "./receipt-storage.js";
 import { PAYMENT_METHODS, PAYMENT_TARGETS } from "../models/payment.js";
 import {
   CUSTOM_POND_PRICING,
@@ -10,16 +19,20 @@ import {
 import { BOOKING_STATUSES } from "../models/service-booking.js";
 import {
   HttpError,
+  OBJECT_ID_PATTERN,
   bookingCents,
   bookingIdentifierFilter,
   handleRouteError,
+  isDateClosed,
   isDuplicateKeyError,
+  isWeekendDate,
   paginationMeta,
   parseFutureServiceDate,
   parsePagination,
   saveWithUniqueReference,
   serializeBooking,
   serializePayment,
+  validateCustomerContact,
   withTransaction,
 } from "./service-booking.js";
 
@@ -100,15 +113,21 @@ function validateCustomConfiguration(configuration) {
 
 /**
  * Validates the booking request and prices it from the server catalog.
- * Client-supplied prices, totals, statuses, and customer details are ignored.
+ * Client-supplied prices, totals, and statuses are ignored. Contact details
+ * typed by the customer are validated and fall back to the account values.
  */
-function validateServiceBookingInput(body) {
+function validateServiceBookingInput(body, authUser) {
   if (!isPlainObject(body)) {
     return { error: "Provide service booking details." };
   }
 
   const serviceDate = parseFutureServiceDate(body.serviceDate);
   if (serviceDate.error) return serviceDate;
+  if (!isWeekendDate(serviceDate.value)) {
+    return { error: "Service dates are available on Saturdays and Sundays only." };
+  }
+  const contact = validateCustomerContact(body, authUser);
+  if (contact.error) return contact;
   const serviceLocation = validateText(body.serviceLocation, {
     field: "Service location",
     required: true,
@@ -156,6 +175,7 @@ function validateServiceBookingInput(body) {
       serviceDate: serviceDate.value,
       serviceLocation: serviceLocation.value,
       notes: notes.value,
+      ...contact.value,
       ...pricing,
     },
   };
@@ -209,8 +229,8 @@ function validatePaymentInput(body) {
     maxLength: 512,
   });
   if (receiptStorageKey.error) return receiptStorageKey;
-  if (/\s/.test(receiptStorageKey.value)) {
-    return { error: "Receipt storage key is invalid." };
+  if (!OBJECT_ID_PATTERN.test(receiptStorageKey.value)) {
+    return { error: "Upload the payment receipt before submitting the payment." };
   }
 
   return {
@@ -284,15 +304,21 @@ function createServiceBookingRouter() {
   });
 
   router.post("/", async (request, response) => {
-    const validation = validateServiceBookingInput(request.body);
+    const { authUser } = request;
+    const validation = validateServiceBookingInput(request.body, authUser);
     if (validation.error) {
       return response.status(400).json({ error: validation.error });
     }
 
-    const { ServiceBooking } = request.bookingModels;
-    const { authUser } = request;
+    const { ServiceBooking, AvailableDate } = request.bookingModels;
     const input = validation.value;
     try {
+      if (await isDateClosed(AvailableDate, "service", input.serviceDate)) {
+        throw new HttpError(
+          409,
+          "That service date is closed. Please choose another date.",
+        );
+      }
       const duplicate = await ServiceBooking.exists({
         customer_id: authUser.id,
         serviceDate: input.serviceDate,
@@ -318,9 +344,9 @@ function createServiceBookingRouter() {
             packagePrice: fromCents(input.packagePriceCents),
             serviceDate: input.serviceDate,
             serviceLocation: input.serviceLocation,
-            customerName: `${authUser.firstName} ${authUser.lastName}`.trim(),
-            customerEmail: authUser.email,
-            customerPhone: authUser.phoneNumber,
+            customerName: input.customerName,
+            customerEmail: input.customerEmail,
+            customerPhone: input.customerPhone,
             notes: input.notes,
             customConfiguration: input.customConfiguration,
             customizationFee: fromCents(input.customizationFeeCents),
@@ -329,7 +355,10 @@ function createServiceBookingRouter() {
             depositAmount: fromCents(depositFor(totalCents)),
             paidAmount: fromCents(0),
             balanceAmount: fromCents(totalCents),
-            bookingStatus: "Pending",
+            // Service bookings are accepted automatically on submission so
+            // the customer can pay the 50% deposit right away; the booking
+            // becomes Confirmed once the owner verifies that deposit.
+            bookingStatus: "Approved",
             paymentStatus: "Unpaid",
             statusHistory: [
               {
@@ -337,6 +366,11 @@ function createServiceBookingRouter() {
                 changedBy: authUser.id,
                 changedAt: now,
                 note: "Booking submitted by customer.",
+              },
+              {
+                status: "Approved",
+                changedAt: now,
+                note: "Booking accepted automatically on submission.",
               },
             ],
           }),
@@ -361,7 +395,7 @@ function createServiceBookingRouter() {
       filter.bookingStatus = bookingStatus;
     }
 
-    const { ServiceBooking } = request.bookingModels;
+    const { ServiceBooking, Payment } = request.bookingModels;
     const { skip, limit } = pagination.value;
     try {
       const [bookings, total] = await Promise.all([
@@ -372,8 +406,24 @@ function createServiceBookingRouter() {
           .lean(),
         ServiceBooking.countDocuments(filter),
       ]);
+      const payments = bookings.length
+        ? await Payment.find({
+            service_booking_id: { $in: bookings.map((booking) => booking._id) },
+          })
+            .sort({ submittedAt: -1, _id: -1 })
+            .lean()
+        : [];
+      const paymentsByBooking = new Map();
+      for (const payment of payments) {
+        const key = String(payment.service_booking_id);
+        if (!paymentsByBooking.has(key)) paymentsByBooking.set(key, []);
+        paymentsByBooking.get(key).push(serializePayment(payment));
+      }
       return response.status(200).json({
-        bookings: bookings.map(serializeBooking),
+        bookings: bookings.map((booking) => ({
+          ...serializeBooking(booking),
+          payments: paymentsByBooking.get(String(booking._id)) ?? [],
+        })),
         pagination: paginationMeta(pagination.value, total),
       });
     } catch (error) {
@@ -433,6 +483,25 @@ function createServiceBookingRouter() {
         }
         const expectedCents = expectedPaymentCents(booking, input);
 
+        // The receipt must have been uploaded by this customer for this
+        // booking, and a receipt can back only one live payment.
+        const receipt = await findOwnedReceipt(
+          connection,
+          input.receiptStorageKey,
+          { serviceBookingId: booking._id, customerId: request.authUser.id },
+          session,
+        );
+        if (!receipt) {
+          throw new HttpError(400, "Upload the payment receipt before submitting the payment.");
+        }
+        const receiptUsed = await Payment.exists({
+          receiptStorageKey: input.receiptStorageKey,
+          status: { $in: ["Pending", "Verified"] },
+        }).session(session);
+        if (receiptUsed) {
+          throw new HttpError(409, "This receipt has already been submitted.");
+        }
+
         if (input.gcashReference) {
           const referenceUsed = await Payment.exists({
             gcashReference: input.gcashReference,
@@ -453,7 +522,7 @@ function createServiceBookingRouter() {
           expectedAmount: fromCents(expectedCents),
           method: input.method,
           gcashReference: input.gcashReference,
-          receiptFileName: input.receiptFileName,
+          receiptFileName: receipt.filename || input.receiptFileName,
           receiptStorageKey: input.receiptStorageKey,
           status: "Pending",
           submittedAt: new Date(),
@@ -487,8 +556,86 @@ function createServiceBookingRouter() {
     }
   });
 
+  router.post(
+    "/:identifier/receipts",
+    express.raw({ type: RECEIPT_CONTENT_TYPES, limit: MAX_RECEIPT_BYTES }),
+    async (request, response) => {
+      const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+      if (!identifierFilter) {
+        return response.status(400).json({ error: "Invalid booking id or reference." });
+      }
+      const contentType = String(request.get("content-type") ?? "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      if (!RECEIPT_CONTENT_TYPES.includes(contentType)) {
+        return response.status(415).json({
+          error: "Upload the receipt as a JPG, PNG, WEBP, HEIC image or a PDF.",
+        });
+      }
+      const buffer = request.body;
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        return response.status(400).json({ error: "Upload a receipt file." });
+      }
+      if (!contentMatchesType(buffer, contentType)) {
+        return response.status(400).json({
+          error: "The receipt file content does not match its file type.",
+        });
+      }
+
+      const { connection, ServiceBooking } = request.bookingModels;
+      try {
+        const booking = await ServiceBooking.findOne({
+          ...identifierFilter,
+          customer_id: request.authUser.id,
+        })
+          .select("_id bookingStatus")
+          .lean();
+        if (!booking) {
+          return response.status(404).json({ error: "Booking not found." });
+        }
+        if (["Rejected", "Cancelled"].includes(booking.bookingStatus)) {
+          return response.status(409).json({
+            error: "This booking can no longer accept payments.",
+          });
+        }
+
+        const fileName = normalizeReceiptFileName(request.get("x-receipt-file-name"));
+        const fileId = await storeReceipt(connection, buffer, {
+          fileName,
+          contentType,
+          metadata: {
+            serviceBookingId: booking._id,
+            customerId: new mongoose.Types.ObjectId(request.authUser.id),
+          },
+        });
+        return response.status(201).json({
+          receipt: {
+            receiptStorageKey: String(fileId),
+            receiptFileName: fileName,
+            contentType,
+            size: buffer.length,
+          },
+        });
+      } catch (error) {
+        return handleRouteError(response, error, "Receipt upload");
+      }
+    },
+  );
+
   router.use((_request, response) => {
     return response.status(404).json({ error: "Not found." });
+  });
+
+  // Body parser failures on the receipt route (oversized or unreadable).
+  router.use((error, _request, response, _next) => {
+    if (error?.type === "entity.too.large") {
+      return response.status(413).json({ error: "Receipts must be 8 MB or smaller." });
+    }
+    if (error?.status === 400) {
+      return response.status(400).json({ error: "The upload could not be read." });
+    }
+    return handleRouteError(response, error, "Service booking");
   });
 
   return router;

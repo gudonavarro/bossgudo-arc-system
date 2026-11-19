@@ -5,7 +5,13 @@ import {
   PAYMENT_STATUSES,
   SERVICE_TYPES,
 } from "../models/service-booking.js";
+import { pipeline } from "node:stream/promises";
 import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
+import {
+  RECEIPT_CONTENT_TYPES,
+  findReceiptFile,
+  openReceiptDownload,
+} from "./receipt-storage.js";
 import {
   HttpError,
   OBJECT_ID_PATTERN,
@@ -542,6 +548,50 @@ function createAdminServiceBookingRouter() {
       });
     } catch (error) {
       return handleRouteError(response, error, "Payment verification");
+    }
+  });
+
+  router.get("/:identifier/payments/:paymentId/receipt", async (request, response) => {
+    const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+    if (!identifierFilter || !OBJECT_ID_PATTERN.test(request.params.paymentId)) {
+      return response.status(400).json({ error: "Invalid booking or payment id." });
+    }
+
+    const { connection, ServiceBooking, Payment } = request.bookingModels;
+    try {
+      const booking = await ServiceBooking.findOne(identifierFilter).select("_id").lean();
+      const payment = booking
+        ? await Payment.findOne({
+            _id: request.params.paymentId,
+            service_booking_id: booking._id,
+          })
+            .select("receiptStorageKey")
+            .lean()
+        : null;
+      const file = payment
+        ? await findReceiptFile(connection, payment.receiptStorageKey)
+        : null;
+      if (!file) {
+        return response.status(404).json({ error: "Receipt not found." });
+      }
+
+      const contentType = RECEIPT_CONTENT_TYPES.includes(file.metadata?.contentType)
+        ? file.metadata.contentType
+        : "application/octet-stream";
+      response.set({
+        "Content-Type": contentType,
+        "Content-Length": String(file.length),
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename || "receipt")}`,
+        "X-Content-Type-Options": "nosniff",
+      });
+      await pipeline(openReceiptDownload(connection, file._id), response);
+      return undefined;
+    } catch (error) {
+      if (response.headersSent) {
+        response.destroy();
+        return undefined;
+      }
+      return handleRouteError(response, error, "Receipt download");
     }
   });
 

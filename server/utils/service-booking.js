@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import { decimalToNumber, toCents } from "./money.js";
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
-const BOOKING_REFERENCE_PATTERN = /^SB-\d{8}-[A-Z2-9]{6}$/;
+const REFERENCE_SUFFIX_PATTERN = String.raw`\d{8}-[A-Z2-9]{6}`;
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+\.[^@\s.]+$/;
+const PHONE_PATTERN = /^(?:09|\+639)\d{9}$/;
 const REFERENCE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const REFERENCE_ATTEMPTS = 5;
 const DEFAULT_PAGE_LIMIT = 10;
@@ -88,27 +90,32 @@ async function withTransaction(connection, work) {
   }
 }
 
-function bookingIdentifierFilter(identifier) {
+/**
+ * Resolves a route identifier to a query filter. Accepts a MongoDB id or a
+ * reference with the given prefix ("SB" service, "VS" visitation).
+ */
+function bookingIdentifierFilter(identifier, prefix = "SB") {
   if (typeof identifier !== "string") return null;
   if (OBJECT_ID_PATTERN.test(identifier)) return { _id: identifier };
   const reference = identifier.trim().toUpperCase();
-  return BOOKING_REFERENCE_PATTERN.test(reference) ? { reference } : null;
+  const pattern = new RegExp(`^${prefix}-${REFERENCE_SUFFIX_PATTERN}$`);
+  return pattern.test(reference) ? { reference } : null;
 }
 
-function generateBookingReference(now = new Date()) {
+function generateBookingReference(prefix = "SB", now = new Date()) {
   const datePart = formatBusinessDate(now).replaceAll("-", "");
   const bytes = crypto.randomBytes(6);
   let suffix = "";
   for (const byte of bytes) {
     suffix += REFERENCE_ALPHABET[byte % REFERENCE_ALPHABET.length];
   }
-  return `SB-${datePart}-${suffix}`;
+  return `${prefix}-${datePart}-${suffix}`;
 }
 
 /** Saves a new booking, retrying when a generated reference collides. */
-async function saveWithUniqueReference(createBooking) {
+async function saveWithUniqueReference(createBooking, prefix = "SB") {
   for (let attempt = 1; ; attempt += 1) {
-    const booking = createBooking(generateBookingReference());
+    const booking = createBooking(generateBookingReference(prefix));
     try {
       return await booking.save();
     } catch (error) {
@@ -132,18 +139,84 @@ function formatBusinessDate(date) {
  * Parses a calendar date (YYYY-MM-DD) that must fall after today in the
  * farm's time zone. Stored as UTC midnight of that calendar day.
  */
-function parseFutureServiceDate(value, now = new Date()) {
+function parseFutureServiceDate(
+  value,
+  { label = "Service date", now = new Date() } = {},
+) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return { error: "Service date must use the YYYY-MM-DD format." };
+    return { error: `${label} must use the YYYY-MM-DD format.` };
   }
   const date = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    return { error: "Service date is not a valid calendar date." };
+    return { error: `${label} is not a valid calendar date.` };
   }
   if (value <= formatBusinessDate(now)) {
-    return { error: "Service date must be a future date." };
+    return { error: `${label} must be a future date.` };
   }
   return { value: date };
+}
+
+/** True for a Saturday or Sunday stored as UTC midnight of that day. */
+function isWeekendDate(date) {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+/** True when the farm has closed this date for the given booking kind. */
+async function isDateClosed(AvailableDate, bookingKind, date) {
+  return Boolean(
+    await AvailableDate.exists({ date, bookingKind, status: "Closed" }),
+  );
+}
+
+function readContactText(value, { label, maxLength }) {
+  if (value === undefined || value === null) return { value: "" };
+  if (typeof value !== "string") return { error: `${label} must be text.` };
+  const text = value.trim();
+  if (text.length > maxLength) {
+    return { error: `${label} must be at most ${maxLength} characters.` };
+  }
+  return { value: text };
+}
+
+/**
+ * Validates the contact details a customer types into a booking form. A
+ * blank field falls back to the signed-in account's value; ownership of the
+ * booking always comes from the session, never from these fields.
+ */
+function validateCustomerContact(body, authUser, { emailRequired = false } = {}) {
+  const name = readContactText(body.customerName, {
+    label: "Name",
+    maxLength: 161,
+  });
+  if (name.error) return name;
+  const phone = readContactText(body.customerPhone, {
+    label: "Contact number",
+    maxLength: 20,
+  });
+  if (phone.error) return phone;
+  const email = readContactText(body.customerEmail, {
+    label: "Email",
+    maxLength: 254,
+  });
+  if (email.error) return email;
+  if (emailRequired && !email.value) {
+    return { error: "Email is required." };
+  }
+
+  const customerName =
+    name.value || `${authUser.firstName} ${authUser.lastName}`.trim();
+  const customerPhone =
+    phone.value.replaceAll(/[\s-]/g, "") || authUser.phoneNumber || "";
+  const customerEmail = (email.value || authUser.email || "").toLowerCase();
+  if (!customerName) return { error: "Name is required." };
+  if (!PHONE_PATTERN.test(customerPhone)) {
+    return { error: "Enter a valid contact number, such as 09XXXXXXXXX." };
+  }
+  if (!EMAIL_PATTERN.test(customerEmail)) {
+    return { error: "Enter a valid email address." };
+  }
+  return { value: { customerName, customerPhone, customerEmail } };
 }
 
 function parsePagination(query) {
@@ -264,12 +337,15 @@ export {
   derivePaymentStatus,
   getErrorName,
   handleRouteError,
+  isDateClosed,
   isDuplicateKeyError,
+  isWeekendDate,
   paginationMeta,
   parseFutureServiceDate,
   parsePagination,
   saveWithUniqueReference,
   serializeBooking,
   serializePayment,
+  validateCustomerContact,
   withTransaction,
 };

@@ -17,7 +17,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     mongodbUri: process.env.MONGODB_URI || "",
     mongodbDatabase:
-      process.env.MONGODB_DATABASE || "gudonavarro_db_user",
+      process.env.MONGODB_DATABASE || "bossgudo_arc",
     smtpHost: process.env.SMTP_HOST || "smtp.gmail.com",
     smtpPort: Number(process.env.SMTP_PORT || 587),
     smtpUser: process.env.SMTP_USER || "",
