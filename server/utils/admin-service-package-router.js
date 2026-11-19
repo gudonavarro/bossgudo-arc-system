@@ -16,8 +16,8 @@ import {
   generatePackageCode,
   serializeAdminPackage,
   validatePackageInput,
-} from "./service-package.js";
-import { publicCustomPondPricing } from "./service-catalog.js";
+} from "./service-package";
+import { publicCustomPondPricing } from "./service-catalog";
 import {
   MAX_PACKAGE_IMAGE_BYTES,
   PACKAGE_IMAGE_TYPES,

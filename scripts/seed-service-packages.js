@@ -2,7 +2,7 @@ import "dotenv/config";
 import { closeMongo } from "../server/utils/mongodb";
 import { getServicePackageModel } from "../server/models/service-package";
 import { connectMongoose } from "../server/utils/mongoose";
-import { seedServicePackages } from "../server/utils/service-package-seed.js";
+import { seedServicePackages } from "../server/utils/service-package-seed";
 
 async function main() {
   const connection = await connectMongoose({

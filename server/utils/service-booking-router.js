@@ -14,9 +14,9 @@ import { PAYMENT_TARGETS } from "../models/payment";
 import {
   CUSTOM_POND_PRICING,
   calculateCustomPondCents,
-} from "./service-catalog.js";
+} from "./service-catalog";
 import { PACKAGE_CODE_PATTERN } from "../models/service-package";
-import { packageSnapshot } from "./service-package.js";
+import { packageSnapshot } from "./service-package";
 import { BOOKING_STATUSES } from "../models/service-booking";
 import {
   HttpError,

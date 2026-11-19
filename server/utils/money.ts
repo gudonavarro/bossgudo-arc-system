@@ -1,7 +1,7 @@
 import mongoose, { type Types } from "mongoose";
 
 const { Decimal128 } = mongoose.Types;
-const MAX_CENTS = 100_000_000_00;
+const MAX_CENTS = 100_000_000 * 100;
 const DECIMAL_TEXT_PATTERN = /^(-?)(\d+)(?:\.(\d{1,2}))?$/;
 
 /** A stored or submitted amount: Decimal128, pesos as a number, or numeric text. */

@@ -95,6 +95,10 @@ test("generatePackageCode slugifies the name and skips taken or reserved codes",
   assert.equal(await generatePackageCode(ServicePackage, "Pond Starter!"), "pond-starter-3");
   assert.equal(await generatePackageCode(ServicePackage, "Custom"), "custom-2");
   assert.equal(await generatePackageCode(ServicePackage, "★"), "package");
+  assert.equal(await generatePackageCode(ServicePackage, "--Big   Pond!!"), "big-pond");
+  assert.equal(await generatePackageCode(ServicePackage, `${"a".repeat(39)} bcd`), "a".repeat(39));
+  assert.equal(await generatePackageCode(ServicePackage, `${"a".repeat(38)} bcd`), `${"a".repeat(38)}-b`);
+  assert.equal(await generatePackageCode(ServicePackage, "x"), "package");
   // Existing behaviour: NFKD splits "ñ" into "n" + a combining mark, which
   // becomes a hyphen. Recorded as-is; changing it is a separate decision.
   assert.equal(await generatePackageCode(ServicePackage, "Ñandú Pond"), "n-andu-pond");

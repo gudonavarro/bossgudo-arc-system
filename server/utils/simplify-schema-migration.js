@@ -1,5 +1,5 @@
 import { fromCents, toCents } from "./money";
-import { INITIAL_SERVICE_PACKAGES } from "./service-package-seed.js";
+import { INITIAL_SERVICE_PACKAGES } from "./service-package-seed";
 
 const REMOVED_BOOKING_FIELDS = ["packageNameSnapshot", "packagePrice", "balanceAmount"];
 const MISSING_SNAPSHOT = { $or: [{ packageSnapshot: null }, { packageSnapshot: { $exists: false } }] };

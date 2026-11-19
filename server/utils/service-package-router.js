@@ -3,8 +3,8 @@ import { PACKAGE_CODE_PATTERN } from "../models/service-package";
 import { HttpError } from "./service-booking.js";
 import { sendPackageImage } from "./package-image-storage.js";
 import { handlePackageError } from "./admin-service-package-router.js";
-import { serializePublicPackage } from "./service-package.js";
-import { publicCustomPondPricing } from "./service-catalog.js";
+import { serializePublicPackage } from "./service-package";
+import { publicCustomPondPricing } from "./service-catalog";
 
 /**
  * Public package endpoints for the storefront. Only active packages are
