@@ -18,8 +18,10 @@ import {
   bookingCents,
   bookingIdentifierFilter,
   derivePaymentStatus,
+  escapeRegExp,
   handleRouteError,
   paginationMeta,
+  parseCalendarDate,
   parsePagination,
   serializeBooking,
   serializePayment,
@@ -38,21 +40,6 @@ const CUSTOMER_FIELDS = "firstName lastName email phoneNumber isActive";
 const STAFF_FIELDS = "firstName lastName role";
 const AUDIT_VIEW = Object.freeze({ includeAudit: true });
 const MAX_SEARCH_LENGTH = 100;
-
-function parseCalendarDate(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return null;
-  }
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== value
-    ? null
-    : date;
-}
-
-function escapeRegExp(text) {
-  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-}
 
 const ENUM_FILTERS = [
   ["bookingStatus", BOOKING_STATUSES, "Invalid booking status."],
@@ -127,34 +114,23 @@ function buildAdminListFilter(query) {
   return { value: filter };
 }
 
-async function summarizePayments(Payment, bookingIds) {
-  if (bookingIds.length === 0) return new Map();
-  const summaries = await Payment.aggregate([
-    { $match: { service_booking_id: { $in: bookingIds } } },
-    { $sort: { submittedAt: -1, _id: -1 } },
-    {
-      $group: {
-        _id: "$service_booking_id",
-        paymentCount: { $sum: 1 },
-        pendingPaymentCount: {
-          $sum: { $cond: [{ $eq: ["$status", "Pending"] }, 1, 0] },
-        },
-        latestPayment: { $first: "$$ROOT" },
-      },
-    },
-  ]);
-  return new Map(
-    summaries.map((summary) => [
-      String(summary._id),
-      {
-        paymentCount: summary.paymentCount,
-        pendingPaymentCount: summary.pendingPaymentCount,
-        latestPayment: serializePayment(summary.latestPayment, {
-          includeAudit: true,
-        }),
-      },
-    ]),
-  );
+/**
+ * Loads every payment for one page of bookings in a single query (newest
+ * first) and groups them into the per-booking summary and full records.
+ */
+async function paymentsByBooking(Payment, bookingIds) {
+  const grouped = new Map();
+  if (bookingIds.length === 0) return grouped;
+  const payments = await Payment.find({ service_booking_id: { $in: bookingIds } })
+    .sort({ submittedAt: -1, _id: -1 })
+    .populate("verifiedBy", STAFF_FIELDS)
+    .lean();
+  for (const payment of payments) {
+    const key = String(payment.service_booking_id);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(serializePayment(payment, AUDIT_VIEW));
+  }
+  return grouped;
 }
 
 /**
@@ -352,20 +328,23 @@ function createAdminServiceBookingRouter() {
           .lean(),
         ServiceBooking.countDocuments(filter.value),
       ]);
-      const paymentSummaries = await summarizePayments(
+      const paymentGroups = await paymentsByBooking(
         Payment,
         bookings.map((booking) => booking._id),
       );
-      const emptySummary = {
-        paymentCount: 0,
-        pendingPaymentCount: 0,
-        latestPayment: null,
-      };
       return response.status(200).json({
-        bookings: bookings.map((booking) => ({
-          ...serializeBooking(booking, AUDIT_VIEW),
-          payments: paymentSummaries.get(String(booking._id)) ?? emptySummary,
-        })),
+        bookings: bookings.map((booking) => {
+          const records = paymentGroups.get(String(booking._id)) ?? [];
+          return {
+            ...serializeBooking(booking, AUDIT_VIEW),
+            payments: {
+              paymentCount: records.length,
+              pendingPaymentCount: records.filter((p) => p.status === "Pending").length,
+              latestPayment: records[0] ?? null,
+            },
+            paymentRecords: records,
+          };
+        }),
         pagination: paginationMeta(pagination.value, total),
       });
     } catch (error) {
@@ -518,7 +497,7 @@ function createAdminServiceBookingRouter() {
               ...(decision === "reject" ? { rejectionReason } : {}),
             },
           },
-          { new: true, runValidators: true, session },
+          { returnDocument: "after", runValidators: true, session },
         );
         if (!payment) {
           throw new HttpError(409, "This payment has already been reviewed.");

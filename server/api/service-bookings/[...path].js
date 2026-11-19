@@ -5,6 +5,7 @@ import { getUserModel } from "../../models/user";
 import { getServiceBookingModel } from "../../models/service-booking.js";
 import { getPaymentModel } from "../../models/payment.js";
 import { getAvailableDateModel } from "../../models/available-date.js";
+import { getServicePackageModel } from "../../models/service-package.js";
 import { createAuthCollections } from "../../utils/auth-collections";
 import { connectMongoose } from "../../utils/mongoose";
 import { createServiceBookingRouter } from "../../utils/service-booking-router.js";
@@ -33,6 +34,7 @@ export default defineEventHandler(async (event) => {
       ServiceBooking: getServiceBookingModel(connection),
       Payment: getPaymentModel(connection),
       AvailableDate: getAvailableDateModel(connection),
+      ServicePackage: getServicePackageModel(connection),
     };
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";

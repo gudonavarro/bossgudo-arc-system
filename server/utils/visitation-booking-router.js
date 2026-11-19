@@ -97,10 +97,14 @@ function validateVisitationInput(body, authUser) {
   };
 }
 
-function serializeVisitation(document) {
+/**
+ * Shapes a visitation for API responses. Without `includeAudit`, the ids of
+ * the staff who reviewed or changed it are omitted (customer responses).
+ */
+function serializeVisitation(document, { includeAudit = false } = {}) {
   const visit =
     typeof document?.toObject === "function" ? document.toObject() : document;
-  return {
+  const serialized = {
     _id: visit._id,
     reference: visit.reference,
     customer_id: visit.customer_id,
@@ -118,10 +122,13 @@ function serializeVisitation(document) {
       status: entry.status,
       changedAt: entry.changedAt,
       note: entry.note,
+      ...(includeAudit ? { changedBy: entry.changedBy ?? null } : {}),
     })),
     createdAt: visit.createdAt,
     updatedAt: visit.updatedAt,
   };
+  if (includeAudit) serialized.reviewedBy = visit.reviewedBy ?? null;
+  return serialized;
 }
 
 function createVisitationBookingRouter() {
@@ -263,4 +270,8 @@ function createVisitationBookingRouter() {
   return router;
 }
 
-export { createVisitationBookingRouter, validateVisitationInput };
+export {
+  createVisitationBookingRouter,
+  serializeVisitation,
+  validateVisitationInput,
+};

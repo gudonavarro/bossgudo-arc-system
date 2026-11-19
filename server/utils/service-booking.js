@@ -156,6 +156,22 @@ function parseFutureServiceDate(
   return { value: date };
 }
 
+/** Parses any valid YYYY-MM-DD calendar date (UTC midnight), or null. */
+function parseCalendarDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+    ? null
+    : date;
+}
+
+function escapeRegExp(text) {
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
 /** True for a Saturday or Sunday stored as UTC midnight of that day. */
 function isWeekendDate(date) {
   const day = date.getUTCDay();
@@ -266,6 +282,18 @@ function serializeBooking(document, { includeAudit = false } = {}) {
     serviceType: booking.serviceType,
     packageNameSnapshot: booking.packageNameSnapshot,
     packagePrice: decimalToNumber(booking.packagePrice),
+    packageSnapshot: booking.packageSnapshot
+      ? {
+          code: booking.packageSnapshot.code,
+          name: booking.packageSnapshot.name,
+          description: booking.packageSnapshot.description,
+          category: booking.packageSnapshot.category,
+          layers: booking.packageSnapshot.layers,
+          dimensions: booking.packageSnapshot.dimensions,
+          inclusions: [...(booking.packageSnapshot.inclusions ?? [])],
+          price: decimalToNumber(booking.packageSnapshot.price),
+        }
+      : null,
     serviceDate: booking.serviceDate,
     serviceLocation: booking.serviceLocation,
     customerName: booking.customerName,
@@ -292,6 +320,10 @@ function serializeBooking(document, { includeAudit = false } = {}) {
   return serialized;
 }
 
+/**
+ * Shapes a payment for API responses. The receipt's storage key is never
+ * returned; admins fetch the file through the payment's receipt endpoint.
+ */
 function serializePayment(document, { includeAudit = false } = {}) {
   const payment = toPlain(document);
   const serialized = {
@@ -303,7 +335,6 @@ function serializePayment(document, { includeAudit = false } = {}) {
     method: payment.method,
     gcashReference: payment.gcashReference ?? null,
     receiptFileName: payment.receiptFileName,
-    receiptStorageKey: payment.receiptStorageKey,
     status: payment.status,
     submittedAt: payment.submittedAt,
     verifiedAt: payment.verifiedAt ?? null,
@@ -335,12 +366,14 @@ export {
   bookingCents,
   bookingIdentifierFilter,
   derivePaymentStatus,
+  escapeRegExp,
   getErrorName,
   handleRouteError,
   isDateClosed,
   isDuplicateKeyError,
   isWeekendDate,
   paginationMeta,
+  parseCalendarDate,
   parseFutureServiceDate,
   parsePagination,
   saveWithUniqueReference,
