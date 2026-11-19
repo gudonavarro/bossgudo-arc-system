@@ -1,0 +1,116 @@
+/*
+ * Boss Gudo design system: Tailwind CSS v4 + DaisyUI v5.
+ *
+ * The previous stylesheet is loaded into the "legacy" cascade layer, which
+ * sits below DaisyUI components, while views move to the new components.
+ * DaisyUI components whose names collide with legacy classes stay excluded
+ * until the views that use those classes are migrated.
+ */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss";
+@import "./style.css" layer(legacy);
+
+/* The legacy script renders its views from HTML strings. */
+@source "../../legacy/script.js";
+
+@plugin "daisyui" {
+  themes: false;
+  exclude: badge, breadcrumbs, calendar, card, footer, hero, label, modal, stat,
+    status, steps, timeline, toast;
+}
+
+/* Customer website: welcoming, rounded, generous spacing. */
+@plugin "daisyui/theme" {
+  name: "bossgudo";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f4f6f1;
+  --color-base-300: #e2e8de;
+  --color-base-content: #1b2a20;
+  --color-primary: #2e6a43;
+  --color-primary-content: #ffffff;
+  --color-secondary: #b3322a;
+  --color-secondary-content: #ffffff;
+  --color-accent: #2b7a80;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1e2b23;
+  --color-neutral-content: #eef2ec;
+  --color-info: #2d6a99;
+  --color-info-content: #ffffff;
+  --color-success: #2f7d4c;
+  --color-success-content: #ffffff;
+  --color-warning: #b7791f;
+  --color-warning-content: #ffffff;
+  --color-error: #b42318;
+  --color-error-content: #ffffff;
+  --radius-selector: 2rem;
+  --radius-field: 0.6rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Admin dashboard: same brand colours, tighter and more data-dense. */
+@plugin "daisyui/theme" {
+  name: "bossgudo-admin";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f5f4;
+  --color-base-300: #dfe5e1;
+  --color-base-content: #18241d;
+  --color-primary: #2e6a43;
+  --color-primary-content: #ffffff;
+  --color-secondary: #b3322a;
+  --color-secondary-content: #ffffff;
+  --color-accent: #2b7a80;
+  --color-accent-content: #ffffff;
+  --color-neutral: #17221b;
+  --color-neutral-content: #e6ece8;
+  --color-info: #2d6a99;
+  --color-info-content: #ffffff;
+  --color-success: #2f7d4c;
+  --color-success-content: #ffffff;
+  --color-warning: #b7791f;
+  --color-warning-content: #ffffff;
+  --color-error: #b42318;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.625rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --color-earth: #4a2f22;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-base-200 font-sans text-base-content antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  svg.icon {
+    flex-shrink: 0;
+  }
+}

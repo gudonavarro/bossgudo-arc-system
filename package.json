@@ -28,15 +28,19 @@
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
     "jiti": "^2.7.0",
+    "lucide": "^1.76.0",
     "mongodb": "~7.8",
     "mongoose": "^9.12.1",
     "nodemailer": "^10.3.1",
     "nuxt": "^4.2.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^26.6.6",
+    "daisyui": "^5.8.1",
     "supertest": "^7.1.4",
+    "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.3.14"
   }

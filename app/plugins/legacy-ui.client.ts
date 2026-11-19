@@ -1,4 +1,5 @@
 import legacyScript from "../legacy/script.js?raw";
+import { iconSvg } from "~/utils/icons";
 
 export default defineNuxtPlugin((nuxtApp) => {
   const router = useRouter();
@@ -15,9 +16,12 @@ export default defineNuxtPlugin((nuxtApp) => {
   ]);
   const browserWindow = window as typeof window & {
     __bossGudoNavigate?: (path: string) => Promise<unknown>;
+    __bossGudoIcon?: typeof iconSvg;
   };
 
   browserWindow.__bossGudoNavigate = (path) => router.push(path);
+  // The legacy views build HTML strings, so they read icons from here.
+  browserWindow.__bossGudoIcon = iconSvg;
 
   function ensureLegacyUi(path: string) {
     if (
