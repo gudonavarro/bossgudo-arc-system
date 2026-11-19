@@ -2403,7 +2403,7 @@ function paymentReviewOutcome(b, payment) {
     : "Payment stays Partially Paid";
 }
 function paymentMismatchMarkup(payment) {
-  return Math.abs(Number(payment.amount) - Number(payment.expectedAmount)) <= 0.001
+  return !paymentAmountsDiffer(payment)
     ? ""
     : '<div class="notice" style="background:#fde5e5;border-color:#f1d1d1;color:#a33d3d;margin-top:10px">The submitted amount does not match the required amount. Reject the proof or investigate before verifying.</div>';
 }
@@ -2422,6 +2422,9 @@ function owedPaymentRow(b) {
   const amount = isBalance ? b.balance : r2(b.deposit - Number(b.paidAmount || 0));
   return `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${paymentDue}</td><td>${money(amount)}</td><td><span class="status ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
 }
+function paymentAmountsDiffer(payment) {
+  return Math.abs(Number(payment.amount) - Number(payment.expectedAmount)) > 0.001;
+}
 function reviewPayment(ref) {
   const b = adminBookingByRef(ref);
   const p = b?.pendingPayment;
@@ -2432,14 +2435,75 @@ function reviewPayment(ref) {
   const paymentType = p.paymentTarget === "balance" ? "Outstanding balance" : "50% down payment";
   const body = paymentReviewBody(b, p, paymentType);
   openModal(
-    "Review GCash payment",
+    "Verify GCash payment",
     `${safe(b.ref)} · ${safe(b.name)} · ${safe(b.pkg)}`,
     body,
-    `<button class="secondary" onclick="closeModal()">Close</button><button class="secondary" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button>`,
+    `<button class="secondary" onclick="closeModal()">Close</button><button class="secondary" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button><button class="danger" id="rejectPaymentButton" onclick="verifyPayment('${b.ref}','${p._id}',false)">Reject proof</button><button class="primary" id="verifyPaymentButton" onclick="verifyPayment('${b.ref}','${p._id}',true)">Verify payment</button>`,
   );
 }
 function paymentReviewBody(b, payment, paymentType) {
-  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div><div class="notice" style="margin-top:14px">Verify and reject actions are not available on this page yet.</div>`;
+  const mismatchConfirmation = paymentAmountsDiffer(payment)
+    ? `<label class="check-row"><input type="checkbox" id="m_mismatch"><span>The submitted amount (${money(payment.amount)}) differs from the required amount (${money(payment.expectedAmount)}). I confirm this is the amount actually received.</span></label>`
+    : "";
+  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div><label class="check-row"><input type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label>${mismatchConfirmation}<div class="field" style="margin-top:14px"><label for="m_reason">Reason (required to reject; shown to the customer)</label><input id="m_reason" maxlength="500" placeholder="e.g. Reference number not found in GCash"></div>${FORM_ERROR_MARKUP}`;
+}
+/**
+ * Verifies or rejects a submitted payment through the backend, which applies
+ * the amount, deposit and status rules and is the final authority.
+ */
+async function verifyPayment(ref, paymentId, valid) {
+  if (adminActionPending) return;
+  const b = adminBookingByRef(ref);
+  const p = b?.pendingPayment;
+  if (!p || p._id !== paymentId) {
+    showFormError("This payment is no longer awaiting verification. Close and refresh.");
+    return;
+  }
+  clearFormError();
+  let body;
+  if (valid) {
+    if (!document.getElementById("m_checked")?.checked) {
+      showFormError("Tick the box to confirm you checked the actual GCash transaction first.");
+      return;
+    }
+    if (paymentAmountsDiffer(p) && !document.getElementById("m_mismatch")?.checked) {
+      showFormError("Confirm the amount difference before verifying this payment.");
+      return;
+    }
+    body = { decision: "approve" };
+  } else {
+    const reason = (document.getElementById("m_reason")?.value || "").trim();
+    if (!reason || reason.length > 500) {
+      showFormError("Enter a rejection reason (up to 500 characters). The customer will see it.");
+      return;
+    }
+    body = { decision: "reject", rejectionReason: reason };
+  }
+
+  const activeId = valid ? "verifyPaymentButton" : "rejectPaymentButton";
+  const otherButton = document.getElementById(valid ? "rejectPaymentButton" : "verifyPaymentButton");
+  setButtonBusy(activeId, true, valid ? "Verifying…" : "Rejecting…");
+  if (otherButton) otherButton.disabled = true;
+  adminActionPending = true;
+  try {
+    const result = await bookingApiRequest(
+      `${adminBookingPath(ref)}/payments/${encodeURIComponent(paymentId)}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    );
+    closeModal();
+    toast(
+      valid
+        ? `Payment verified — booking ${result.booking.bookingStatus}, payment ${result.booking.paymentStatus}.`
+        : "Proof rejected — customer notified. No money recorded.",
+    );
+  } catch (error) {
+    setButtonBusy(activeId, false);
+    if (otherButton) otherButton.disabled = false;
+    showFormError(error instanceof Error ? error.message : "The payment could not be updated.");
+  } finally {
+    adminActionPending = false;
+    await reloadAdminData();
+  }
 }
 
 /* ----- visitations ----- */
