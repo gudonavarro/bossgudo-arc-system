@@ -30,6 +30,7 @@ const { createAuthenticationMiddleware } = require(
 
 const CUSTOMER_FIELDS = "firstName lastName email phoneNumber isActive";
 const STAFF_FIELDS = "firstName lastName role";
+const AUDIT_VIEW = Object.freeze({ includeAudit: true });
 const MAX_SEARCH_LENGTH = 100;
 
 function parseCalendarDate(value) {
@@ -356,7 +357,7 @@ function createAdminServiceBookingRouter() {
       };
       return response.status(200).json({
         bookings: bookings.map((booking) => ({
-          ...serializeBooking(booking),
+          ...serializeBooking(booking, AUDIT_VIEW),
           payments: paymentSummaries.get(String(booking._id)) ?? emptySummary,
         })),
         pagination: paginationMeta(pagination.value, total),
@@ -387,7 +388,7 @@ function createAdminServiceBookingRouter() {
         .populate("verifiedBy", STAFF_FIELDS)
         .lean();
       return response.status(200).json({
-        booking: serializeBooking(booking),
+        booking: serializeBooking(booking, AUDIT_VIEW),
         payments: payments.map((payment) =>
           serializePayment(payment, { includeAudit: true }),
         ),
@@ -426,7 +427,7 @@ function createAdminServiceBookingRouter() {
       // Optimistic concurrency rejects the save if the booking changed
       // since it was read (for example, a concurrent payment verification).
       await booking.save();
-      return response.status(200).json({ booking: serializeBooking(booking) });
+      return response.status(200).json({ booking: serializeBooking(booking, AUDIT_VIEW) });
     } catch (error) {
       return handleRouteError(response, error, "Booking status update");
     }
@@ -456,7 +457,7 @@ function createAdminServiceBookingRouter() {
       booking.deliveryFeeSetBy = request.authUser.id;
       booking.deliveryFeeSetAt = new Date();
       await booking.save();
-      return response.status(200).json({ booking: serializeBooking(booking) });
+      return response.status(200).json({ booking: serializeBooking(booking, AUDIT_VIEW) });
     } catch (error) {
       return handleRouteError(response, error, "Delivery fee update");
     }
@@ -537,7 +538,7 @@ function createAdminServiceBookingRouter() {
 
       return response.status(200).json({
         payment: serializePayment(result.payment, { includeAudit: true }),
-        booking: serializeBooking(result.booking),
+        booking: serializeBooking(result.booking, AUDIT_VIEW),
       });
     } catch (error) {
       return handleRouteError(response, error, "Payment verification");

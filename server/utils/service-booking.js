@@ -175,9 +175,18 @@ function toPlain(document) {
     : document;
 }
 
-function serializeBooking(document) {
+/**
+ * Shapes a booking for API responses. Without `includeAudit`, the
+ * administrator ids behind status and delivery fee changes are omitted.
+ */
+function serializeBooking(document, { includeAudit = false } = {}) {
   const booking = toPlain(document);
-  return {
+  const statusHistory = (booking.statusHistory ?? []).map((entry) =>
+    includeAudit
+      ? entry
+      : { status: entry.status, changedAt: entry.changedAt, note: entry.note },
+  );
+  const serialized = {
     _id: booking._id,
     reference: booking.reference,
     customer_id: booking.customer_id,
@@ -199,12 +208,15 @@ function serializeBooking(document) {
     balanceAmount: decimalToNumber(booking.balanceAmount),
     bookingStatus: booking.bookingStatus,
     paymentStatus: booking.paymentStatus,
-    deliveryFeeSetBy: booking.deliveryFeeSetBy ?? null,
     deliveryFeeSetAt: booking.deliveryFeeSetAt ?? null,
-    statusHistory: booking.statusHistory ?? [],
+    statusHistory,
     createdAt: booking.createdAt,
     updatedAt: booking.updatedAt,
   };
+  if (includeAudit) {
+    serialized.deliveryFeeSetBy = booking.deliveryFeeSetBy ?? null;
+  }
+  return serialized;
 }
 
 function serializePayment(document, { includeAudit = false } = {}) {
