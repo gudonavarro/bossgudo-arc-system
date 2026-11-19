@@ -14,6 +14,7 @@
     "seed:setup-faq": "jiti scripts/seed-setup-faq.js",
     "seed:contact-faq": "jiti scripts/seed-contact-faq.js",
     "seed:packages": "jiti scripts/seed-service-packages.js",
+    "migrate:package-snapshots": "jiti scripts/migrate-booking-package-snapshots.js",
     "test": "node --test"
   },
   "engines": {
