@@ -1,6 +1,6 @@
 import express from "express";
 import { PACKAGE_CODE_PATTERN } from "../models/service-package";
-import { HttpError } from "./service-booking.js";
+import { HttpError } from "./service-booking";
 import { sendPackageImage } from "./package-image-storage.js";
 import { handlePackageError } from "./admin-service-package-router.js";
 import { serializePublicPackage } from "./service-package";

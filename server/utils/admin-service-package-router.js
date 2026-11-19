@@ -11,7 +11,7 @@ import {
   getErrorName,
   isDuplicateKeyError,
   withTransaction,
-} from "./service-booking.js";
+} from "./service-booking";
 import {
   generatePackageCode,
   serializeAdminPackage,

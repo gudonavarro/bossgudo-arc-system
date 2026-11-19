@@ -26,7 +26,7 @@ import {
   serializeBooking,
   serializePayment,
   withTransaction,
-} from "./service-booking.js";
+} from "./service-booking";
 
 const require = createRequire(import.meta.url);
 const path = require("node:path");

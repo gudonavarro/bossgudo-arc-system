@@ -13,7 +13,7 @@ import {
   paginationMeta,
   parseCalendarDate,
   parsePagination,
-} from "./service-booking.js";
+} from "./service-booking";
 import { serializeVisitation } from "./visitation-booking-router.js";
 
 const require = createRequire(import.meta.url);
