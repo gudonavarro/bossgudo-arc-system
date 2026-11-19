@@ -48,8 +48,11 @@ export default defineEventHandler(async (event) => {
       return Array.isArray(value) ? value.join(", ") : value;
     },
   });
-  request.url =
-    (request.url ?? "/").replace(/^\/api\/admin\/service-bookings/, "") || "/";
+  const routerUrl = (request.url ?? "/").replace(
+    /^\/api\/admin\/service-bookings/,
+    "",
+  );
+  request.url = routerUrl.startsWith("/") ? routerUrl : `/${routerUrl}`;
   return new Promise((resolve, reject) => {
     app(request, event.node.res, (error) => {
       if (error) {
