@@ -1214,7 +1214,22 @@ function calendarBlock(kind, mode = "select") {
 function register() {
   return `<div class="panel auth-card"><div style="text-align:center"><h1 class="page-title">Create an account</h1><p class="muted">Register to submit and track bookings.</p></div><form id="registerForm"><div class="field"><label>Full name</label><input class="input w-full" id="regName" required placeholder="Your full name"></div><div class="field"><label>Email address</label><input class="input w-full" type="email" required placeholder="you@example.com"></div><div class="field"><label>Password</label><input class="input w-full" type="password" required minlength="6" placeholder="At least 6 characters"></div><button class="btn btn-primary">Create Account</button></form></div>`;
 }
+/** Section heading shared by the About page sections. */
+function aboutHeading(id, eyebrow, title, sub = "") {
+  const subtitle = sub ? `<p class="muted mt-3 leading-relaxed">${sub}</p>` : "";
+  return `<div class="max-w-3xl"><p class="eyebrow">${eyebrow}</p><h2 id="${id}" class="section-title mt-1">${title}</h2>${subtitle}</div>`;
+}
 function about() {
+  const focusAreas = [
+    ["sprout", "Seedstock production"],
+    ["shrimp", "Hatchery management"],
+    ["waves", "Commercial grow-out"],
+  ];
+  const objectives = [
+    ["shield-check", "Reliable local supply", "Establish a clean, sustainable, and biosecure commercial source of Australian Redclaw Crayfish as an alternative high-value food source and aquaculture commodity."],
+    ["store", "Market expansion", "Raise consumer and commercial awareness of ARC as a prime crustacean alternative comparable to traditional shrimp and crabs."],
+    ["handshake", "Industry mentorship & network building", "Mentor new entrants, hobbyists, and outgrower partners to build a robust supply chain, widen distribution networks, and stabilize market pricing."],
+  ];
   const offers = [
     ["shrimp", "Crayfish supply", "Australian Red Claw stock for new and growing crayfish farms."],
     ["wrench", "Pond setup assistance", "Pond packages, manufacturing, installation and custom pond design."],
@@ -1226,13 +1241,21 @@ function about() {
     ["graduation-cap", "Training & support", "Ask the owner about training requirements and available support."],
     ["calendar-check", "Bookings & visits", "Book a service or schedule a farm visit on an available weekend."],
   ];
+  const focusMarkup = focusAreas
+    .map(([name, label]) => `<li class="flex items-center gap-3 font-medium">${icon(name, "size-5 text-primary")}${label}</li>`)
+    .join("");
+  const objectiveMarkup = objectives
+    .map(([name, title, text]) => `<article class="tile flex flex-col"><span class="icon-chip">${icon(name, "size-5")}</span><h3 class="mt-4 text-lg">${title}</h3><p class="muted mt-2 text-sm leading-relaxed">${text}</p></article>`)
+    .join("");
   const offerMarkup = offers
     .map(([name, title, text]) => `<div>${icon(name, "size-6 text-primary")}<h3 class="mt-3 font-semibold">${title}</h3><p class="muted mt-1.5 text-sm leading-relaxed">${text}</p></div>`)
     .join("");
   const askMarkup = asks
     .map(([name, title, text]) => `<div class="tile flex gap-4"><span class="icon-chip shrink-0">${icon(name, "size-5")}</span><div><h3>${title}</h3><p class="muted mt-1 text-sm leading-relaxed">${text}</p></div></div>`)
     .join("");
-  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Learn about the business and its services.")}<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2"><img src="/images/aquaculture-ponds.jpg" alt="Aerated aquaculture ponds with a farm building beside them" class="h-60 w-full object-cover lg:h-full" width="1280" height="720"><div class="p-6 sm:p-10"><p class="eyebrow">About the farm</p><h2 class="section-title">Supporting new and growing crayfish enthusiasts</h2><p class="mt-4 leading-relaxed text-base-content/75">BOSSGUDO A.R.C. AQUA FARM provides Australian Red Claw crayfish supply, pond setup assistance, training, and after-sales support. The farm aims to help customers understand the basics of raising crayfish and setting up suitable ponds.</p><p class="mt-3 leading-relaxed text-base-content/75">Use the booking page to book a pond service or schedule a farm visit.</p><div class="mt-6 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section><h2 class="section-title mt-12">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
+  const overview = `<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2" aria-labelledby="about-overview-title"><img src="/images/aquaculture-ponds.jpg" alt="Aerated aquaculture ponds with a farm building beside them" class="h-60 w-full object-cover sm:h-72 lg:h-full" width="1280" height="720"><div class="p-6 sm:p-10"><p class="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">${icon("map-pin")}General Trias, Cavite</p><p class="eyebrow mt-5">Overview</p><h2 id="about-overview-title" class="section-title mt-1">Australian Redclaw Crayfish Farming Initiative</h2><p class="mt-4 leading-relaxed text-base-content/75">The Australian Redclaw Crayfish (ARC) (<em>Cherax quadricarinatus</em>) farming initiative represents a high-potential aquaculture enterprise in the Philippines focused on sustainable seedstock production, hatchery management, and commercial grow-out operations.</p><p class="mt-3 leading-relaxed text-base-content/75">Based in General Trias, Cavite, BOSSGUDO A.R.C. AQUA FARM addresses the growing domestic and international demand for premium, high-protein freshwater crustaceans.</p><ul class="mt-6 grid gap-3 border-t border-base-300 pt-6 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3" aria-label="Focus areas">${focusMarkup}</ul><div class="mt-7 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section>`;
+  const objectivesSection = `<section class="mt-14 sm:mt-16" aria-labelledby="about-objectives-title">${aboutHeading("about-objectives-title", "Core objectives & vision", "What the initiative works toward")}<div class="mt-6 grid gap-4 md:grid-cols-3">${objectiveMarkup}</div></section>`;
+  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Australian Redclaw Crayfish farming in General Trias, Cavite, Philippines.")}${overview}${objectivesSection}<h2 class="section-title mt-14 sm:mt-16">What the farm offers</h2><div class="mt-6 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
 }
 /* Receipt preview for admins. The file is fetched from the admin-protected
    receipt endpoint with the session cookie and shown through a temporary
