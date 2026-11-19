@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { getLogoutCancelRedirect } from "~/utils/logout-navigation";
 
+useHead({ title: "Log Out | BOSSGUDO A.R.C. AQUA FARM" });
+
 const route = useRoute();
 const { user } = useAuth();
 const { logout, isLoggingOut } = useLogout();
@@ -41,9 +43,9 @@ onMounted(() => cancelButton.value?.focus());
 </script>
 
 <template>
-  <div class="modal-backdrop logout-confirmation-backdrop">
+  <div class="fixed inset-0 z-[80] grid place-items-center bg-neutral/60 p-4 backdrop-blur-sm">
     <section
-      class="modal logout-confirmation"
+      class="w-full max-w-sm rounded-box bg-base-100 p-6 shadow-2xl"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="logout-title"
@@ -52,19 +54,19 @@ onMounted(() => cancelButton.value?.focus());
       @keydown.esc.prevent="cancelLogout"
       @keydown.tab="trapDialogFocus"
     >
-      <header class="modal-head">
-        <h1 id="logout-title">Confirm Logout</h1>
-      </header>
-      <div class="modal-body">
-        <p id="logout-message">Are you sure you want to log out of your account?</p>
-        <output v-if="errorMessage" class="form-feedback show" role="alert" aria-live="assertive">
-          {{ errorMessage }}
-        </output>
-      </div>
-      <footer class="modal-foot">
+      <span class="grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
+        <AppIcon name="log-out" size="size-6" />
+      </span>
+      <h1 id="logout-title" class="mt-4 text-xl font-semibold">Confirm logout</h1>
+      <p id="logout-message" class="mt-2 text-sm text-base-content/70">Are you sure you want to log out of your account?</p>
+      <output v-if="errorMessage" class="alert alert-error alert-soft mt-4 text-sm" role="alert" aria-live="assertive">
+        <AppIcon name="circle-alert" size="size-4" />
+        <span>{{ errorMessage }}</span>
+      </output>
+      <div class="mt-6 flex justify-end gap-2">
         <button
           ref="cancelButton"
-          class="secondary small logout-action"
+          class="btn btn-ghost"
           type="button"
           :disabled="isLoggingOut"
           @click="cancelLogout"
@@ -73,14 +75,15 @@ onMounted(() => cancelButton.value?.focus());
         </button>
         <button
           ref="confirmButton"
-          class="primary small logout-action"
+          class="btn btn-primary"
           type="button"
           :disabled="isLoggingOut"
           @click="confirmLogout"
         >
+          <span v-if="isLoggingOut" class="loading loading-spinner loading-sm" aria-hidden="true" />
           {{ isLoggingOut ? "Logging out…" : "Log Out" }}
         </button>
-      </footer>
+      </div>
     </section>
   </div>
 </template>

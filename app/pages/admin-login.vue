@@ -9,7 +9,6 @@ useHead({ title: "Admin Login | BOSSGUDO A.R.C. AQUA FARM" });
 
 const email = ref("");
 const password = ref("");
-const showPassword = ref(false);
 const errorMessage = ref("");
 const pending = ref(false);
 const { loginAdmin } = useAuth();
@@ -49,72 +48,61 @@ async function submit() {
 </script>
 
 <template>
-  <main class="login-shell admin-login-shell">
-    <section class="login-visual" aria-label="Boss Gudo administrator portal">
-      <div class="login-visual-content">
-        <div class="brand-chip">
-          <img class="brand-mark" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
-          <div>
-            <strong>BOSSGUDO</strong>
-            <small>A.R.C. AQUA FARM</small>
-          </div>
+  <AuthLayout
+    variant="admin"
+    label="Administrator login form"
+    eyebrow="Administrator portal"
+    heading="Farm operations, in one place."
+    copy="A dedicated sign-in page for BOSSGUDO administrators to manage bookings, payments, visits, the calendar and the package catalog."
+    :benefits="['Verify GCash payments', 'Manage bookings and visits', 'Maintain packages and FAQs']"
+  >
+    <div class="mb-6">
+      <span class="badge badge-neutral badge-sm mb-3 gap-1">
+        <AppIcon name="shield-check" size="size-3" />
+        Admin
+      </span>
+      <h1 class="text-2xl font-semibold tracking-tight">Admin login</h1>
+      <p class="mt-1 text-sm text-base-content/65">Sign in with your administrator account.</p>
+    </div>
+
+    <form class="space-y-4" novalidate @submit.prevent="submit">
+      <div>
+        <label for="admin-email" class="mb-1.5 block text-sm font-medium">Email address</label>
+        <div class="input w-full">
+          <AppIcon name="mail" size="size-4 text-base-content/40" />
+          <input id="admin-email" v-model="email" class="grow" type="email" autocomplete="username" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
         </div>
-
-        <p class="eyebrow login-eyebrow">Administrator portal</p>
-        <h1>Farm operations, in one place.</h1>
-        <p class="login-visual-copy">
-          A dedicated sign-in page for BOSSGUDO administrators.
-        </p>
       </div>
-    </section>
 
-    <section class="login-panel" aria-label="Administrator login form">
-      <div class="login-card">
-        <div class="login-card-header">
-          <h2>Admin Login</h2>
-        </div>
-
-        <form novalidate @submit.prevent="submit">
-          <div class="field">
-            <label for="admin-email">Email address</label>
-            <input id="admin-email" v-model="email" type="email" autocomplete="username" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
-          </div>
-
-          <div class="field">
-            <label for="admin-password">Password</label>
-            <div class="password-input-wrap">
-              <input
-                id="admin-password"
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="••••••••"
-                required
-                :disabled="pending"
-                @input="errorMessage = ''"
-              >
-              <button
-                class="password-toggle"
-                type="button"
-                :disabled="pending"
-                :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                @click="showPassword = !showPassword"
-              >
-                {{ showPassword ? "Hide" : "Show" }}
-              </button>
-            </div>
-          </div>
-
-          <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
-            {{ pending ? "Signing in..." : "Log In" }}
-          </button>
-          <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>
-        </form>
-
-        <p class="auth-card-footer recovery-login-link">
-          <NuxtLink to="/">Return to the main website</NuxtLink>
-        </p>
+      <div>
+        <label for="admin-password" class="mb-1.5 block text-sm font-medium">Password</label>
+        <PasswordInput
+          id="admin-password"
+          v-model="password"
+          autocomplete="current-password"
+          placeholder="Enter your password"
+          required
+          :disabled="pending"
+          @input="errorMessage = ''"
+        />
       </div>
-    </section>
-  </main>
+
+      <output v-if="errorMessage" class="alert alert-error alert-soft text-sm" role="alert" aria-live="polite">
+        <AppIcon name="circle-alert" size="size-4" />
+        <span>{{ errorMessage }}</span>
+      </output>
+
+      <button class="btn btn-neutral w-full" type="submit" :disabled="pending" :aria-busy="pending">
+        <span v-if="pending" class="loading loading-spinner loading-sm" aria-hidden="true" />
+        {{ pending ? "Signing in..." : "Log In" }}
+      </button>
+    </form>
+
+    <p class="mt-6 border-t border-base-300 pt-5 text-center text-sm">
+      <NuxtLink to="/" class="link link-hover inline-flex items-center gap-1 text-base-content/70">
+        <AppIcon name="arrow-left" size="size-4" />
+        Return to the main website
+      </NuxtLink>
+    </p>
+  </AuthLayout>
 </template>

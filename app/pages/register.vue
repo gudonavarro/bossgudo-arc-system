@@ -9,14 +9,13 @@ import {
 } from "~/utils/registration";
 
 definePageMeta({ middleware: ["guest"] });
+useHead({ title: "Create an Account | BOSSGUDO A.R.C. AQUA FARM" });
 
 const route = useRoute();
 const form = reactive({ firstName: "", lastName: "", email: "", phoneNumber: "", password: "", confirmPassword: "" });
 const feedback = ref("");
 const fieldErrors = reactive<RegistrationFieldErrors>({});
 const pending = ref(false);
-const showPassword = ref(false);
-const showConfirmPassword = ref(false);
 const { showToast } = useToast();
 
 function getSafeNextPath() {
@@ -100,94 +99,60 @@ function clearFieldError(field: RegistrationField) {
 </script>
 
 <template>
-  <main class="register-shell">
-    <section class="login-visual" aria-label="Boss Gudo farm preview">
-      <div class="login-visual-content">
-        <div class="brand-chip">
-          <img class="brand-mark" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
-          <div>
-            <strong>BOSSGUDO</strong>
-            <small>A.R.C. AQUA FARM</small>
-          </div>
+  <AuthLayout with-header label="Create account form">
+    <div class="mb-6">
+      <h1 class="text-2xl font-semibold tracking-tight">Create account</h1>
+      <p class="mt-1 text-sm text-base-content/65">Register to submit and track your bookings.</p>
+    </div>
+
+    <form class="space-y-4" novalidate @submit.prevent="submit">
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label for="firstName" class="mb-1.5 block text-sm font-medium">First name</label>
+          <input id="firstName" v-model="form.firstName" class="input w-full" :class="{ 'input-error': fieldErrors.firstName }" autocomplete="given-name" maxlength="80" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.firstName)" :aria-describedby="fieldErrors.firstName ? 'firstName-error' : undefined" @input="clearFieldError('firstName')">
+          <p v-if="fieldErrors.firstName" id="firstName-error" class="mt-1 text-xs text-error">{{ fieldErrors.firstName }}</p>
         </div>
-
-        <p class="eyebrow login-eyebrow">Sustainable aquaculture support</p>
-        <h1>Welcome to Boss Gudo.</h1>
-        <p class="login-visual-copy">
-          From pond packages to farm visits, we help growers build healthy, productive Australian Red Claw systems with practical support at every stage.
-        </p>
-
-        <ul class="login-benefits" aria-label="Business highlights">
-          <li>Pond packages and custom design</li>
-          <li>Farm guidance and setup support</li>
-          <li>Track services and bookings</li>
-        </ul>
+        <div>
+          <label for="lastName" class="mb-1.5 block text-sm font-medium">Last name</label>
+          <input id="lastName" v-model="form.lastName" class="input w-full" :class="{ 'input-error': fieldErrors.lastName }" autocomplete="family-name" maxlength="80" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.lastName)" :aria-describedby="fieldErrors.lastName ? 'lastName-error' : undefined" @input="clearFieldError('lastName')">
+          <p v-if="fieldErrors.lastName" id="lastName-error" class="mt-1 text-xs text-error">{{ fieldErrors.lastName }}</p>
+        </div>
       </div>
-    </section>
-    <section class="register-panel" aria-label="Create account form">
-      <section class="panel auth-card register-card">
-        <h1 class="page-title">Create Account</h1>
-        <form novalidate @submit.prevent="submit">
-          <div class="field">
-            <label for="firstName">FIRST NAME</label>
-            <input id="firstName" v-model="form.firstName" autocomplete="given-name" maxlength="80" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.firstName)" :aria-describedby="fieldErrors.firstName ? 'firstName-error' : undefined" @input="clearFieldError('firstName')">
-            <small v-if="fieldErrors.firstName" id="firstName-error" class="field-error show">{{ fieldErrors.firstName }}</small>
-          </div>
-          <div class="field">
-            <label for="lastName">LAST NAME</label>
-            <input id="lastName" v-model="form.lastName" autocomplete="family-name" maxlength="80" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.lastName)" :aria-describedby="fieldErrors.lastName ? 'lastName-error' : undefined" @input="clearFieldError('lastName')">
-            <small v-if="fieldErrors.lastName" id="lastName-error" class="field-error show">{{ fieldErrors.lastName }}</small>
-          </div>
-          <div class="field">
-            <label for="email">EMAIL ADDRESS</label>
-            <input id="email" v-model="form.email" type="email" autocomplete="email" maxlength="254" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.email)" :aria-describedby="fieldErrors.email ? 'email-error' : undefined" @input="clearFieldError('email')">
-            <small v-if="fieldErrors.email" id="email-error" class="field-error show">{{ fieldErrors.email }}</small>
-          </div>
-          <div class="field">
-            <label for="phoneNumber">PHONE NUMBER</label>
-            <input id="phoneNumber" v-model="form.phoneNumber" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.phoneNumber)" :aria-describedby="fieldErrors.phoneNumber ? 'phoneNumber-error' : undefined" @input="clearFieldError('phoneNumber')">
-            <small v-if="fieldErrors.phoneNumber" id="phoneNumber-error" class="field-error show">{{ fieldErrors.phoneNumber }}</small>
-          </div>
-          <div class="field">
-            <label for="password">PASSWORD</label>
-            <div class="register-password-wrap">
-              <input id="password" v-model="form.password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.password)" :aria-describedby="fieldErrors.password ? 'password-error' : undefined" @input="clearFieldError('password')">
-              <button
-                class="register-password-toggle"
-                type="button"
-                :disabled="pending"
-                :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                @click="showPassword = !showPassword"
-              >
-                {{ showPassword ? "Hide" : "Show" }}
-              </button>
-            </div>
-            <small v-if="fieldErrors.password" id="password-error" class="field-error show">{{ fieldErrors.password }}</small>
-          </div>
-          <div class="field">
-            <label for="confirmPassword">CONFIRM PASSWORD</label>
-            <div class="register-password-wrap">
-              <input id="confirmPassword" v-model="form.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" autocomplete="new-password" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.confirmPassword)" :aria-describedby="fieldErrors.confirmPassword ? 'confirmPassword-error' : undefined" @input="clearFieldError('confirmPassword')">
-              <button
-                class="register-password-toggle"
-                type="button"
-                :disabled="pending"
-                :aria-label="showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'"
-                @click="showConfirmPassword = !showConfirmPassword"
-              >
-                {{ showConfirmPassword ? "Hide" : "Show" }}
-              </button>
-            </div>
-            <small v-if="fieldErrors.confirmPassword" id="confirmPassword-error" class="field-error show">{{ fieldErrors.confirmPassword }}</small>
-          </div>
-          <button class="primary register-submit" type="submit" :disabled="pending" :aria-busy="pending">{{ pending ? "Creating..." : "Create Account" }}</button>
-          <output v-if="feedback" class="form-feedback show" aria-live="polite">{{ feedback }}</output>
-        </form>
-        <p class="auth-card-footer register-login-link">
-          Already have an account?
-          <NuxtLink :to="loginTarget">Login</NuxtLink>
-        </p>
-      </section>
-    </section>
-  </main>
+      <div>
+        <label for="email" class="mb-1.5 block text-sm font-medium">Email address</label>
+        <input id="email" v-model="form.email" class="input w-full" :class="{ 'input-error': fieldErrors.email }" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.email)" :aria-describedby="fieldErrors.email ? 'email-error' : undefined" @input="clearFieldError('email')">
+        <p v-if="fieldErrors.email" id="email-error" class="mt-1 text-xs text-error">{{ fieldErrors.email }}</p>
+      </div>
+      <div>
+        <label for="phoneNumber" class="mb-1.5 block text-sm font-medium">Phone number</label>
+        <input id="phoneNumber" v-model="form.phoneNumber" class="input w-full" :class="{ 'input-error': fieldErrors.phoneNumber }" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="09XX XXX XXXX" required :disabled="pending" :aria-invalid="Boolean(fieldErrors.phoneNumber)" :aria-describedby="fieldErrors.phoneNumber ? 'phoneNumber-error' : undefined" @input="clearFieldError('phoneNumber')">
+        <p v-if="fieldErrors.phoneNumber" id="phoneNumber-error" class="mt-1 text-xs text-error">{{ fieldErrors.phoneNumber }}</p>
+      </div>
+      <div>
+        <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
+        <PasswordInput id="password" v-model="form.password" autocomplete="new-password" required :disabled="pending" :invalid="Boolean(fieldErrors.password)" :aria-describedby="fieldErrors.password ? 'password-error' : undefined" @input="clearFieldError('password')" />
+        <p v-if="fieldErrors.password" id="password-error" class="mt-1 text-xs text-error">{{ fieldErrors.password }}</p>
+      </div>
+      <div>
+        <label for="confirmPassword" class="mb-1.5 block text-sm font-medium">Confirm password</label>
+        <PasswordInput id="confirmPassword" v-model="form.confirmPassword" toggle-label="confirm password" autocomplete="new-password" required :disabled="pending" :invalid="Boolean(fieldErrors.confirmPassword)" :aria-describedby="fieldErrors.confirmPassword ? 'confirmPassword-error' : undefined" @input="clearFieldError('confirmPassword')" />
+        <p v-if="fieldErrors.confirmPassword" id="confirmPassword-error" class="mt-1 text-xs text-error">{{ fieldErrors.confirmPassword }}</p>
+      </div>
+
+      <output v-if="feedback" class="alert alert-error alert-soft text-sm" aria-live="polite">
+        <AppIcon name="circle-alert" size="size-4" />
+        <span>{{ feedback }}</span>
+      </output>
+
+      <button class="btn btn-primary w-full" type="submit" :disabled="pending" :aria-busy="pending">
+        <span v-if="pending" class="loading loading-spinner loading-sm" aria-hidden="true" />
+        {{ pending ? "Creating..." : "Create Account" }}
+      </button>
+    </form>
+
+    <p class="mt-6 border-t border-base-300 pt-5 text-center text-sm text-base-content/70">
+      Already have an account?
+      <NuxtLink :to="loginTarget" class="link link-primary font-semibold">Log in</NuxtLink>
+    </p>
+  </AuthLayout>
 </template>

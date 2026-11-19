@@ -16,8 +16,7 @@
 
 @plugin "daisyui" {
   themes: false;
-  exclude: breadcrumbs, calendar, label, modal, stat, status, steps, timeline,
-    toast;
+  exclude: breadcrumbs, calendar, label, modal, stat, status, timeline, toast;
 }
 
 /* Customer website: welcoming, rounded, generous spacing. */
