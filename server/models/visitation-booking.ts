@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+import { Schema, type Connection, type Model, type Types } from "mongoose";
 
-const VISIT_TYPES = Object.freeze(["Regular", "Special"]);
+const VISIT_TYPES = Object.freeze(["Regular", "Special"] as const);
 const VISITATION_STATUSES = Object.freeze([
   "Booked",
   "Pending Review",
@@ -8,22 +8,51 @@ const VISITATION_STATUSES = Object.freeze([
   "Declined",
   "Completed",
   "Cancelled",
-]);
+] as const);
 
-const visitationStatusHistorySchema = new mongoose.Schema(
+export type VisitType = (typeof VISIT_TYPES)[number];
+export type VisitationStatus = (typeof VISITATION_STATUSES)[number];
+
+export interface VisitationStatusHistoryEntry {
+  status: VisitationStatus;
+  changedBy?: Types.ObjectId;
+  changedAt: Date;
+  note?: string;
+}
+
+export interface VisitationBooking {
+  customer_id: Types.ObjectId;
+  reference: string;
+  visitDate: Date;
+  visitType: VisitType;
+  specialRequestReason?: string;
+  visitorCount: number;
+  farmName: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  status: VisitationStatus;
+  reviewedBy?: Types.ObjectId;
+  reviewedAt?: Date;
+  statusHistory: VisitationStatusHistoryEntry[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const visitationStatusHistorySchema = new Schema<VisitationStatusHistoryEntry>(
   {
     status: { type: String, enum: VISITATION_STATUSES, required: true },
-    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    changedBy: { type: Schema.Types.ObjectId, ref: "User" },
     changedAt: { type: Date, required: true, default: Date.now },
     note: { type: String, trim: true, maxlength: 500 },
   },
   { _id: false },
 );
 
-const visitationBookingSchema = new mongoose.Schema(
+const visitationBookingSchema = new Schema<VisitationBooking>(
   {
     customer_id: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
@@ -34,7 +63,7 @@ const visitationBookingSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 1000,
-      required() {
+      required(this: VisitationBooking) {
         return this.visitType === "Special";
       },
     },
@@ -59,7 +88,7 @@ const visitationBookingSchema = new mongoose.Schema(
     },
     customerPhone: { type: String, required: true, trim: true, maxlength: 20 },
     status: { type: String, enum: VISITATION_STATUSES, required: true },
-    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
     reviewedAt: { type: Date },
     statusHistory: { type: [visitationStatusHistorySchema], default: [] },
   },
@@ -71,10 +100,10 @@ visitationBookingSchema.index({ customer_id: 1, createdAt: -1 });
 visitationBookingSchema.index({ status: 1, visitDate: 1 });
 visitationBookingSchema.index({ visitDate: 1 });
 
-function getVisitationBookingModel(connection) {
+function getVisitationBookingModel(connection: Connection): Model<VisitationBooking> {
   return (
-    connection.models.VisitationBooking ??
-    connection.model(
+    (connection.models.VisitationBooking as Model<VisitationBooking> | undefined) ??
+    connection.model<VisitationBooking>(
       "VisitationBooking",
       visitationBookingSchema,
       "visitation_bookings",

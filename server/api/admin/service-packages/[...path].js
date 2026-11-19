@@ -2,7 +2,7 @@ import { defineEventHandler, getRequestIP, setResponseStatus } from "h3";
 import express from "express";
 import { getSessionModel } from "../../../models/session";
 import { getUserModel } from "../../../models/user";
-import { getServicePackageModel } from "../../../models/service-package.js";
+import { getServicePackageModel } from "../../../models/service-package";
 import { createAuthCollections } from "../../../utils/auth-collections";
 import { connectMongoose } from "../../../utils/mongoose";
 import { createAdminServicePackageRouter } from "../../../utils/admin-service-package-router.js";

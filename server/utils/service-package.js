@@ -4,7 +4,7 @@ import {
   PACKAGE_STATUSES,
   RESERVED_PACKAGE_NAMES,
   normalizePackageName,
-} from "../models/service-package.js";
+} from "../models/service-package";
 
 // "custom" is the storefront's identifier for Custom Pond Design.
 const RESERVED_PACKAGE_CODES = new Set(["custom"]);

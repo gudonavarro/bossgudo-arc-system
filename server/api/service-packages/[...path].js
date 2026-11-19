@@ -1,6 +1,6 @@
 import { defineEventHandler, setResponseStatus } from "h3";
 import express from "express";
-import { getServicePackageModel } from "../../models/service-package.js";
+import { getServicePackageModel } from "../../models/service-package";
 import { connectMongoose } from "../../utils/mongoose";
 import { createServicePackageRouter } from "../../utils/service-package-router.js";
 

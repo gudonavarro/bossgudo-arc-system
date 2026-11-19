@@ -4,7 +4,7 @@ import {
   BOOKING_STATUSES,
   PAYMENT_STATUSES,
   SERVICE_TYPES,
-} from "../models/service-booking.js";
+} from "../models/service-booking";
 import { pipeline } from "node:stream/promises";
 import { depositFor, fromCents, parseAmountInput, toCents } from "./money";
 import {

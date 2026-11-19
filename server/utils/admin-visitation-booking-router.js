@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import {
   VISITATION_STATUSES,
   VISIT_TYPES,
-} from "../models/visitation-booking.js";
+} from "../models/visitation-booking";
 import {
   HttpError,
   OBJECT_ID_PATTERN,

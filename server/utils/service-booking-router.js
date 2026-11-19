@@ -10,14 +10,14 @@ import {
   normalizeReceiptFileName,
   storeReceipt,
 } from "./receipt-storage.js";
-import { PAYMENT_TARGETS } from "../models/payment.js";
+import { PAYMENT_TARGETS } from "../models/payment";
 import {
   CUSTOM_POND_PRICING,
   calculateCustomPondCents,
 } from "./service-catalog.js";
-import { PACKAGE_CODE_PATTERN } from "../models/service-package.js";
+import { PACKAGE_CODE_PATTERN } from "../models/service-package";
 import { packageSnapshot } from "./service-package.js";
-import { BOOKING_STATUSES } from "../models/service-booking.js";
+import { BOOKING_STATUSES } from "../models/service-booking";
 import {
   HttpError,
   OBJECT_ID_PATTERN,

@@ -4,7 +4,7 @@ import {
   PACKAGE_CODE_PATTERN,
   PACKAGE_STATUSES,
   normalizePackageName,
-} from "../models/service-package.js";
+} from "../models/service-package";
 import {
   HttpError,
   escapeRegExp,

@@ -1,16 +1,36 @@
-import mongoose from "mongoose";
-import { toCents } from "../utils/money";
+import { Schema, type Connection, type Model, type Types } from "mongoose";
+import { toCents, type MoneyValue } from "../utils/money";
 
-const PAYMENT_TARGETS = Object.freeze(["deposit", "balance"]);
-const PAYMENT_RECORD_STATUSES = Object.freeze(["Pending", "Verified", "Rejected"]);
+const PAYMENT_TARGETS = Object.freeze(["deposit", "balance"] as const);
+const PAYMENT_RECORD_STATUSES = Object.freeze(["Pending", "Verified", "Rejected"] as const);
+
+export type PaymentTarget = (typeof PAYMENT_TARGETS)[number];
+export type PaymentRecordStatus = (typeof PAYMENT_RECORD_STATUSES)[number];
+
+export interface Payment {
+  service_booking_id: Types.ObjectId;
+  paymentTarget: PaymentTarget;
+  amount: Types.Decimal128;
+  expectedAmount: Types.Decimal128;
+  gcashReference: string;
+  receiptFileName: string;
+  receiptStorageKey: string;
+  status: PaymentRecordStatus;
+  submittedAt: Date;
+  verifiedBy?: Types.ObjectId;
+  verifiedAt?: Date;
+  rejectionReason?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 const positiveMoney = {
-  type: mongoose.Schema.Types.Decimal128,
+  type: Schema.Types.Decimal128,
   required: true,
   validate: {
-    validator(value) {
+    validator(value: unknown) {
       try {
-        return toCents(value) > 0;
+        return toCents(value as MoneyValue) > 0;
       } catch {
         return false;
       }
@@ -19,10 +39,10 @@ const positiveMoney = {
   },
 };
 
-const paymentSchema = new mongoose.Schema(
+const paymentSchema = new Schema<Payment>(
   {
     service_booking_id: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "ServiceBooking",
       required: true,
     },
@@ -50,7 +70,7 @@ const paymentSchema = new mongoose.Schema(
       default: "Pending",
     },
     submittedAt: { type: Date, required: true, default: Date.now },
-    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    verifiedBy: { type: Schema.Types.ObjectId, ref: "User" },
     verifiedAt: { type: Date },
     rejectionReason: { type: String, trim: true, maxlength: 500 },
   },
@@ -71,10 +91,10 @@ paymentSchema.index(
   },
 );
 
-function getPaymentModel(connection) {
+function getPaymentModel(connection: Connection): Model<Payment> {
   return (
-    connection.models.Payment ??
-    connection.model("Payment", paymentSchema, "payments")
+    (connection.models.Payment as Model<Payment> | undefined) ??
+    connection.model<Payment>("Payment", paymentSchema, "payments")
   );
 }
 

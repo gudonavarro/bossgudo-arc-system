@@ -1,7 +1,7 @@
-import mongoose from "mongoose";
+import { Schema, Types, type Connection, type Model } from "mongoose";
 import { isNonNegativeDecimal, toCents } from "../utils/money";
 
-const SERVICE_TYPES = Object.freeze(["Pond Package", "Custom Pond Design"]);
+const SERVICE_TYPES = Object.freeze(["Pond Package", "Custom Pond Design"] as const);
 const BOOKING_STATUSES = Object.freeze([
   "Pending",
   "Approved",
@@ -10,17 +10,71 @@ const BOOKING_STATUSES = Object.freeze([
   "Ongoing",
   "Completed",
   "Cancelled",
-]);
+] as const);
 const PAYMENT_STATUSES = Object.freeze([
   "Unpaid",
   "Verification Pending",
   "Partially Paid",
   "Paid",
   "Rejected",
-]);
+] as const);
 
-const money = (options = {}) => ({
-  type: mongoose.Schema.Types.Decimal128,
+export type ServiceType = (typeof SERVICE_TYPES)[number];
+export type BookingStatus = (typeof BOOKING_STATUSES)[number];
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export interface StatusHistoryEntry {
+  status: BookingStatus;
+  changedBy?: Types.ObjectId;
+  changedAt: Date;
+  note?: string;
+}
+
+/**
+ * Copy of the catalog package at booking time. Later catalog edits or
+ * deactivation never change it. Custom pond designs have no package.
+ */
+export interface PackageSnapshot {
+  code: string;
+  name: string;
+  description: string;
+  category: string;
+  layers: string;
+  dimensions: string;
+  inclusions: string[];
+  price: Types.Decimal128;
+}
+
+export interface ServiceBooking {
+  customer_id: Types.ObjectId;
+  reference: string;
+  serviceType: ServiceType;
+  packageSnapshot: PackageSnapshot | null;
+  serviceDate: Date;
+  serviceLocation: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  notes: string;
+  customConfiguration: unknown;
+  customizationFee: Types.Decimal128;
+  deliveryFee: Types.Decimal128;
+  totalAmount: Types.Decimal128;
+  depositAmount: Types.Decimal128;
+  paidAmount: Types.Decimal128;
+  bookingStatus: BookingStatus;
+  paymentStatus: PaymentStatus;
+  deliveryFeeSetBy?: Types.ObjectId;
+  deliveryFeeSetAt?: Date;
+  statusHistory: StatusHistoryEntry[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const zeroAmount = () => Types.Decimal128.fromString("0.00");
+
+const money = (options: { required?: boolean; default?: () => Types.Decimal128 } = {}) => ({
+  type: Schema.Types.Decimal128,
   validate: {
     validator: isNonNegativeDecimal,
     message: "Monetary values must be non-negative.",
@@ -28,21 +82,17 @@ const money = (options = {}) => ({
   ...options,
 });
 
-const statusHistorySchema = new mongoose.Schema(
+const statusHistorySchema = new Schema<StatusHistoryEntry>(
   {
     status: { type: String, enum: BOOKING_STATUSES, required: true },
-    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    changedBy: { type: Schema.Types.ObjectId, ref: "User" },
     changedAt: { type: Date, required: true, default: Date.now },
     note: { type: String, trim: true, maxlength: 500 },
   },
   { _id: false },
 );
 
-/**
- * Copy of the catalog package at booking time. Later catalog edits or
- * deactivation never change it. Custom pond designs have no package.
- */
-const packageSnapshotSchema = new mongoose.Schema(
+const packageSnapshotSchema = new Schema<PackageSnapshot>(
   {
     code: { type: String, required: true, trim: true },
     name: { type: String, required: true, trim: true },
@@ -56,10 +106,10 @@ const packageSnapshotSchema = new mongoose.Schema(
   { _id: false },
 );
 
-const serviceBookingSchema = new mongoose.Schema(
+const serviceBookingSchema = new Schema<ServiceBooking>(
   {
     customer_id: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
@@ -84,12 +134,12 @@ const serviceBookingSchema = new mongoose.Schema(
     },
     customerPhone: { type: String, required: true, trim: true, maxlength: 20 },
     notes: { type: String, trim: true, maxlength: 1000, default: "" },
-    customConfiguration: { type: mongoose.Schema.Types.Mixed, default: null },
-    customizationFee: money({ default: () => mongoose.Types.Decimal128.fromString("0.00") }),
-    deliveryFee: money({ default: () => mongoose.Types.Decimal128.fromString("0.00") }),
+    customConfiguration: { type: Schema.Types.Mixed, default: null },
+    customizationFee: money({ default: zeroAmount }),
+    deliveryFee: money({ default: zeroAmount }),
     totalAmount: money({ required: true }),
     depositAmount: money({ required: true }),
-    paidAmount: money({ default: () => mongoose.Types.Decimal128.fromString("0.00") }),
+    paidAmount: money({ default: zeroAmount }),
     bookingStatus: {
       type: String,
       enum: BOOKING_STATUSES,
@@ -102,7 +152,7 @@ const serviceBookingSchema = new mongoose.Schema(
       required: true,
       default: "Unpaid",
     },
-    deliveryFeeSetBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    deliveryFeeSetBy: { type: Schema.Types.ObjectId, ref: "User" },
     deliveryFeeSetAt: { type: Date },
     statusHistory: { type: [statusHistorySchema], default: [] },
   },
@@ -142,10 +192,10 @@ serviceBookingSchema.pre("validate", function () {
   }
 });
 
-function getServiceBookingModel(connection) {
+function getServiceBookingModel(connection: Connection): Model<ServiceBooking> {
   return (
-    connection.models.ServiceBooking ??
-    connection.model("ServiceBooking", serviceBookingSchema, "service_bookings")
+    (connection.models.ServiceBooking as Model<ServiceBooking> | undefined) ??
+    connection.model<ServiceBooking>("ServiceBooking", serviceBookingSchema, "service_bookings")
   );
 }
 
