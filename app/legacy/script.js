@@ -1438,31 +1438,6 @@ async function submitVisit() {
     showFormError(error instanceof Error ? error.message : "Unable to submit your visitation.");
   }
 }
-function updateVisit(ref, status) {
-  const v = visits.find((x) => x.ref === ref);
-  if (!v) return;
-  const transitions = {
-    Approved: {
-      from: ["Pending Review"],
-      message: "Special date approved. The customer can see it in My Bookings.",
-    },
-    Declined: {
-      from: ["Pending Review"],
-      confirmation: "Decline this special date request?",
-    },
-    Completed: { from: ["Booked", "Approved"] },
-    Cancelled: {
-      from: ["Booked", "Approved"],
-      confirmation: "Cancel this visitation?",
-    },
-  };
-  const transition = transitions[status];
-  if (!transition?.from.includes(v.status)) return;
-  if (transition.confirmation && !confirm(transition.confirmation)) return;
-  v.status = status;
-  if (transition.message) alert(transition.message);
-  render();
-}
 function adminCalendar() {
   const kind = calKind;
   const closedDates = [...blockedDates[kind]].sort((a, b) =>
@@ -1956,10 +1931,11 @@ async function submitPaymentProof(ref, target) {
    Booking, payment and visitation tabs read real records from the admin
    endpoints. Every change goes through the backend, then the data reloads. */
 let adminServiceBookings = [],
+  adminVisitations = [],
   adminDataState = "idle",
   adminDataError = "",
   adminActionPending = false;
-const ADMIN_DATA_TABS = new Set(["bookings"]);
+const ADMIN_DATA_TABS = new Set(["bookings", "visits", "special"]);
 
 async function fetchAllPages(path, key) {
   const items = [];
@@ -2006,8 +1982,12 @@ async function loadAdminData() {
   adminDataState = "loading";
   adminDataError = "";
   try {
-    const bookingRecords = await fetchAllPages("/api/admin/service-bookings", "bookings");
+    const [bookingRecords, visitRecords] = await Promise.all([
+      fetchAllPages("/api/admin/service-bookings", "bookings"),
+      fetchAllPages("/api/admin/visitation-bookings", "visits"),
+    ]);
     adminServiceBookings = bookingRecords.map(toAdminBooking);
+    adminVisitations = visitRecords.map(toAdminVisit);
     adminDataState = "loaded";
   } catch (error) {
     adminDataState = "error";
@@ -2022,6 +2002,27 @@ function reloadAdminData() {
 }
 function adminBookingByRef(ref) {
   return adminServiceBookings.find((x) => x.ref === ref) || null;
+}
+/** Maps an admin API visitation onto the fields the dashboard views use. */
+function toAdminVisit(server) {
+  const visit = toCustomerVisit(server);
+  const account =
+    server.customer_id && typeof server.customer_id === "object"
+      ? server.customer_id
+      : null;
+  visit.account = account
+    ? {
+        name: staffName(account),
+        email: account.email,
+        active: account.isActive !== false,
+      }
+    : null;
+  visit.reviewedAt = server.reviewedAt || null;
+  visit.reviewerName = staffName(server.reviewedBy);
+  return visit;
+}
+function adminVisitByRef(ref) {
+  return adminVisitations.find((x) => x.ref === ref) || null;
 }
 /** Loading or error panel for tabs that depend on booking records. */
 function adminDataStatusPanel() {
@@ -2085,7 +2086,7 @@ function adminCounts() {
     payments: bookings.filter(
       (b) => b.payment === "Pending Verification" && b.proof,
     ).length,
-    special: visits.filter(
+    special: adminVisitations.filter(
       (v) => v.type === "Special" && v.status === "Pending Review",
     ).length,
   };
@@ -2553,7 +2554,7 @@ function setVFilter(f) {
   render();
 }
 function adminVisits() {
-  const base = visits.filter(
+  const base = adminVisitations.filter(
       (v) =>
         !(
           v.type === "Special" &&
@@ -2571,7 +2572,7 @@ function adminVisits() {
   const rows = list.length
     ? list.map(visitTableRow).join("")
     : '<tr><td colspan="8" class="muted">No visitation bookings match.</td></tr>';
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Visitation Bookings</h3><p class="muted" style="margin:6px 0 0">Farm visits for 1–5 visitors on weekends, including approved special dates.</p></div><button class="primary" onclick="openVisitForm()">＋ Add visit</button></div><div class="toolbar"><div class="filters">${filters}</div></div><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Visitor</th><th>Farm</th><th>Visit date</th><th>Visitors</th><th>Type</th><th>Status</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Visitation Bookings</h3><p class="muted" style="margin:6px 0 0">Farm visits for 1–5 visitors on weekends, including approved special dates.</p></div></div><div class="toolbar"><div class="filters">${filters}</div></div><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Visitor</th><th>Farm</th><th>Visit date</th><th>Visitors</th><th>Type</th><th>Status</th><th>Manage</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function matchesVisitFilter(visit) {
   if (vFilter === "upcoming") {
@@ -2593,10 +2594,10 @@ function visitManageButtons(visit) {
   const statusActions = ["Booked", "Approved"].includes(visit.status)
     ? `<button class="primary small" onclick="updateVisit('${visit.ref}','Completed')">Mark completed</button><button class="danger small" onclick="updateVisit('${visit.ref}','Cancelled')">Cancel</button>`
     : "";
-  return `${statusActions}<button class="secondary small" onclick="openVisitForm('${visit.ref}')">Edit</button><button class="danger small" onclick="deleteVisit('${visit.ref}')">Delete</button>`;
+  return `<button class="secondary small" onclick="adminViewVisit('${visit.ref}')">View</button>${statusActions}`;
 }
 function adminSpecial() {
-  const list = visits.filter((v) => v.type === "Special"),
+  const list = adminVisitations.filter((v) => v.type === "Special"),
     pend = list.filter((v) => v.status === "Pending Review").length;
   const statusClass = pend ? "" : "green";
   const requests = list.length
@@ -2609,89 +2610,62 @@ function specialVisitCard(visit) {
     visit.status === "Pending Review"
       ? `<button class="primary" onclick="updateVisit('${visit.ref}','Approved')">Approve special date</button><button class="danger" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
       : "";
-  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${visit.ref} · Submitted ${safe(visit.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(visit.date, true)}</h3></div><span class="status ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div><div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${reviewActions}<button class="secondary" onclick="openVisitForm('${visit.ref}')">Edit</button><button class="danger" onclick="deleteVisit('${visit.ref}')">Delete</button></div></div>`;
+  const reviewed = visit.reviewedAt
+    ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(visit.reviewedAt))}${visit.reviewerName ? ` · ${safe(visit.reviewerName)}` : ""}</strong></div>`
+    : "";
+  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${visit.ref} · Submitted ${safe(visit.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(visit.date, true)}</h3></div><span class="status ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}<div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${reviewActions}<button class="secondary" onclick="adminViewVisit('${visit.ref}')">View</button></div></div>`;
 }
-function openVisitForm(ref) {
-  const v = ref ? visits.find((x) => x.ref === ref) : null;
-  if (ref && !v) return;
-  const body = visitFormBody(v);
-  openModal(
-    v ? "Edit visitation" : "Add visitation",
-    v ? v.ref : "Create a visit for a walk-in or phone booking",
-    body,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveVisit('${v ? v.ref : ""}')">${v ? "Save changes" : "Add visit"}</button>`,
+const VISIT_STATUS_PROMPTS = {
+  Approved: (ref) => `Approve special-date request ${ref}? The customer will see it as approved.`,
+  Declined: (ref) => `Decline special-date request ${ref}?`,
+  Completed: (ref) => `Mark visit ${ref} as completed?`,
+  Cancelled: (ref) => `Cancel visit ${ref}?`,
+};
+/** Changes a visitation status through the backend's allowed transitions. */
+async function updateVisit(ref, status) {
+  const visit = adminVisitByRef(ref);
+  const prompt = VISIT_STATUS_PROMPTS[status];
+  if (!visit || !prompt || adminActionPending) return;
+  if (!confirm(prompt(ref))) return;
+  await runAdminAction(
+    () =>
+      bookingApiRequest(`/api/admin/visitation-bookings/${encodeURIComponent(ref)}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    `Visit ${ref} is now ${status}.`,
   );
 }
-function visitFormBody(visit) {
-  const fields = [
-    fld("m_vname", "Visitor name", visit?.name, "text", 'list="custList"'),
-    fld("m_vphone", "Contact number", visit?.phone),
-    fld("m_vemail", "Email", visit?.email, "email"),
-    fld("m_vfarm", "Farm name (optional)", visit?.farm),
-    fld("m_vdate", "Visit date", visit?.date || "", "date"),
-    sel("m_vcount", "Number of visitors (max 5)", [1, 2, 3, 4, 5], visit?.visitors || 1),
-    sel("m_vtype", "Type", ["Regular", "Special"], visit?.type || "Regular"),
-    sel(
-      "m_vstatus",
-      "Status",
-      ["Booked", "Approved", "Pending Review", "Declined", "Completed", "Cancelled"],
-      visit?.status || "Booked",
-    ),
-  ].join("");
-  const customerOptions = customers
-    .map((customer) => `<option value="${safe(customer.name)}">`)
-    .join("");
-  const reason = safe(visit?.reason || "");
-  return `<div class="field-grid">${fields}</div><datalist id="custList">${customerOptions}</datalist><div class="field"><label for="m_vreason">Reason (for special dates)</label><input id="m_vreason" value="${reason}" maxlength="160"></div>`;
-}
-function saveVisit(ref) {
-  const name = V("m_vname"),
-    phone = V("m_vphone"),
-    email = V("m_vemail"),
-    date = V("m_vdate");
-  if (!name || !phone || !date) {
-    toast("Please enter name, contact number and date.");
-    return;
-  }
-  if (email && !document.getElementById("m_vemail")?.validity.valid) {
-    toast("Please enter a valid email address.");
-    return;
-  }
-  const o = {
-    name,
-    phone,
-    email,
-    farm: V("m_vfarm"),
-    date,
-    visitors: Math.min(5, Math.max(1, Number(V("m_vcount")) || 1)),
-    type: V("m_vtype"),
-    status: V("m_vstatus"),
-    reason: V("m_vreason"),
-  };
-  if (ref) {
-    Object.assign(
-      visits.find((x) => x.ref === ref),
-      o,
+async function adminViewVisit(ref) {
+  const close = '<button class="secondary" onclick="closeModal()">Close</button>';
+  openModal("Visitation details", safe(ref), '<p class="muted" aria-busy="true">Loading visitation…</p>', close);
+  try {
+    const { visit: server } = await bookingApiRequest(
+      `/api/admin/visitation-bookings/${encodeURIComponent(ref)}`,
     );
-    toast("Visit updated.");
-  } else {
-    o.ref = nextRef("VS-2026-", visits);
-    o.submittedAt = fmtDate(TODAY_ISO);
-    visits.unshift(o);
-    toast("Visit " + o.ref + " added.");
+    const v = toAdminVisit(server);
+    const account = v.account
+      ? `<div class="summary-line"><span>Customer account</span><strong>${safe(v.account.name)} · ${safe(v.account.email || "—")}${v.account.active ? "" : " (inactive)"}</strong></div>`
+      : "";
+    const reason = v.reason
+      ? `<div class="summary-line"><span>Reason for special date</span><strong>${safe(v.reason)}</strong></div>`
+      : "";
+    const reviewed = v.reviewedAt
+      ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(v.reviewedAt))}${v.reviewerName ? ` · ${safe(v.reviewerName)}` : ""}</strong></div>`
+      : "";
+    const history = (server.statusHistory || [])
+      .slice()
+      .reverse()
+      .map((entry) => {
+        const by = staffName(entry.changedBy);
+        return `<li>${safe(entry.status)}${entry.note ? ` · ${safe(entry.note)}` : ""}${by ? ` · by ${safe(by)}` : ""}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
+      })
+      .join("");
+    const body = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px"><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="status gray">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 style="margin:18px 0 0">Status updates</h4>${history ? `<ul class="timeline">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
+    openModal("Visitation details", safe(ref), body, close);
+  } catch (error) {
+    openModal("Visitation details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this visitation.")}</p>`, close);
   }
-  upsertCustomer({ name, phone, email });
-  closeModal();
-  render();
-}
-function deleteVisit(ref) {
-  const v = visits.find((x) => x.ref === ref);
-  if (!v) return;
-  if (!confirm("Permanently delete visit " + ref + " (" + v.name + ")?"))
-    return;
-  visits = visits.filter((x) => x.ref !== ref);
-  toast("Visit " + ref + " deleted.");
-  render();
 }
 
 /* ----- customers ----- */
