@@ -3,6 +3,7 @@ import { getUserModel } from "../models/user";
 import { getAvailableDateModel } from "../models/available-date.js";
 import { getPaymentModel } from "../models/payment.js";
 import { getServiceBookingModel } from "../models/service-booking.js";
+import { getServicePackageModel } from "../models/service-package.js";
 import { getVisitationBookingModel } from "../models/visitation-booking.js";
 import { closeMongo } from "../utils/mongodb";
 import { connectMongoose } from "../utils/mongoose";
@@ -21,6 +22,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     getPaymentModel(connection);
     getVisitationBookingModel(connection);
     getAvailableDateModel(connection);
+    getServicePackageModel(connection);
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     console.error("MongoDB connection failed:", errorName);
