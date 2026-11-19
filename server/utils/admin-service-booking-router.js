@@ -39,55 +39,78 @@ function parseCalendarDate(value) {
 }
 
 function escapeRegExp(text) {
-  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
-function buildAdminListFilter(query) {
+const ENUM_FILTERS = [
+  ["bookingStatus", BOOKING_STATUSES, "Invalid booking status."],
+  ["paymentStatus", PAYMENT_STATUSES, "Invalid payment status."],
+  ["serviceType", SERVICE_TYPES, "Invalid service type."],
+];
+
+function parseEnumFilters(query) {
   const filter = {};
-  const enumFilters = [
-    ["bookingStatus", BOOKING_STATUSES, "Invalid booking status."],
-    ["paymentStatus", PAYMENT_STATUSES, "Invalid payment status."],
-    ["serviceType", SERVICE_TYPES, "Invalid service type."],
-  ];
-  for (const [field, allowed, message] of enumFilters) {
+  for (const [field, allowed, message] of ENUM_FILTERS) {
     if (query[field] === undefined) continue;
     if (!allowed.includes(query[field])) return { error: message };
     filter[field] = query[field];
   }
+  return { value: filter };
+}
 
-  if (query.customerId !== undefined) {
-    if (typeof query.customerId !== "string" || !OBJECT_ID_PATTERN.test(query.customerId)) {
-      return { error: "Invalid customer id." };
-    }
-    filter.customer_id = query.customerId;
+function parseCustomerFilter({ customerId }) {
+  if (customerId === undefined) return { value: {} };
+  if (typeof customerId !== "string" || !OBJECT_ID_PATTERN.test(customerId)) {
+    return { error: "Invalid customer id." };
   }
+  return { value: { customer_id: customerId } };
+}
 
-  const serviceDate = {};
+function parseServiceDateFilter(query) {
+  const range = {};
   for (const [param, operator] of [["dateFrom", "$gte"], ["dateTo", "$lte"]]) {
     if (query[param] === undefined) continue;
     const date = parseCalendarDate(query[param]);
     if (!date) return { error: `${param} must be a valid YYYY-MM-DD date.` };
-    serviceDate[operator] = date;
+    range[operator] = date;
   }
-  if (serviceDate.$gte && serviceDate.$lte && serviceDate.$gte > serviceDate.$lte) {
+  if (range.$gte && range.$lte && range.$gte > range.$lte) {
     return { error: "dateFrom must not be after dateTo." };
   }
-  if (Object.keys(serviceDate).length > 0) filter.serviceDate = serviceDate;
+  return { value: Object.keys(range).length > 0 ? { serviceDate: range } : {} };
+}
 
-  if (query.search !== undefined) {
-    if (typeof query.search !== "string" || query.search.trim().length > MAX_SEARCH_LENGTH) {
-      return { error: `Search must be at most ${MAX_SEARCH_LENGTH} characters.` };
-    }
-    const search = query.search.trim();
-    if (search) {
-      const pattern = new RegExp(escapeRegExp(search), "i");
-      filter.$or = [
+function parseSearchFilter({ search }) {
+  if (search === undefined) return { value: {} };
+  if (typeof search !== "string" || search.trim().length > MAX_SEARCH_LENGTH) {
+    return { error: `Search must be at most ${MAX_SEARCH_LENGTH} characters.` };
+  }
+  const text = search.trim();
+  if (!text) return { value: {} };
+  const pattern = new RegExp(escapeRegExp(text), "i");
+  return {
+    value: {
+      $or: [
         { reference: pattern },
         { customerName: pattern },
         { customerEmail: pattern },
         { customerPhone: pattern },
-      ];
-    }
+      ],
+    },
+  };
+}
+
+function buildAdminListFilter(query) {
+  const filter = {};
+  for (const parse of [
+    parseEnumFilters,
+    parseCustomerFilter,
+    parseServiceDateFilter,
+    parseSearchFilter,
+  ]) {
+    const result = parse(query);
+    if (result.error) return result;
+    Object.assign(filter, result.value);
   }
   return { value: filter };
 }
