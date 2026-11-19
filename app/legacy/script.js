@@ -94,29 +94,36 @@ function toast(msg) {
   window._tt = setTimeout(() => t.classList.remove("show"), 3400);
 }
 function openModal(title, sub, body, foot, wide) {
+  const host = document.getElementById("modalHost");
   const subtitle = sub
-    ? `<div class="muted" style="font-size:12px;margin-bottom:3px">${sub}</div>`
+    ? `<p class="text-xs font-medium text-base-content/60">${sub}</p>`
     : "";
-  const footer = foot ? `<div class="modal-foot">${foot}</div>` : "";
-  const modalClass = wide ? "modal wide" : "modal";
-  document.getElementById("modalHost").innerHTML =
-    `<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="${modalClass}" role="dialog" aria-modal="true"><div class="modal-head"><div>${subtitle}<h3>${title}</h3></div><button class="secondary small" onclick="closeModal()" aria-label="Close">✕</button></div><div class="modal-body">${body}</div>${footer}</div></div>`;
+  const footer = foot
+    ? `<div class="modal-foot">${foot}</div>`
+    : "";
+  const sizeClass = wide ? "sm:max-w-3xl" : "sm:max-w-lg";
+  if (!host.firstElementChild) modalReturnFocus = document.activeElement;
+  host.innerHTML = `<div class="modal modal-open modal-bottom sm:modal-middle" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-box flex max-h-[92dvh] flex-col p-0 ${sizeClass}"><div class="modal-head"><div class="min-w-0">${subtitle}<h3 id="modalTitle" class="text-lg font-semibold leading-snug">${title}</h3></div><button class="btn btn-ghost btn-sm btn-square" onclick="closeModal()" aria-label="Close">${icon("x", "size-5")}</button></div><div class="modal-body">${body}</div>${footer}</div><div class="modal-backdrop" onclick="closeModal()"></div></div>`;
   document.body.style.overflow = "hidden";
+  const firstField = host.querySelector(".modal-body input:not([type=hidden]):not([hidden]), .modal-body textarea, .modal-body select");
+  (firstField || host.querySelector(".modal-box button"))?.focus();
 }
 function closeModal() {
   document.getElementById("modalHost").innerHTML = "";
   document.body.style.overflow = "";
   releaseReceiptUrl();
   releasePackageFormPhoto();
+  if (modalReturnFocus && document.contains(modalReturnFocus)) modalReturnFocus.focus();
+  modalReturnFocus = null;
 }
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
 });
 function fld(id, label, val, type = "text", attrs = "") {
-  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" type="${type}" value="${safe(val ?? "")}" ${attrs}></div>`;
+  return `<div class="field"><label for="${id}">${label}</label><input class="input w-full" id="${id}" type="${type}" value="${safe(val ?? "")}" ${attrs}></div>`;
 }
 function sel(id, label, opts, val, attrs = "") {
-  return `<div class="field"><label for="${id}">${label}</label><select id="${id}" ${attrs}>${opts
+  return `<div class="field"><label for="${id}">${label}</label><select class="select w-full" id="${id}" ${attrs}>${opts
     .map((o) => {
       const v = Array.isArray(o) ? o[0] : o,
         l = Array.isArray(o) ? o[1] : o;
@@ -383,7 +390,7 @@ function toCatalogPackage(server) {
     layers: server.layers,
     dimensions: server.dimensions,
     inclusions: server.inclusions || [],
-    freebie: (server.inclusions || []).join(" · "),
+    freebie: (server.inclusions || []).map(cleanInclusion).join(" · "),
     featured: Boolean(server.featured),
     image: server.imageUrl || null,
     active: true,
@@ -408,10 +415,10 @@ async function loadServicePackages() {
 /** Loading or error markup for package views; empty string once loaded. */
 function packageCatalogStatusMarkup() {
   if (packageCatalogState === "error") {
-    return `<div class="panel" role="alert"><p style="margin-top:0">${safe(packageCatalogError)}</p><button class="secondary" onclick="packageCatalogState='idle';render()">Try again</button></div>`;
+    return `<div class="alert alert-error alert-soft mt-5" role="alert">${icon("circle-alert", "size-5")}<span>${safe(packageCatalogError)}</span><button class="btn btn-sm" onclick="packageCatalogState='idle';render()">${icon("refresh-cw")} Try again</button></div>`;
   }
   if (packageCatalogState !== "loaded") {
-    return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading packages…</p></div>';
+    return `<div class="pkg-grid mt-5" aria-busy="true"><span class="sr-only" role="status">Loading packages…</span>${skeletonCards(3)}</div>`;
   }
   return "";
 }
@@ -429,15 +436,15 @@ function selectedPackageName() {
   return selectedPondPackage()?.name || "";
 }
 /** Placeholder shown wherever a package has no uploaded photo. */
-function photoPlaceholder(cls, label, icon = "🦞") {
-  return `<div class="${cls}" role="img" aria-label="${safe(label)}" style="display:flex;align-items:center;justify-content:center;font-size:64px;background:linear-gradient(145deg,#e3eee2,#a9c9ad);min-height:180px">${icon}</div>`;
+function photoPlaceholder(cls, label, iconName = "shrimp") {
+  return `<div class="pkg-placeholder ${cls}" role="img" aria-label="${safe(label)}">${icon(iconName, "size-14")}</div>`;
 }
 function packagePhoto(x, cls = "package-photo") {
   if (!x.image) return photoPlaceholder(cls, `${x.name} (no photo yet)`);
   return `<img class="${cls}" src="${safe(x.image)}" alt="${safe(x.name)} photo" onerror="this.onerror=null;this.style.display='none'">`;
 }
 function pkgImg(x) {
-  if (!x.image) return `<span role="img" aria-label="${safe(x.name)} (no photo yet)">🦞</span>`;
+  if (!x.image) return `<span class="pkg-placeholder" role="img" aria-label="${safe(x.name)} (no photo yet)">${icon("shrimp", "size-14")}</span>`;
   return `<img src="${safe(x.image)}" alt="${safe(x.name)}" loading="lazy" onerror="this.style.display='none'">`;
 }
 function customPrice(layersStr, w, h, filt) {
@@ -619,7 +626,7 @@ function toCustomerBooking(server) {
     location: server.serviceLocation,
     notes: server.notes || "",
     pkg: server.packageName,
-    freebie: (preset?.inclusions || []).join(" · "),
+    freebie: (preset?.inclusions || []).map(cleanInclusion).join(" · "),
     packageLayers: preset && !custom ? preset.layers : "",
     packageDimensions: preset && !custom ? preset.dimensions : "",
     layers: custom ? `${custom.layers} ${custom.layers === 1 ? "layer" : "layers"}` : "",
@@ -801,10 +808,10 @@ function setButtonBusy(buttonId, busy, busyLabel) {
   const button = document.getElementById(buttonId);
   if (!button) return;
   if (busy) {
-    button.dataset.idleLabel = button.textContent;
-    button.textContent = busyLabel;
+    button.dataset.idleLabel = button.innerHTML;
+    button.innerHTML = `<span class="loading loading-spinner loading-sm" aria-hidden="true"></span>${safe(busyLabel)}`;
   } else if (button.dataset.idleLabel) {
-    button.textContent = button.dataset.idleLabel;
+    button.innerHTML = button.dataset.idleLabel;
   }
   button.disabled = busy;
   button.setAttribute("aria-busy", String(busy));
@@ -824,7 +831,7 @@ function clearFormError() {
   if (element) element.hidden = true;
 }
 const FORM_ERROR_MARKUP =
-  '<p class="notice" id="formError" role="alert" hidden style="margin-top:15px;border-color:#df9696;background:#fdf0f0;color:#8a1f1f"></p>';
+  '<p class="alert alert-error alert-soft mt-4 text-sm" id="formError" role="alert" hidden></p>';
 function sessionCustomerName() {
   return sessionCustomer
     ? `${sessionCustomer.firstName || ""} ${sessionCustomer.lastName || ""}`.trim()
@@ -835,15 +842,17 @@ function sessionCustomerName() {
 /* Booking status: Pending -> Confirmed (automatic when the 50% down payment is verified) -> Completed (service done).
    Payment status: Awaiting Deposit / Pending Verification -> Partially Paid -> (after delivery fee) Pending Verification -> Paid. */
 function bookingClass(s) {
-  if (["Confirmed", "Completed"].includes(s)) return "green";
-  if (["Rejected", "Cancelled"].includes(s)) return "red";
-  return "";
+  if (["Confirmed", "Completed"].includes(s)) return "badge-success";
+  if (["Rejected", "Cancelled"].includes(s)) return "badge-error";
+  if (s === "Ongoing") return "badge-info";
+  return "badge-warning";
 }
 function payClass(p) {
-  if (p === "Paid") return "green";
-  if (p === "Rejected") return "red";
-  if (p === "Awaiting Deposit" || p === "Unpaid") return "gray";
-  return "";
+  if (p === "Paid") return "badge-success";
+  if (p === "Rejected") return "badge-error";
+  if (p === "Awaiting Deposit" || p === "Unpaid") return "badge-neutral";
+  if (p === "Partially Paid") return "badge-info";
+  return "badge-warning";
 }
 /**
  * The owner's next step for a server booking. Actions map to backend
@@ -860,19 +869,19 @@ function nextAction(b) {
           ? "Verify balance payment"
           : "Verify down payment",
       fn: `reviewPayment('${b.ref}')`,
-      cls: "primary",
+      cls: "btn-primary",
     };
   if (b.booking === "Confirmed")
     return {
       label: "Start service",
       fn: `updateBooking('${b.ref}','Ongoing')`,
-      cls: "primary",
+      cls: "btn-primary",
     };
   if (b.booking === "Ongoing")
     return {
       label: "Mark service completed",
       fn: `updateBooking('${b.ref}','Completed')`,
-      cls: "primary",
+      cls: "btn-primary",
     };
   if (
     b.booking === "Completed" &&
@@ -882,7 +891,7 @@ function nextAction(b) {
     return {
       label: "Set delivery fee",
       fn: `openPricing('${b.ref}')`,
-      cls: "primary",
+      cls: "btn-primary",
     };
   if (b.booking === "Completed" && b.payment !== "Paid")
     return {
@@ -902,31 +911,26 @@ function nextAction(b) {
 }
 function tracker(b, s) {
   if (s < 0)
-    return `<div class="notice">This booking is ${safe(b.booking.toLowerCase())}.</div>`;
-  return `<div class="tracker">${[
-    "Submitted",
-    "Confirmed",
-    "Service done",
-    "Delivery & balance",
-    "Fully paid",
-  ]
-    .map((l, i) => {
+    return `<div class="alert alert-soft alert-error my-3 text-sm">${icon("circle-x", "size-5")}<span>This booking is ${safe(b.booking.toLowerCase())}.</span></div>`;
+  const steps = ["Submitted", "Confirmed", "Service done", "Delivery & balance", "Fully paid"]
+    .map((label, i) => {
       const done = i < s || s === 4;
-      let stepClass = "";
-      if (done) stepClass = "done";
-      else if (i === s) stepClass = "current";
-      const stepMarker = done ? "✓" : i + 1;
-      return `<div class="t-step ${stepClass}"><div class="t-dot">${stepMarker}</div>${l}</div>`;
+      const current = i === s && s !== 4;
+      const cls = done || current ? "step step-primary" : "step";
+      const content = done ? ' data-content="✓"' : "";
+      const aria = current ? ' aria-current="step"' : "";
+      return `<li class="${cls}"${content}${aria}>${label}</li>`;
     })
-    .join("")}</div>`;
+    .join("");
+  return `<ul class="steps tracker my-4 w-full text-xs" aria-label="Booking progress">${steps}</ul>`;
 }
 function timelineHtml(b, showNew) {
   const t = (b.timeline || []).slice().reverse();
   const items = t.map((e) => {
-    const newTag = showNew && !e.seen ? '<span class="tag-new">NEW</span>' : "";
-    return `<li>${safe(e.text)}${newTag}<span class="when">${safe(e.at)}</span></li>`;
+    const newTag = showNew && !e.seen ? '<span class="badge badge-secondary badge-xs ml-2">NEW</span>' : "";
+    return `<li><p>${safe(e.text)}${newTag}</p><time>${safe(e.at)}</time></li>`;
   }).join("");
-  return items ? `<ul class="timeline">${items}</ul>` : '<p class="muted">No updates yet.</p>';
+  return items ? `<ul class="updates">${items}</ul>` : '<p class="muted text-sm">No updates yet.</p>';
 }
 function myBookingList() {
   return customerBookings;
@@ -971,6 +975,72 @@ function money(n) {
       maximumFractionDigits: 2,
     })
   );
+}
+
+/* ---------- UI helpers (DaisyUI markup) ---------- */
+/** Decorative Lucide icon supplied by the legacy-ui plugin. */
+function icon(name, cls = "size-4") {
+  return typeof window.__bossGudoIcon === "function"
+    ? window.__bossGudoIcon(name, cls)
+    : "";
+}
+function crumbs(trail) {
+  const items = trail.map((item) => `<li>${safe(item)}</li>`).join("");
+  return `<nav class="breadcrumbs py-0 text-sm text-base-content/60" aria-label="Breadcrumb"><ul>${items}</ul></nav>`;
+}
+function pageHead(trail, title, sub = "", actions = "") {
+  const subtitle = sub ? `<p class="page-sub">${sub}</p>` : "";
+  const actionMarkup = actions
+    ? `<div class="flex flex-wrap items-center gap-2">${actions}</div>`
+    : "";
+  return `${crumbs(trail)}<div class="page-head"><div class="min-w-0"><h1 class="page-title">${title}</h1>${subtitle}</div>${actionMarkup}</div>`;
+}
+/** Inclusions are entered as free text; drop leading list markers. */
+function cleanInclusion(text) {
+  return String(text).replace(/^\s*[-•*]\s*/, "");
+}
+function inclusionList(x) {
+  const items = (x.inclusions || [])
+    .map((item) => `<li>${icon("gift", "size-4 text-secondary")}<span>${safe(cleanInclusion(item))}</span></li>`)
+    .join("");
+  return items ? `<ul class="freebie" aria-label="Included with this package">${items}</ul>` : "";
+}
+function skeletonCards(count) {
+  return Array.from(
+    { length: count },
+    () => '<div class="pkg-card" aria-hidden="true"><div class="skeleton h-44 rounded-none"></div><div class="space-y-3 p-5"><div class="skeleton h-5 w-2/3"></div><div class="skeleton h-4 w-full"></div><div class="skeleton h-4 w-4/5"></div></div></div>',
+  ).join("");
+}
+let modalReturnFocus = null;
+// Keep keyboard focus inside an open modal dialog.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+  const box = document.querySelector("#modalHost .modal-box");
+  if (!box) return;
+  const focusable = [...box.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]):not([hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])")]
+    .filter((element) => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || !box.contains(document.activeElement))) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+function pkgChips(layers, dimensions) {
+  return `<div class="chips"><span class="badge badge-soft badge-primary gap-1">${icon("layers", "size-3")}${layers}</span><span class="badge badge-soft badge-primary gap-1">${icon("ruler", "size-3")}${dimensions}</span></div>`;
+}
+function gcashDetailsMarkup(rows, amount, note) {
+  return `<div class="pay-grid"><div class="tile text-center"><h3 class="tile-title justify-center">${icon("qr-code", "size-4 text-primary")}Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted text-xs">Scan the QR code or use the owner’s GCash account details.</p></div><div class="tile"><h3 class="tile-title">${icon("smartphone", "size-4 text-primary")}Owner’s GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner’s GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner’s GCash number]</strong></div>${rows}<div class="amount-due"><span>Amount to pay now</span><strong>${money(amount)}</strong></div><div class="notice mt-4">${note}</div></div></div>`;
+}
+function receiptUploadMarkup(intro) {
+  return `<h3 class="tile-title">${icon("receipt", "size-4 text-primary")}Upload payment receipt</h3><p class="muted text-sm">${intro}</p><div class="field-grid"><div class="field"><label for="gcashReference">GCash transaction reference number <span class="text-error">*</span></label><input class="input w-full" id="gcashReference" placeholder="Enter the transaction reference number" autocomplete="off" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot <span class="text-error">*</span></label><input class="file-input w-full" id="gcashProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" required aria-describedby="gcashProofHint"><p class="muted mt-1.5 text-xs" id="gcashProofHint">Accepted: JPG, PNG, WEBP, HEIC image or PDF, up to 8 MB.</p></div></div>`;
+}
+function resultPanel(iconName, title, text, details, actions) {
+  return `<div class="panel result-panel"><span class="result-icon">${icon(iconName, "size-8")}</span><h1 class="page-title mt-4">${title}</h1><p class="muted mx-auto mt-3 max-w-xl">${text}</p><div class="tile mx-auto my-6 max-w-lg text-left">${details}</div><div class="flex flex-wrap justify-center gap-3">${actions}</div></div>`;
 }
 const pageFiles = {
   home: "/",
@@ -1040,12 +1110,13 @@ function setPage(p) {
 }
 function wizardHeader(steps, cur) {
   const stepMarkup = steps.map((step, index) => {
-    let stepClass = "";
-    if (cur === index + 1) stepClass = "active";
-    else if (cur > index + 1) stepClass = "done";
-    return `<div class="wizard-step ${stepClass}">${index + 1}. ${step}</div>`;
+    const n = index + 1;
+    const cls = cur >= n ? "step step-primary" : "step";
+    const content = cur > n ? ' data-content="✓"' : "";
+    const aria = cur === n ? ' aria-current="step"' : "";
+    return `<li class="${cls}"${content}${aria}>${step}</li>`;
   }).join("");
-  return `<div class="wizard-steps" style="--n:${steps.length}">${stepMarkup}</div>`;
+  return `<ul class="steps wizard-steps mb-6 w-full text-xs sm:text-sm" aria-label="Booking steps">${stepMarkup}</ul>`;
 }
 function startBooking() {
   bookingType = null;
@@ -1056,7 +1127,7 @@ function calendarHtml(kind = "service", mode = "select") {
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const dayCount = new Date(calYear, calMonth + 1, 0).getDate();
   const selectedDateForKind = kind === "visit" ? visitDate : selectedDate;
-  const blankDays = new Array(firstDay).fill('<div class="day"></div>').join("");
+  const blankDays = new Array(firstDay).fill('<div class="cal-day is-blank" aria-hidden="true"></div>').join("");
   const dayMarkup = Array.from({ length: dayCount }, (_, index) =>
     calendarDayHtml(index + 1, kind, mode, selectedDateForKind),
   ).join("");
@@ -1069,11 +1140,11 @@ function calendarDayHtml(day, kind, mode, selectedDateForKind) {
   // Bookings must be for a future date; the server applies the same rule.
   const isOpen = isWeekend && value > TODAY_ISO;
   const isBlocked = blockedDates[kind].has(value);
-  let className = "day";
+  let className = "cal-day";
   let attributes = "";
   let title = "Not selectable";
 
-  if (isOpen) className += isBlocked ? " unavailable" : " available";
+  if (isOpen) className += isBlocked ? " is-unavailable" : " is-available";
   if (mode === "admin" && isOpen) {
     title = isBlocked ? "Closed. Click to reopen" : "Open. Click to close";
     attributes = `onclick="toggleBlock('${kind}','${value}')"`;
@@ -1083,12 +1154,13 @@ function calendarDayHtml(day, kind, mode, selectedDateForKind) {
   } else if (mode !== "admin" && isOpen) {
     title = "Unavailable";
   }
-  if (mode !== "admin" && selectedDateForKind === value)
-    className += " selected";
+  const isSelected = mode !== "admin" && selectedDateForKind === value;
+  if (isSelected) className += " is-selected";
   if (attributes)
     attributes +=
-      ' role="button" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}"';
-  return `<div class="${className}" ${attributes} title="${title}">${day}</div>`;
+      ` role="button" tabindex="0" aria-pressed="${isSelected}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}"`;
+  const label = `${fmtDate(value, true)}: ${title}`;
+  return `<div class="${className}" ${attributes} title="${title}" aria-label="${safe(label)}">${day}</div>`;
 }
 function changeMonth(n) {
   readDetails();
@@ -1127,19 +1199,36 @@ function calendarBlock(kind, mode = "select") {
     { month: "long", year: "numeric" },
   );
   const legend = mode === "admin"
-    ? '<span><i class="dot" style="background:#8cc596"></i>Open</span><span><i class="dot" style="background:#df9696"></i>Closed</span><span><i class="dot" style="background:#d8ddd5"></i>Not adjustable</span>'
-    : '<span><i class="dot" style="background:#8cc596"></i>Available</span><span><i class="dot" style="background:#df9696"></i>Unavailable</span><span><i class="dot" style="background:#d8ddd5"></i>Not selectable</span>';
+    ? '<span><i class="cal-dot is-available"></i>Open</span><span><i class="cal-dot is-unavailable"></i>Closed</span><span><i class="cal-dot"></i>Not adjustable</span>'
+    : '<span><i class="cal-dot is-available"></i>Available</span><span><i class="cal-dot is-unavailable"></i>Unavailable</span><span><i class="cal-dot"></i>Not selectable</span>';
   const dayNames = DAYNAMES.map((name) =>
     `<div class="cal-dayname">${name}</div>`,
   ).join("");
   const calendarDays = calendarHtml(kind, mode);
-  return `<div class="calendar"><div class="cal-head"><button onclick="changeMonth(-1)" aria-label="Previous month">←</button><strong>${monthLabel}</strong><button onclick="changeMonth(1)" aria-label="Next month">→</button></div><div class="cal-grid">${dayNames}${calendarDays}</div><div class="legend">${legend}</div></div>`;
+  return `<div class="cal"><div class="cal-head"><button type="button" class="btn btn-ghost btn-sm btn-square" onclick="changeMonth(-1)" aria-label="Previous month">${icon("chevron-left", "size-5")}</button><strong aria-live="polite">${monthLabel}</strong><button type="button" class="btn btn-ghost btn-sm btn-square" onclick="changeMonth(1)" aria-label="Next month">${icon("chevron-right", "size-5")}</button></div><div class="cal-grid">${dayNames}${calendarDays}</div><div class="cal-legend">${legend}</div></div>`;
 }
 function register() {
-  return `<div class="panel auth-card"><div style="text-align:center"><h1 class="page-title">Create an account</h1><p class="muted">Register to submit and track bookings.</p></div><form id="registerForm"><div class="field"><label>Full name</label><input id="regName" required placeholder="Your full name"></div><div class="field"><label>Email address</label><input type="email" required placeholder="you@example.com"></div><div class="field"><label>Password</label><input type="password" required minlength="6" placeholder="At least 6 characters"></div><button class="primary">Create Account</button></form></div>`;
+  return `<div class="panel auth-card"><div style="text-align:center"><h1 class="page-title">Create an account</h1><p class="muted">Register to submit and track bookings.</p></div><form id="registerForm"><div class="field"><label>Full name</label><input class="input w-full" id="regName" required placeholder="Your full name"></div><div class="field"><label>Email address</label><input class="input w-full" type="email" required placeholder="you@example.com"></div><div class="field"><label>Password</label><input class="input w-full" type="password" required minlength="6" placeholder="At least 6 characters"></div><button class="btn btn-primary">Create Account</button></form></div>`;
 }
 function about() {
-  return `<div class="breadcrumbs">Home / About</div><h1 class="page-title">About BOSSGUDO A.R.C. AQUA FARM</h1><p class="muted">Learn about the business and its services.</p><div class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:25px;align-items:center"><div><div class="eyebrow" style="color:var(--green)">About the farm</div><h2>Supporting new and growing crayfish enthusiasts</h2><p class="muted" style="line-height:1.8">BOSSGUDO A.R.C. AQUA FARM provides Australian Red Claw crayfish supply, pond setup assistance, training, and after-sales support. The farm aims to help customers understand the basics of raising crayfish and setting up suitable ponds.</p><p class="muted" style="line-height:1.8">Use the booking page to book a pond service or schedule a farm visit.</p><button class="primary" onclick="startBooking()">Book Now</button></div><div style="border-radius:18px;background:linear-gradient(145deg,#e3eee2,#a9c9ad);padding:35px;text-align:center;font-size:95px">🦞<div style="font-size:14px;font-weight:800;color:var(--green)">Australian Red Claw (ARC)</div></div></div><div class="section-head"><div><h2>What you can ask about</h2><p>Use the assistant for predefined FAQs or contact the owner for special requests.</p></div></div><div class="grid3"><div class="card"><h3>Packages & services</h3><p>Ask about supply, pond setup, and combined options.</p></div><div class="card"><h3>Training & support</h3><p>Ask the owner about training requirements and available support.</p></div><div class="card"><h3>Bookings & visits</h3><p>Book a service or schedule a farm visit on an available weekend.</p></div></div>`;
+  const offers = [
+    ["shrimp", "Crayfish supply", "Australian Red Claw stock for new and growing crayfish farms."],
+    ["wrench", "Pond setup assistance", "Pond packages, manufacturing, installation and custom pond design."],
+    ["graduation-cap", "Training", "Learn the basics of raising crayfish and setting up suitable ponds."],
+    ["handshake", "After-sales support", "Practical help from the farm after your setup is done."],
+  ];
+  const asks = [
+    ["package", "Packages & services", "Ask about supply, pond setup, and combined options."],
+    ["graduation-cap", "Training & support", "Ask the owner about training requirements and available support."],
+    ["calendar-check", "Bookings & visits", "Book a service or schedule a farm visit on an available weekend."],
+  ];
+  const offerMarkup = offers
+    .map(([name, title, text]) => `<div class="tile"><span class="icon-chip">${icon(name, "size-5")}</span><h3 class="mt-4">${title}</h3><p class="muted mt-1 text-sm leading-relaxed">${text}</p></div>`)
+    .join("");
+  const askMarkup = asks
+    .map(([name, title, text]) => `<div class="tile flex gap-4"><span class="icon-chip shrink-0">${icon(name, "size-5")}</span><div><h3>${title}</h3><p class="muted mt-1 text-sm leading-relaxed">${text}</p></div></div>`)
+    .join("");
+  return `${pageHead(["Home", "About"], "About BOSSGUDO A.R.C. AQUA FARM", "Learn about the business and its services.")}<section class="grid overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-2"><img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&amp;fit=crop&amp;w=1100&amp;q=80" alt="Open farmland under a clear sky" class="h-60 w-full object-cover lg:h-full"><div class="p-6 sm:p-10"><p class="eyebrow">About the farm</p><h2 class="section-title">Supporting new and growing crayfish enthusiasts</h2><p class="mt-4 leading-relaxed text-base-content/75">BOSSGUDO A.R.C. AQUA FARM provides Australian Red Claw crayfish supply, pond setup assistance, training, and after-sales support. The farm aims to help customers understand the basics of raising crayfish and setting up suitable ponds.</p><p class="mt-3 leading-relaxed text-base-content/75">Use the booking page to book a pond service or schedule a farm visit.</p><div class="mt-6 flex flex-wrap gap-3"><button class="btn btn-primary" onclick="startBooking()">${icon("calendar-plus")}Book Now</button><button class="btn" onclick="setPage('shop')">${icon("store")}View packages</button></div></div></section><h2 class="section-title mt-12">What the farm offers</h2><div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">${offerMarkup}</div><div class="mt-12 flex flex-wrap items-end justify-between gap-4"><div><h2 class="section-title">What you can ask about</h2><p class="muted mt-2">Use the assistant for predefined FAQs or contact the owner for special requests.</p></div><button class="btn btn-outline btn-primary" onclick="document.getElementById('chatLaunch')?.click()">${icon("message-circle")}Ask the ARC Assistant</button></div><div class="mt-5 grid gap-4 md:grid-cols-3">${askMarkup}</div>`;
 }
 /* Receipt preview for admins. The file is fetched from the admin-protected
    receipt endpoint with the session cookie and shown through a temporary
@@ -1165,7 +1254,7 @@ function receiptFileNameFrom(response, fallback) {
 async function viewPaymentReceipt(ref, paymentId) {
   const requestId = ++receiptRequestId;
   const title = "Payment receipt";
-  const close = '<button class="secondary" onclick="closeModal()">Close</button>';
+  const close = '<button class="btn" onclick="closeModal()">Close</button>';
   releaseReceiptUrl();
   openModal(title, safe(ref), '<p class="muted" aria-busy="true">Loading receipt…</p>', close, true);
   let response;
@@ -1202,14 +1291,19 @@ async function viewPaymentReceipt(ref, paymentId) {
   } else if (contentType === "application/pdf") {
     preview = `<iframe id="receiptPreview" src="${url}" title="Payment receipt PDF for ${safe(ref)}" style="width:100%;height:70vh;border:0"></iframe>`;
   } else {
-    preview = `<div class="notice" id="receiptPreview">This file type (${safe(contentType || "unknown")}) can't be previewed in the browser. Download it to view the receipt.</div><p style="margin-top:12px"><a class="primary" href="${url}" download="${safe(fileName)}">Download receipt</a></p>`;
+    preview = `<div class="notice" id="receiptPreview">This file type (${safe(contentType || "unknown")}) can't be previewed in the browser. Download it to view the receipt.</div><p style="margin-top:12px"><a class="btn btn-primary" href="${url}" download="${safe(fileName)}">Download receipt</a></p>`;
   }
   const body = `<div class="summary-line"><span>File</span><strong>${safe(fileName)}</strong></div><div class="summary-line"><span>Size</span><strong>${(blob.size / 1024).toFixed(1)} KB</strong></div><div style="margin-top:12px">${preview}</div>`;
-  const actions = `${close}<a class="secondary" href="${url}" target="_blank" rel="noopener">Open in new tab</a>`;
+  const actions = `${close}<a class="btn" href="${url}" target="_blank" rel="noopener">Open in new tab</a>`;
   openModal(title, safe(ref), body, actions, true);
 }
 function bookingChooser() {
-  return `<div class="breadcrumbs">Home / Bookings</div><h1 class="page-title">Booking</h1><h2 style="margin:6px 0 0;font-size:20px">What would you like to book today?</h2><div class="choice-grid"><div class="card choice"><div class="service-icon">🌊</div><h3>Book a Service</h3><p>Pond packages, manufacturing, installation, and custom pond design.</p><button class="primary" onclick="chooseBookingType('service')">Select Service</button></div><div class="card choice"><div class="service-icon">🏡</div><h3>Book a Visitation</h3><p>Schedule a farm visit for 1–5 visitors on available weekends.</p><button class="primary" onclick="chooseBookingType('visit')">Select Visitation</button></div></div>`;
+  const loginHint = loggedIn
+    ? ""
+    : `<div class="notice mt-6 flex items-center gap-3">${icon("lock", "size-5 text-primary")}<span>You’ll be asked to log in or create an account before completing a booking.</span></div>`;
+  const choice = (iconName, title, text, points, action, label) =>
+    `<article class="tile choice"><span class="service-icon">${icon(iconName, "size-7")}</span><h2>${title}</h2><p class="muted">${text}</p><ul class="choice-points">${points.map((p) => `<li>${icon("check", "size-4 text-primary")}<span>${p}</span></li>`).join("")}</ul><button class="btn btn-primary btn-block mt-auto" onclick="chooseBookingType('${action}')">${label}${icon("arrow-right")}</button></article>`;
+  return `${pageHead(["Home", "Bookings"], "Booking", "What would you like to book today?")}<div class="choice-grid">${choice("waves", "Book a Service", "Pond packages, manufacturing, installation, and custom pond design.", ["Choose a package or design a custom pond", "Pick an open weekend service date", "Pay a 50% down payment through GCash"], "service", "Select Service")}${choice("trees", "Book a Visitation", "Schedule a farm visit for 1–5 visitors on available weekends.", ["1–5 visitors per visit", "Available Saturdays and Sundays", "Special dates can be requested for review"], "visit", "Select Visitation")}</div>${loginHint}`;
 }
 function chooseBookingType(t) {
   bookingType = t;
@@ -1225,7 +1319,7 @@ function changeBookingType() {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function qrPlaceholder() {
-  return `<div style="width:220px;height:220px;margin:16px auto;background:#fff;border:1px solid #d7ded7;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:12px"><div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);gap:3px;opacity:.8">${Array.from(
+  return `<div class="mx-auto my-4 grid size-52 place-items-center rounded-box border border-base-300 bg-white p-3" role="img" aria-label="GCash QR code placeholder"><div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);gap:3px;opacity:.85">${Array.from(
     { length: 121 },
     (_, i) => {
       let x = i % 11,
@@ -1252,14 +1346,14 @@ function readDetails() {
 }
 function servicePhoto() {
   const p = selectedPondPackage();
-  return p ? packagePhoto(p) : photoPlaceholder("package-photo", "Custom pond design", "📐");
+  return p ? packagePhoto(p, "package-photo") : photoPlaceholder("package-photo", "Custom pond design", "ruler");
 }
 function reviewStep() {
   let d = window.bookingDraft || {},
     p = currentPricing(),
     preset = selectedPondPackage();
   const packageDetails = preset
-    ? `<p class="muted" style="margin-top:0">${safe(preset.description)}</p><div class="summary-line"><span>Pond configuration</span><strong>${safe(preset.layers)} · ${safe(preset.dimensions)}</strong></div><div class="summary-line"><span>Included freebie</span><strong>${safe(preset.freebie)}</strong></div>`
+    ? `<p class="muted mt-1">${safe(preset.description)}</p><div class="summary-line"><span>Pond configuration</span><strong>${safe(preset.layers)} · ${safe(preset.dimensions)}</strong></div><div class="summary-line"><span>Included freebie</span><strong>${safe(preset.freebie)}</strong></div>`
     : `<div class="summary-line"><span>Pond size</span><strong>${Number(pondWidth).toFixed(1)} m × ${Number(pondHeight).toFixed(1)} m (${(pondWidth * pondHeight).toFixed(2)} m²)</strong></div><div class="summary-line"><span>Layers</span><strong>${safe(selectedLayers)}</strong></div><div class="summary-line"><span>Filtration</span><strong>${safe(filtration)}</strong></div>`;
   const notes = d.notes
     ? `<div class="summary-line"><span>Notes for the owner</span><strong>${safe(d.notes)}</strong></div>`
@@ -1270,11 +1364,12 @@ function reviewStep() {
   const preferredDate = selectedDate
     ? fmtDate(selectedDate, true)
     : "Not selected";
-  return `<h2>Review your booking</h2><p class="muted">Check the package, booking information, and price. Then continue to payment.</p><div class="review-grid"><div>${servicePhoto()}</div><div><h3 style="margin-top:0">${safe(selectedPackageName())}</h3>${packageDetails}${notes}</div></div><div class="panel"><h3>Booking information</h3><div class="summary-line"><span>Preferred date</span><strong>${preferredDate}</strong></div><div class="summary-line"><span>Name</span><strong>${safe(d.name || "")}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone || "")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email || "Not provided")}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(d.location || "")}</strong></div></div><div class="panel"><h3>Price</h3>${priceDetails}<div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment due now</span><strong style="color:var(--green)">${money(p.deposit)}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(p.balance)}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings.</p></div><div class="callout" style="margin-top:18px"><strong>No-refund policy.</strong> ${NO_REFUND_POLICY}<label class="check-row"><input type="checkbox" id="policyBox" ${policyAccepted ? "checked" : ""} onchange="policyAccepted=this.checked"><span>I understand and accept the no-refund policy.</span></label></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=3;render()">← Back</button><button class="primary" onclick="goPayment()">Continue to Payment →</button></div>`;
+  return `<h2 class="step-title">Review your booking</h2><p class="muted">Check the package, booking information, and price. Then continue to payment.</p><div class="review-grid mt-5"><div class="overflow-hidden rounded-box">${servicePhoto()}</div><div><h3 class="text-lg font-semibold">${safe(selectedPackageName())}</h3>${packageDetails}${notes}</div></div><div class="mt-5 grid gap-5 md:grid-cols-2"><div class="tile"><h3 class="tile-title">${icon("user", "size-4 text-primary")}Booking information</h3><div class="summary-line"><span>Preferred date</span><strong>${preferredDate}</strong></div><div class="summary-line"><span>Name</span><strong>${safe(d.name || "")}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone || "")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email || "Not provided")}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(d.location || "")}</strong></div></div><div class="tile"><h3 class="tile-title">${icon("wallet", "size-4 text-primary")}Price</h3>${priceDetails}<div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line is-highlight"><span>50% down payment due now</span><strong>${money(p.deposit)}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(p.balance)}</strong></div><p class="muted mt-2 text-xs">After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings.</p></div></div><div class="callout mt-5"><p class="flex items-start gap-2"><span class="text-warning">${icon("triangle-alert", "size-5")}</span><span><strong>No-refund policy.</strong> ${NO_REFUND_POLICY}</span></p><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="policyBox" ${policyAccepted ? "checked" : ""} onchange="policyAccepted=this.checked"><span>I understand and accept the no-refund policy.</span></label></div><div class="wizard-actions"><button class="btn" onclick="wizardStep=3;render()">${icon("arrow-left")}Back</button><button class="btn btn-primary" onclick="goPayment()">Continue to Payment${icon("arrow-right")}</button></div>`;
 }
 function paymentStep() {
   let p = currentPricing();
-  return `<h2>Payment</h2><p class="muted">Pay the 50% down payment in GCash, then upload your receipt. Your booking and receipt are submitted together, and your booking is confirmed once the owner verifies your payment.</p><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner's GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner's GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner's GCash number]</strong></div><div class="summary-line"><span>Package</span><strong>${safe(selectedPackageName())}</strong></div><div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment to pay now</span><strong style="font-size:23px;color:var(--green)">${money(p.deposit)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the account details above, and pay the exact amount. After the transfer succeeds, upload your receipt below and submit.</div></div></div><div class="panel" style="margin-top:20px"><h3>Upload payment receipt</h3><p class="muted">Your booking is submitted together with this receipt. The owner checks the receipt against the actual GCash transaction.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: JPG, PNG, WEBP, HEIC image or PDF, up to 8 MB.</p></div>${pendingBookingNotice()}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="secondary" onclick="wizardStep=4;render()">← Back</button><button class="primary" id="submitBookingButton" onclick="submitBooking()">Submit Booking and Receipt</button></div></div>`;
+  const rows = `<div class="summary-line"><span>Package</span><strong>${safe(selectedPackageName())}</strong></div><div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div>`;
+  return `<h2 class="step-title">Payment</h2><p class="muted">Pay the 50% down payment in GCash, then upload your receipt. Your booking and receipt are submitted together, and your booking is confirmed once the owner verifies your payment.</p><div class="mt-5">${gcashDetailsMarkup(rows, p.deposit, "Open GCash, scan the QR or use the account details above, and pay the exact amount. After the transfer succeeds, upload your receipt below and submit.")}</div><div class="tile mt-5">${receiptUploadMarkup("Your booking is submitted together with this receipt. The owner checks the receipt against the actual GCash transaction.")}${pendingBookingNotice()}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="wizardStep=4;render()">${icon("arrow-left")}Back</button><button class="btn btn-primary" id="submitBookingButton" onclick="submitBooking()">${icon("upload")}Submit Booking and Receipt</button></div></div>`;
 }
 function booking() {
   if (!loggedIn) {
@@ -1288,25 +1383,33 @@ function booking() {
 function visitSuccess() {
   const v = currentServerVisit;
   if (!v)
-    return `<div class="panel"><h2>Visitation details unavailable</h2><button class="primary" onclick="setPage('mybookings')">Go to My Bookings</button></div>`;
+    return `<div class="panel"><h2 class="step-title">Visitation details unavailable</h2><button class="btn btn-primary mt-4" onclick="setPage('mybookings')">Go to My Bookings</button></div>`;
   const sp = v.type === "Special";
-  return `<div class="panel success"><div class="bigcheck">✓</div><h1>${sp ? "Special date request submitted" : "Visitation booked"}</h1><p class="muted">${sp ? "The admin will review your request. The visit is not confirmed until the request is approved." : "Your farm visit is booked. You can track it in My Bookings."}</p><div class="card" style="max-width:480px;margin:22px auto;text-align:left"><div class="summary-line"><span>Reference number</span><strong>${safe(v.ref)}</strong></div><div class="summary-line"><span>Status</span><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div></div><button class="primary" onclick="setPage('mybookings')">Track My Booking</button> <button class="secondary" onclick="setPage('home')">Back to Home</button></div>`;
+  const details = `<div class="summary-line"><span>Reference number</span><strong>${safe(v.ref)}</strong></div><div class="summary-line"><span>Status</span><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div>`;
+  const actions = `<button class="btn btn-primary" onclick="setPage('mybookings')">${icon("clipboard-list")}Track My Booking</button><button class="btn" onclick="setPage('home')">Back to Home</button>`;
+  return resultPanel(
+    sp ? "hourglass" : "circle-check",
+    sp ? "Special date request submitted" : "Visitation booked",
+    sp ? "The admin will review your request. The visit is not confirmed until the request is approved." : "Your farm visit is booked. You can track it in My Bookings.",
+    details,
+    actions,
+  );
 }
 function visitStatusClass(s) {
-  if (["Booked", "Approved", "Completed"].includes(s)) return "green";
-  if (["Declined", "Cancelled"].includes(s)) return "red";
-  return "";
+  if (["Booked", "Approved", "Completed"].includes(s)) return "badge-success";
+  if (["Declined", "Cancelled"].includes(s)) return "badge-error";
+  return "badge-warning";
 }
 function visitBooking() {
   let stepContent = visitReviewStep();
   if (visitStep === 1) stepContent = visitDateStep();
   else if (visitStep === 2) stepContent = visitDetailsStep();
-  return `<div class="breadcrumbs">Home / Bookings / Book a Visitation</div><div class="admin-header"><div><h1 class="page-title">Book a Visitation</h1><p class="muted">Visit the farm with 1–5 visitors on an available Saturday or Sunday.</p></div><button class="secondary small" onclick="changeBookingType()">Change booking type</button></div>${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel">${stepContent}</div>`;
+  return `${pageHead(["Home", "Bookings", "Book a Visitation"], "Book a Visitation", "Visit the farm with 1–5 visitors on an available Saturday or Sunday.", `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`)}${wizardHeader(["Date", "Details", "Review"], visitStep)}<div class="panel mt-0">${stepContent}</div>`;
 }
 function visitDateStep() {
   if (visitMode === "special")
-    return `<h2>Request a special date</h2><p class="muted">Use this for a date outside the regular weekend schedule, such as a weekday or a closed weekend. The admin reviews every request, and the visit is not confirmed until it is approved.</p><div class="field-grid"><div class="field"><label for="specialDate">Requested date</label><input id="specialDate" type="date" min="${TOMORROW_ISO}" value="${safe(visitDate)}" onchange="visitDate=this.value"></div><div class="field"><label for="specialReason">Reason for this date</label><input id="specialReason" maxlength="160" value="${safe(visitReason)}" placeholder="e.g. Only available on weekdays" oninput="visitReason=this.value"></div></div><div class="wizard-actions"><button class="secondary" onclick="setVisitMode('regular')">← Back to weekend calendar</button><button class="primary" onclick="visitToDetails()">Continue to Details →</button></div>`;
-  return `<h2>Select a visit date</h2><p class="muted">Farm visits are open on available Saturdays and Sundays. Calendar availability is managed by the farm.</p><div class="calendar-wrap" style="margin-top:18px">${calendarBlock("visit")}<div><div class="card"><h3>Selected date</h3><p>${visitDate ? fmtDate(visitDate, true) : "Choose an available green date"}</p><div class="notice">Each visit is for 1–5 visitors.</div></div></div></div><div class="panel"><div class="admin-header"><div><h3 style="margin:0">Need a different date?</h3><p class="muted" style="margin:6px 0 0">Dates outside the regular weekend schedule need admin review.</p></div><button class="secondary" onclick="setVisitMode('special')">Request a special date</button></div></div><div class="wizard-actions"><button class="secondary" onclick="changeBookingType()">← Back</button><button class="primary" onclick="visitToDetails()">Continue to Details →</button></div>`;
+    return `<h2 class="step-title">Request a special date</h2><p class="muted">Use this for a date outside the regular weekend schedule, such as a weekday or a closed weekend. The admin reviews every request, and the visit is not confirmed until it is approved.</p><div class="field-grid"><div class="field"><label for="specialDate">Requested date</label><input class="input w-full" id="specialDate" type="date" min="${TOMORROW_ISO}" value="${safe(visitDate)}" onchange="visitDate=this.value"></div><div class="field"><label for="specialReason">Reason for this date</label><input class="input w-full" id="specialReason" maxlength="160" value="${safe(visitReason)}" placeholder="e.g. Only available on weekdays" oninput="visitReason=this.value"></div></div><div class="wizard-actions"><button class="btn" onclick="setVisitMode('regular')">${icon("arrow-left")}Back to weekend calendar</button><button class="btn btn-primary" onclick="visitToDetails()">Continue to Details${icon("arrow-right")}</button></div>`;
+  return `<h2 class="step-title">Select a visit date</h2><p class="muted">Farm visits are open on available Saturdays and Sundays. Calendar availability is managed by the farm.</p><div class="cal-wrap mt-5">${calendarBlock("visit")}<div class="space-y-4"><div class="tile"><h3 class="tile-title">${icon("calendar-check", "size-4 text-primary")}Selected date</h3><p class="text-lg font-semibold">${visitDate ? fmtDate(visitDate, true) : '<span class="muted text-base font-normal">Choose an available green date</span>'}</p></div><div class="notice flex items-center gap-2">${icon("users", "size-4 text-primary")}Each visit is for 1–5 visitors.</div><div class="tile"><h3 class="tile-title">Need a different date?</h3><p class="muted text-sm">Dates outside the regular weekend schedule need admin review.</p><button class="btn btn-sm mt-3" onclick="setVisitMode('special')">${icon("calendar-plus")}Request a special date</button></div></div></div><div class="wizard-actions"><button class="btn" onclick="changeBookingType()">${icon("arrow-left")}Back</button><button class="btn btn-primary" onclick="visitToDetails()">Continue to Details${icon("arrow-right")}</button></div>`;
 }
 function setVisitMode(m) {
   visitMode = m;
@@ -1360,7 +1463,7 @@ function visitDetailsStep() {
     const selected = Number(d.visitors || 1) === count ? "selected" : "";
     return `<option value="${count}" ${selected}>${count}</option>`;
   }).join("");
-  return `<h2>Visitor details</h2><p class="muted">Visit date: <strong>${fmtDate(visitDate, true)}</strong>${specialRequest}</p><div class="field-grid"><div class="field"><label for="vName">Full name</label><input id="vName" value="${safe(d.name || sessionCustomerName())}" placeholder="Full name"></div><div class="field"><label for="vEmail">Email</label><input id="vEmail" type="email" value="${safe(d.email || sessionCustomer?.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="vPhone">Contact number</label><input id="vPhone" value="${safe(d.phone || sessionCustomer?.phoneNumber || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="vFarm">Farm name (optional)</label><input id="vFarm" value="${safe(d.farm || "")}" placeholder="Your farm, if you have one"></div><div class="field"><label for="vVisitors">Number of visitors (maximum 5)</label><select id="vVisitors">${visitorOptions}</select></div></div><div class="wizard-actions"><button class="secondary" onclick="readVisit();visitStep=1;render()">← Back</button><button class="primary" onclick="visitToReview()">Continue to Review →</button></div>`;
+  return `<h2 class="step-title">Visitor details</h2><div class="notice mt-3 flex items-center gap-2">${icon("calendar", "size-4 text-primary")}<span>Visit date: <strong>${fmtDate(visitDate, true)}</strong>${specialRequest}</span></div><div class="field-grid"><div class="field"><label for="vName">Full name</label><input class="input w-full" id="vName" value="${safe(d.name || sessionCustomerName())}" placeholder="Full name" autocomplete="name"></div><div class="field"><label for="vEmail">Email</label><input class="input w-full" id="vEmail" type="email" value="${safe(d.email || sessionCustomer?.email || "")}" placeholder="you@example.com" autocomplete="email"></div><div class="field"><label for="vPhone">Contact number</label><input class="input w-full" id="vPhone" type="tel" value="${safe(d.phone || sessionCustomer?.phoneNumber || "")}" placeholder="09XX XXX XXXX" autocomplete="tel"></div><div class="field"><label for="vFarm">Farm name (optional)</label><input class="input w-full" id="vFarm" value="${safe(d.farm || "")}" placeholder="Your farm, if you have one"></div><div class="field"><label for="vVisitors">Number of visitors (maximum 5)</label><select class="select w-full" id="vVisitors">${visitorOptions}</select></div></div><div class="wizard-actions"><button class="btn" onclick="readVisit();visitStep=1;render()">${icon("arrow-left")}Back</button><button class="btn btn-primary" onclick="visitToReview()">Continue to Review${icon("arrow-right")}</button></div>`;
 }
 function readVisit() {
   if (!document.getElementById("vName")) return;
@@ -1400,7 +1503,7 @@ function visitReviewStep() {
   const submitLabel = sp
     ? "Submit Special Date Request"
     : "Submit Visitation Booking";
-  return `<h2>Review your ${heading}</h2><p class="muted">Check the date and your information before submitting.</p><div class="panel"><div class="summary-line"><span>Visit date</span><strong>${fmtDate(visitDate, true)}</strong></div>${requestDetails}<div class="summary-line"><span>Name</span><strong>${safe(d.name)}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email)}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(d.farm || "Not provided")}</strong></div><div class="summary-line"><span>Number of visitors</span><strong>${d.visitors}</strong></div><div class="notice" style="margin-top:15px">${notice}</div></div>${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="secondary" onclick="visitStep=2;render()">← Back</button><button class="primary" id="submitVisitButton" onclick="submitVisit()">${submitLabel}</button></div>`;
+  return `<h2 class="step-title">Review your ${heading}</h2><p class="muted">Check the date and your information before submitting.</p><div class="tile mt-5"><div class="summary-line"><span>Visit date</span><strong>${fmtDate(visitDate, true)}</strong></div>${requestDetails}<div class="summary-line"><span>Name</span><strong>${safe(d.name)}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email)}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(d.farm || "Not provided")}</strong></div><div class="summary-line"><span>Number of visitors</span><strong>${d.visitors}</strong></div><div class="notice mt-4">${notice}</div></div>${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="visitStep=2;render()">${icon("arrow-left")}Back</button><button class="btn btn-primary" id="submitVisitButton" onclick="submitVisit()">${icon("send")}${submitLabel}</button></div>`;
 }
 async function submitVisit() {
   if (submitting) return;
@@ -1453,63 +1556,71 @@ function adminCalendar() {
   const closedDates = [...blockedDates[kind]].sort((a, b) =>
     a.localeCompare(b),
   );
-  const serviceClass = kind === "service" ? "primary" : "secondary";
-  const visitClass = kind === "visit" ? "primary" : "secondary";
+  const serviceClass = kind === "service" ? "btn-active btn-primary" : "btn-ghost";
+  const visitClass = kind === "visit" ? "btn-active btn-primary" : "btn-ghost";
   const closedMarkup = closedDates.length
     ? closedDates.map((date) =>
-      `<div class="summary-line"><span>${fmtDate(date)}</span><button class="secondary small" onclick="toggleBlock('${kind}','${date}')">Reopen</button></div>`,
+      `<div class="summary-line"><span>${fmtDate(date)}</span><button class="btn btn-sm" onclick="toggleBlock('${kind}','${date}')">Reopen</button></div>`,
     ).join("")
     : '<p class="muted">No closed dates.</p>';
-  return `${sampleDataNotice("Closing or reopening dates here only changes this browser's view. It is not saved and does not change which dates the server accepts for bookings.")}<div class="panel"><div class="admin-header"><div><h3>Calendar Controls</h3><p class="muted">Open or close weekend dates. Customers can select only open dates.</p></div><div class="pill-row"><button class="${serviceClass} small" onclick="setCalKind('service')">Package service calendar</button><button class="${visitClass} small" onclick="setCalKind('visit')">Visitation calendar</button></div></div><div class="calendar-wrap" style="margin-top:18px">${calendarBlock(kind, "admin")}<div><div class="card"><h3>Closed dates</h3>${closedMarkup}</div></div></div><div class="notice" style="margin-top:16px">Click a weekend date to close or reopen it. Past dates cannot be changed. Closing a date does not cancel existing bookings.</div></div>`;
+  return `${sampleDataNotice("Closing or reopening dates here only changes this browser's view. It is not saved and does not change which dates the server accepts for bookings.")}<div class="panel"><div class="admin-header"><div><h3>Calendar Controls</h3><p class="muted">Open or close weekend dates. Customers can select only open dates.</p></div><div class="pill-row"><button class="btn ${serviceClass} btn-sm" onclick="setCalKind('service')">Package service calendar</button><button class="btn ${visitClass} btn-sm" onclick="setCalKind('visit')">Visitation calendar</button></div></div><div class="cal-wrap mt-5">${calendarBlock(kind, "admin")}<div><div class="tile"><h3>Closed dates</h3>${closedMarkup}</div></div></div><div class="notice" style="margin-top:16px">Click a weekend date to close or reopen it. Past dates cannot be changed. Closing a date does not cancel existing bookings.</div></div>`;
 }
 function pkgCardPublic(x) {
-  return `<article class="pkg-card"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ MOST POPULAR</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span><strong>Free with this package</strong><br>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><button class="primary" onclick="choosePkgById('${x.id}')">Choose</button></div></div></article>`;
+  const featured = x.featured ? `<span class="pkg-badge badge badge-secondary gap-1">${icon("star", "size-3")}Most popular</span>` : "";
+  return `<article class="pkg-card"><div class="pkg-media">${pkgImg(x)}${featured}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p class="pkg-desc">${safe(x.description)}</p>${pkgChips(safe(x.layers), safe(x.dimensions))}${inclusionList(x)}<div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><button class="btn btn-primary" onclick="choosePkgById('${x.id}')">Choose${icon("arrow-right")}</button></div></div></article>`;
 }
 function pkgCardCustom() {
-  return `<article class="pkg-card custom"><div class="pkg-media"><span>📐</span></div><div class="pkg-body"><h3>Custom Pond Design</h3><p>None of the packages fit? Choose 1–3 layers, enter your pond’s width and length, and decide on filtration.</p><div class="chips"><span class="chip">Up to 3 layers</span><span class="chip">Your own size</span></div><div class="pkg-foot"><div class="price-big"><small>Price from your size</small>${money(pondRatePerSqmPerLayer)}<small>per m² per layer</small></div><button class="primary" onclick="choosePkgById('custom')">Design</button></div></div></article>`;
+  return `<article class="pkg-card custom"><div class="pkg-media"><span class="pkg-placeholder">${icon("ruler", "size-14")}</span></div><div class="pkg-body"><h3>Custom Pond Design</h3><p class="pkg-desc">None of the packages fit? Choose 1–3 layers, enter your pond’s width and length, and decide on filtration.</p>${pkgChips("Up to 3 layers", "Your own size")}<div class="pkg-foot"><div class="price-big"><small>Price from your size</small>${money(pondRatePerSqmPerLayer)}<small>per m² per layer</small></div><button class="btn btn-primary" onclick="choosePkgById('custom')">Design${icon("arrow-right")}</button></div></div></article>`;
 }
 function shop() {
   const act = activePackages();
   const status = packageCatalogStatusMarkup();
   const empty =
     !status && !act.length
-      ? '<div class="notice" style="margin-top:18px">No predefined packages are available right now. You can still book a Custom Pond Design.</div>'
+      ? `<div class="notice mt-5">No predefined packages are available right now. You can still book a Custom Pond Design.</div>`
       : "";
   const cards = status ? "" : act.map(pkgCardPublic).join("") + pkgCardCustom();
-  return `<div class="breadcrumbs">Home / Shop</div><h1 class="page-title">Shop</h1><p class="muted">Browse the owner’s predefined pond packages, each with one included freebie. Choose one option per booking, or design your own pond.</p>${status}${empty}<div class="pkg-grid" style="margin-top:24px">${cards}</div><div class="notice" style="margin-top:22px"><strong>How pricing works.</strong> Custom pond price = width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected. You pay 50% when you book; your booking is confirmed once the owner verifies that payment. After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance.</div>`;
+  const pricing = [
+    ["ruler", "Custom pond price", `Width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected.`],
+    ["smartphone", "50% down payment", "You pay 50% when you book. Your booking is confirmed once the owner verifies that payment."],
+    ["truck", "Delivery & balance", "After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance."],
+  ];
+  const pricingMarkup = pricing
+    .map(([name, title, text]) => `<div class="flex gap-3"><span class="icon-chip shrink-0">${icon(name, "size-5")}</span><div><h3 class="font-semibold">${title}</h3><p class="muted mt-1 text-sm leading-relaxed">${text}</p></div></div>`)
+    .join("");
+  return `${pageHead(["Home", "Shop"], "Shop", "Browse the owner’s predefined pond packages, each with one included freebie. Choose one option per booking, or design your own pond.")}${status}${empty}<div class="pkg-grid">${cards}</div><section class="panel mt-8" aria-labelledby="pricingTitle"><h2 id="pricingTitle" class="section-title text-2xl">How pricing works</h2><div class="mt-5 grid gap-6 md:grid-cols-3">${pricingMarkup}</div></section>`;
 }
 
 function pkgCardSelect(x, custom) {
   const selected = custom ? isCustomPond() : selectedPackageCode === x.id;
   const id = custom ? "custom" : x.id;
   const name = custom ? "Custom Pond Design" : x.name;
-  const cardClass = custom ? "pkg-card custom" : "pkg-card";
+  const cardClass = custom ? "pkg-card is-selectable custom" : "pkg-card is-selectable";
   const selectedClass = selected ? " selected" : "";
-  const media = custom ? "<span>📐</span>" : pkgImg(x);
+  const media = custom ? `<span class="pkg-placeholder">${icon("ruler", "size-14")}</span>` : pkgImg(x);
   const featuredBadge =
     !custom && x.featured
-      ? '<span class="pkg-badge">★ MOST POPULAR</span>'
+      ? `<span class="pkg-badge badge badge-secondary gap-1">${icon("star", "size-3")}Most popular</span>`
       : "";
-  const selectedBadge = selected ? '<span class="pkg-tick">✓</span>' : "";
+  const selectedBadge = selected ? `<span class="pkg-tick">${icon("check", "size-4")}</span>` : "";
   const description = custom
     ? "Build your own pond: layers, size and filtration."
     : safe(x.description);
-  let packageDetails =
-    '<div class="chips"><span class="chip">Up to 3 layers</span><span class="chip">Your own size</span></div>';
+  let packageDetails = pkgChips("Up to 3 layers", "Your own size");
   if (!custom) {
-    packageDetails = `<div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span><strong>Free:</strong> ${safe(x.freebie)}</span></div>`;
+    packageDetails = `${pkgChips(safe(x.layers), safe(x.dimensions))}${inclusionList(x)}`;
   }
   const priceLabel = custom ? "Price from your size" : "Package price";
   const price = custom ? "Computed" : money(x.price);
   const selectionLabel = selected
-    ? '<span class="status green">Selected</span>'
-    : '<span class="status gray">Tap to select</span>';
-  return `<div class="${cardClass}${selectedClass}" role="button" tabindex="0" aria-pressed="${selected}" onclick="pickPkg('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pickPkg('${id}')}"><div class="pkg-media">${media}${featuredBadge}${selectedBadge}</div><div class="pkg-body"><h3>${safe(name)}</h3><p>${description}</p>${packageDetails}<div class="pkg-foot"><div class="price-big"><small>${priceLabel}</small>${price}</div>${selectionLabel}</div></div></div>`;
+    ? '<span class="badge badge-success">Selected</span>'
+    : '<span class="badge badge-ghost">Tap to select</span>';
+  return `<div class="${cardClass}${selectedClass}" role="button" tabindex="0" aria-pressed="${selected}" onclick="pickPkg('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pickPkg('${id}')}"><div class="pkg-media">${media}${featuredBadge}${selectedBadge}</div><div class="pkg-body"><h3>${safe(name)}</h3><p class="pkg-desc">${description}</p>${packageDetails}<div class="pkg-foot"><div class="price-big"><small>${priceLabel}</small>${price}</div>${selectionLabel}</div></div></div>`;
 }
 function packageStep() {
   const status = packageCatalogStatusMarkup();
   if (status) {
-    return `<h2>Choose one service option</h2>${status}<div class="wizard-actions"><button class="secondary" onclick="changeBookingType()">← Back</button></div>`;
+    return `<h2 class="step-title">Choose one service option</h2>${status}<div class="wizard-actions"><button class="btn" onclick="changeBookingType()">${icon("arrow-left")}Back</button></div>`;
   }
   const predefined = selectedPondPackage();
   const packageCards = activePackages()
@@ -1519,7 +1630,7 @@ function packageStep() {
   if (isCustomPond()) pondOptions = customPondPanel();
   else if (predefined) pondOptions = predefinedPondPanel(predefined);
   const notes = safe(extraNotes || window.bookingDraft?.notes || "");
-  return `<h2>Choose one service option</h2><p class="muted">Select one predefined package (each includes a freebie), or choose Custom Pond Design to set your own layers and dimensions.</p><div class="pkg-grid" style="margin-top:18px">${packageCards}</div>${pondOptions}<div class="panel"><h3 style="margin-top:0">Additional request (optional)</h3><div class="field"><label for="notes">Notes for the owner</label><textarea id="notes" placeholder="Share any other requirements..." oninput="extraNotes=this.value">${notes}</textarea></div></div><div class="wizard-actions"><button class="secondary" onclick="changeBookingType()">← Back</button><button class="primary" onclick="continueToSchedule()">Continue to Date →</button></div>`;
+  return `<h2 class="step-title">Choose one service option</h2><p class="muted">Select one predefined package (each includes a freebie), or choose Custom Pond Design to set your own layers and dimensions.</p><div class="pkg-grid mt-5">${packageCards}</div>${pondOptions}<div class="field mt-6"><label for="notes">Notes for the owner (optional)</label><textarea class="textarea w-full" id="notes" placeholder="Share any other requirements..." oninput="extraNotes=this.value">${notes}</textarea></div><div class="wizard-actions"><button class="btn" onclick="changeBookingType()">${icon("arrow-left")}Back</button><button class="btn btn-primary" onclick="continueToSchedule()">Continue to Date${icon("arrow-right")}</button></div>`;
 }
 function customPondPanel() {
   const layerOptions = ["1 layer", "2 layers", "3 layers"].map((layer) => {
@@ -1535,14 +1646,14 @@ function customPondPanel() {
   const estimate = money(pondCustomizationEstimate());
   const rate = money(pondRatePerSqmPerLayer);
   const filtrationFee = money(filtrationEstimate);
-  return `<div class="panel" style="margin-top:18px"><h3 style="margin-top:0">Customize your pond</h3><p class="muted">Choose 1 to 3 layers and enter your pond’s width and length in metres. The price updates automatically.</p><div class="field-grid"><div class="field"><label for="layers">Number of pond layers (maximum 3)</label><select id="layers" onchange="selectedLayers=this.value;render()">${layerOptions}</select></div><div class="field"><label for="filtration">Filtration system</label><select id="filtration" onchange="filtration=this.value;render()">${filtrationOptions}</select></div><div class="field"><label for="pondWidth">Width (metres)</label><input id="pondWidth" type="number" min="1" max="10" step="0.5" value="${pondWidth}" oninput="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondWidth;updatePondEstimate()"></div><div class="field"><label for="pondHeight">Length (metres)</label><input id="pondHeight" type="number" min="1" max="10" step="0.5" value="${pondHeight}" oninput="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondHeight;updatePondEstimate()"></div></div><div class="summary-line"><span>Pond area</span><strong id="pondArea">${area} m²</strong></div><div class="summary-line"><span>Custom pond price</span><strong id="pondEstimate">${estimate}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">Formula: width × length × ${rate} per m² per layer, plus ${filtrationFee} if filtration is selected.</p></div>`;
+  return `<div class="tile mt-6"><h3 class="tile-title">${icon("ruler", "size-4 text-primary")}Customize your pond</h3><p class="muted text-sm">Choose 1 to 3 layers and enter your pond’s width and length in metres. The price updates automatically.</p><div class="field-grid"><div class="field"><label for="layers">Number of pond layers (maximum 3)</label><select class="select w-full" id="layers" onchange="selectedLayers=this.value;render()">${layerOptions}</select></div><div class="field"><label for="filtration">Filtration system</label><select class="select w-full" id="filtration" onchange="filtration=this.value;render()">${filtrationOptions}</select></div><div class="field"><label for="pondWidth">Width (metres)</label><input class="input w-full" id="pondWidth" type="number" min="1" max="10" step="0.5" value="${pondWidth}" oninput="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondWidth=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondWidth;updatePondEstimate()"></div><div class="field"><label for="pondHeight">Length (metres)</label><input class="input w-full" id="pondHeight" type="number" min="1" max="10" step="0.5" value="${pondHeight}" oninput="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));updatePondEstimate()" onchange="pondHeight=Math.min(10,Math.max(1,Number(this.value)||1));this.value=pondHeight;updatePondEstimate()"></div></div><div class="mt-4 grid gap-3 sm:grid-cols-2"><div class="rounded-field bg-base-200 px-4 py-3"><p class="muted text-xs">Pond area</p><p class="text-lg font-semibold" id="pondArea">${area} m²</p></div><div class="rounded-field bg-primary/10 px-4 py-3"><p class="muted text-xs">Custom pond price</p><p class="text-lg font-bold text-primary" id="pondEstimate" aria-live="polite">${estimate}</p></div></div><p class="muted mt-3 text-xs">Formula: width × length × ${rate} per m² per layer, plus ${filtrationFee} if filtration is selected.</p></div>`;
 }
 function predefinedPondPanel(predefined) {
   const name = safe(predefined.name);
   const layers = safe(predefined.layers);
   const dimensions = safe(predefined.dimensions);
   const freebie = safe(predefined.freebie);
-  return `<div class="panel" style="margin-top:18px"><h3 style="margin-top:0">${name} details</h3><div class="summary-line"><span>Included pond configuration</span><strong>${layers} · ${dimensions}</strong></div><div class="summary-line"><span>Predefined freebie</span><strong>${freebie}</strong></div><p class="muted" style="margin-bottom:0">The package uses the owner’s predefined setup. For different dimensions or layers, select Custom Pond Design instead.</p></div>`;
+  return `<div class="tile mt-6"><h3 class="tile-title">${icon("package", "size-4 text-primary")}${name} details</h3><div class="summary-line"><span>Included pond configuration</span><strong>${layers} · ${dimensions}</strong></div><div class="summary-line"><span>Predefined freebie</span><strong>${freebie}</strong></div><p class="muted mt-2 text-sm">The package uses the owner’s predefined setup. For different dimensions or layers, select Custom Pond Design instead.</p></div>`;
 }
 
 function continueToSchedule() {
@@ -1555,7 +1666,7 @@ function continueToSchedule() {
 }
 function dateStep() {
   const p = currentPricing();
-  return `<h2>Choose your service date</h2><p class="muted">Pick your preferred date first, then enter your details. Service dates are open on weekends only. Calendar availability is managed by the farm.</p><div class="calendar-wrap" style="margin-top:14px">${calendarBlock("service")}<div><div class="card"><h3 style="margin-top:0">Selected date</h3><p>${selectedDate ? fmtDate(selectedDate, true) : "Choose an available green date"}</p><div class="notice">Choose any open weekend date. Closed dates cannot be selected. Your date is reserved once your 50% down payment is verified.</div></div><div class="card" style="margin-top:12px"><h3 style="margin-top:0">Your option</h3><p style="margin:0"><strong>${safe(selectedPackageName())}</strong><br><span class="muted">${money(p.total)} · 50% down payment ${money(p.deposit)}</span></p></div></div></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=1;render()">← Back</button><button class="primary" onclick="goDetails()">Continue to Details →</button></div>`;
+  return `<h2 class="step-title">Choose your service date</h2><p class="muted">Pick your preferred date first, then enter your details. Service dates are open on weekends only. Calendar availability is managed by the farm.</p><div class="cal-wrap mt-5">${calendarBlock("service")}<div class="space-y-4"><div class="tile"><h3 class="tile-title">${icon("calendar-check", "size-4 text-primary")}Selected date</h3><p class="text-lg font-semibold">${selectedDate ? fmtDate(selectedDate, true) : '<span class="muted text-base font-normal">Choose an available green date</span>'}</p></div><div class="notice">Choose any open weekend date. Closed dates cannot be selected. Your date is reserved once your 50% down payment is verified.</div><div class="tile"><h3 class="tile-title">${icon("package", "size-4 text-primary")}Your option</h3><p class="font-semibold">${safe(selectedPackageName())}</p><p class="muted text-sm">${money(p.total)} · 50% down payment ${money(p.deposit)}</p></div></div></div><div class="wizard-actions"><button class="btn" onclick="wizardStep=1;render()">${icon("arrow-left")}Back</button><button class="btn btn-primary" onclick="goDetails()">Continue to Details${icon("arrow-right")}</button></div>`;
 }
 function goDetails() {
   if (!selectedDate || blockedDates.service.has(selectedDate)) {
@@ -1569,7 +1680,7 @@ function goDetails() {
 }
 function detailsStep() {
   const d = window.bookingDraft || {};
-  return `<h2>Your details</h2><div class="notice" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><span>📅 Service date: <strong>${selectedDate ? fmtDate(selectedDate, true) : "Not selected"}</strong> · ${safe(selectedPackageName())}</span><button class="secondary small" onclick="readDetails();wizardStep=2;render()">Change date</button></div><div class="panel"><h3 style="margin-top:0">Customer details</h3><div class="field-grid"><div class="field"><label for="customerName">Full name</label><input id="customerName" value="${safe(d.name || sessionCustomerName())}" placeholder="Full name"></div><div class="field"><label for="phone">Contact number</label><input id="phone" value="${safe(d.phone || sessionCustomer?.phoneNumber || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="email">Email (optional)</label><input id="email" type="email" value="${safe(d.email || sessionCustomer?.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="location">Service location</label><input id="location" value="${safe(d.location || "")}" placeholder="Complete service address"></div></div></div><div class="wizard-actions"><button class="secondary" onclick="readDetails();wizardStep=2;render()">← Back</button><button class="primary" onclick="goReview()">Continue to Review →</button></div>`;
+  return `<h2 class="step-title">Your details</h2><div class="notice mt-3 flex flex-wrap items-center justify-between gap-3"><span class="flex items-center gap-2">${icon("calendar", "size-4 text-primary")}<span>Service date: <strong>${selectedDate ? fmtDate(selectedDate, true) : "Not selected"}</strong> · ${safe(selectedPackageName())}</span></span><button class="btn btn-sm" onclick="readDetails();wizardStep=2;render()">Change date</button></div><div class="field-grid"><div class="field"><label for="customerName">Full name</label><input class="input w-full" id="customerName" value="${safe(d.name || sessionCustomerName())}" placeholder="Full name" autocomplete="name"></div><div class="field"><label for="phone">Contact number</label><input class="input w-full" id="phone" type="tel" value="${safe(d.phone || sessionCustomer?.phoneNumber || "")}" placeholder="09XX XXX XXXX" autocomplete="tel"></div><div class="field"><label for="email">Email (optional)</label><input class="input w-full" id="email" type="email" value="${safe(d.email || sessionCustomer?.email || "")}" placeholder="you@example.com" autocomplete="email"></div><div class="field"><label for="location">Service location</label><input class="input w-full" id="location" value="${safe(d.location || "")}" placeholder="Complete service address" autocomplete="street-address"></div></div><div class="wizard-actions"><button class="btn" onclick="readDetails();wizardStep=2;render()">${icon("arrow-left")}Back</button><button class="btn btn-primary" onclick="goReview()">Continue to Review${icon("arrow-right")}</button></div>`;
 }
 function goReview() {
   readDetails();
@@ -1651,7 +1762,7 @@ function serviceBookingPayload(details) {
 }
 function pendingBookingNotice() {
   if (!pendingServiceBooking) return "";
-  return `<div class="notice" style="margin-top:15px">Booking <strong>${safe(pendingServiceBooking.reference)}</strong> has been saved and accepted. Submit your receipt below to finish. Your 50% down payment is <strong>${money(r2(pendingServiceBooking.depositAmount - pendingServiceBooking.paidAmount))}</strong>.</div>`;
+  return `<div class="notice mt-4">Booking <strong>${safe(pendingServiceBooking.reference)}</strong> has been saved and accepted. Submit your receipt below to finish. Your 50% down payment is <strong>${money(r2(pendingServiceBooking.depositAmount - pendingServiceBooking.paidAmount))}</strong>.</div>`;
 }
 function resetServiceWizard() {
   pendingServiceBooking = null;
@@ -1725,15 +1836,23 @@ function serviceBooking() {
   else if (wizardStep === 2) stepContent = dateStep();
   else if (wizardStep === 3) stepContent = detailsStep();
   else if (wizardStep === 4) stepContent = reviewStep();
-  return `<div class="breadcrumbs">Home / Bookings / Book a Service</div><div class="admin-header"><div><h1 class="page-title">Book a Service</h1><p class="muted">Choose a package, pick your date, enter your details, review, then pay the 50% down payment.</p></div><button class="secondary small" onclick="changeBookingType()">Change booking type</button></div>${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel">${stepContent}</div>`;
+  return `${pageHead(["Home", "Bookings", "Book a Service"], "Book a Service", "Choose a package, pick your date, enter your details, review, then pay the 50% down payment.", `<button class="btn btn-ghost btn-sm" onclick="changeBookingType()">${icon("arrow-left")}Change booking type</button>`)}${wizardHeader(["Package", "Date", "Details", "Review", "Payment"], wizardStep)}<div class="panel mt-0">${stepContent}</div>`;
 }
 
 function success() {
   if (successKind === "visit") return visitSuccess();
   const b = currentServerBooking;
   if (!b)
-    return `<div class="panel"><h2>Booking details unavailable</h2><button class="primary" onclick="setPage('mybookings')">Go to My Bookings</button></div>`;
-  return `<div class="panel success"><div class="bigcheck">✓</div><h1>Booking submitted</h1><p class="muted">Your booking has been accepted. Your receipt is now waiting for the owner to verify it against the actual GCash transaction. Your booking is <strong>confirmed once your 50% down payment is verified</strong>, and you will see the update in My Bookings.</p><div class="card" style="max-width:480px;margin:22px auto;text-align:left"><div class="summary-line"><span>Reference number</span><strong>${safe(b.ref)}</strong></div><div class="summary-line"><span>Booking status</span><span class="status ${bookingClass(b.booking)}">${safe(b.booking)}</span></div><div class="summary-line"><span>Payment status</span><span class="status ${payClass(b.payment)}">${safe(b.payment)}</span></div><div class="summary-line"><span>Package</span><strong>${safe(b.pkg)}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>50% down payment submitted</span><strong>${money(b.proof ? b.deposit : 0)}</strong></div><div class="summary-line"><span>Remaining balance (due after service)</span><strong>${money(r2(b.total - b.deposit))}</strong></div></div><button class="primary" onclick="setPage('mybookings')">Track My Booking</button> <button class="secondary" onclick="setPage('home')">Back to Home</button></div>`;
+    return `<div class="panel"><h2 class="step-title">Booking details unavailable</h2><button class="btn btn-primary mt-4" onclick="setPage('mybookings')">Go to My Bookings</button></div>`;
+  const details = `<div class="summary-line"><span>Reference number</span><strong>${safe(b.ref)}</strong></div><div class="summary-line"><span>Booking status</span><span class="badge badge-soft ${bookingClass(b.booking)}">${safe(b.booking)}</span></div><div class="summary-line"><span>Payment status</span><span class="badge badge-soft ${payClass(b.payment)}">${safe(b.payment)}</span></div><div class="summary-line"><span>Package</span><strong>${safe(b.pkg)}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>50% down payment submitted</span><strong>${money(b.proof ? b.deposit : 0)}</strong></div><div class="summary-line"><span>Remaining balance (due after service)</span><strong>${money(r2(b.total - b.deposit))}</strong></div>`;
+  const actions = `<button class="btn btn-primary" onclick="setPage('mybookings')">${icon("clipboard-list")}Track My Booking</button><button class="btn" onclick="setPage('home')">Back to Home</button>`;
+  return resultPanel(
+    "circle-check",
+    "Booking submitted",
+    "Your booking has been accepted. Your receipt is now waiting for the owner to verify it against the actual GCash transaction. Your booking is <strong>confirmed once your 50% down payment is verified</strong>, and you will see the update in My Bookings.",
+    details,
+    actions,
+  );
 }
 
 function customerBookingCard(b) {
@@ -1746,7 +1865,7 @@ function customerBookingCard(b) {
       : "Added by owner after the service";
   const deliveryNote =
     b.deliveryFee == null
-      ? ' <span class="muted" style="font-weight:500">+ delivery</span>'
+      ? ' <span class="muted font-normal">+ delivery</span>'
       : "";
   const proofMarkup = b.proof
     ? `<div class="summary-line"><span>Submitted reference · file</span><strong>${safe(b.proof.reference)} · ${safe(b.proof.fileName)}</strong></div>`
@@ -1761,24 +1880,24 @@ function customerBookingCard(b) {
   }
   const depositButton =
     t === "deposit"
-      ? `<button class="primary small" onclick="openCustomerPayment('${b.ref}','deposit')">${depositLabel}</button>`
+      ? `<button class="btn btn-primary btn-sm" onclick="openCustomerPayment('${b.ref}','deposit')">${icon("wallet")}${depositLabel}</button>`
       : "";
   const balanceButton =
     t === "balance"
-      ? `<button class="primary small" onclick="openCustomerPayment('${b.ref}','balance')">${balanceLabel}</button>`
+      ? `<button class="btn btn-primary btn-sm" onclick="openCustomerPayment('${b.ref}','balance')">${icon("wallet")}${balanceLabel}</button>`
       : "";
-  return `<div class="card" style="margin:14px 0"><div class="admin-header"><div><div class="muted" style="font-size:12px">${b.ref} · Service date ${safe(b.date)}</div><h3 style="margin:7px 0">${safe(b.pkg)}</h3></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div></div>${tracker(b, customerStage(b))}<div class="notice" style="margin:8px 0 12px">${safe(customerMessage(b))}</div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not specified")}</strong></div><div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}${deliveryNote}</strong></div><div class="summary-line"><span>Verified amount paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>${paidLbl}</span><strong>${money(b.balance)}</strong></div>${proofMarkup}<div style="margin-top:15px;display:flex;gap:8px;flex-wrap:wrap"><button class="secondary small" onclick="viewBooking('${b.ref}')">View details & updates</button>${depositButton}${balanceButton}</div></div>`;
+  return `<article class="tile booking-card"><div class="admin-header"><div class="min-w-0"><p class="muted text-xs font-medium">${b.ref} · Service date ${safe(b.date)}</p><h3 class="mt-1 text-lg font-semibold">${safe(b.pkg)}</h3></div><div class="flex flex-wrap gap-1.5"><span class="badge badge-soft ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="badge badge-soft ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div></div>${tracker(b, customerStage(b))}<div class="notice">${safe(customerMessage(b))}</div><div class="mt-3 grid gap-x-8 md:grid-cols-2"><div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not specified")}</strong></div><div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div></div><div><div class="summary-line"><span>Total</span><strong>${money(b.total)}${deliveryNote}</strong></div><div class="summary-line"><span>Verified amount paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line is-highlight"><span>${paidLbl}</span><strong>${money(b.balance)}</strong></div></div></div>${proofMarkup}<div class="mt-4 flex flex-wrap gap-2"><button class="btn btn-sm" onclick="viewBooking('${b.ref}')">${icon("eye")}View details & updates</button>${depositButton}${balanceButton}</div></article>`;
 }
 function freshUpdatesMarkup(fresh) {
   if (!fresh.length) return "";
   const items = fresh
     .map(
       (update) =>
-        `<li><strong>${safe(update.b.pkg)} (${update.b.ref}):</strong> ${safe(update.e.text)}<span class="when">${safe(update.e.at)}</span></li>`,
+        `<li><p><strong>${safe(update.b.pkg)} (${update.b.ref}):</strong> ${safe(update.e.text)}</p><time>${safe(update.e.at)}</time></li>`,
     )
     .join("");
   const updateLabel = fresh.length === 1 ? "update" : "updates";
-  return `<div class="callout" style="margin-top:16px"><strong>🔔 ${fresh.length} new ${updateLabel}</strong><ul class="timeline" style="margin-top:12px">${items}</ul></div>`;
+  return `<div class="callout mt-5"><p class="flex items-center gap-2 font-semibold">${icon("bell", "size-5 text-warning")}${fresh.length} new ${updateLabel}</p><ul class="updates mt-3">${items}</ul></div>`;
 }
 function visitCard(v) {
   const typeLabel =
@@ -1786,15 +1905,15 @@ function visitCard(v) {
   const reasonMarkup = v.reason
     ? `<div class="summary-line"><span>Reason for special date</span><strong>${safe(v.reason)}</strong></div>`
     : "";
-  return `<div class="card" style="margin:12px 0"><div class="admin-header"><div><div class="muted" style="font-size:12px">${v.ref} · ${typeLabel}</div><h3 style="margin:7px 0">${fmtDate(v.date, true)}</h3></div><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div>${reasonMarkup}</div>`;
+  return `<article class="tile booking-card"><div class="admin-header"><div class="min-w-0"><p class="muted text-xs font-medium">${v.ref} · ${typeLabel}</p><h3 class="mt-1 text-lg font-semibold">${fmtDate(v.date, true)}</h3></div><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span></div><div class="mt-3"><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div>${reasonMarkup}</div></article>`;
 }
 function mybookings() {
-  const header = `<div class="breadcrumbs">Customer Portal / My Bookings</div><div class="admin-header"><div><h1 class="page-title">My Bookings</h1><p class="muted">Follow each booking from submission to final payment. Booking status and payment status are tracked separately.</p></div><button class="primary" onclick="startBooking()">+ New Booking</button></div>`;
+  const header = pageHead(["Customer Portal", "My Bookings"], "My Bookings", "Follow each booking from submission to final payment. Booking status and payment status are tracked separately.", `<button class="btn btn-primary" onclick="startBooking()">${icon("plus")}New Booking</button>`);
   if (customerBookingsState === "loading" || customerBookingsState === "idle") {
-    return `${header}<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading your bookings…</p></div>`;
+    return `${header}<div class="space-y-4" aria-busy="true"><span class="sr-only" role="status">Loading your bookings…</span><div class="skeleton h-48 w-full"></div><div class="skeleton h-48 w-full"></div></div>`;
   }
   if (customerBookingsState === "error") {
-    return `${header}<div class="panel" role="alert"><p style="margin-top:0">${safe(customerBookingsError)}</p><button class="secondary" onclick="customerBookingsState='idle';render()">Try again</button></div>`;
+    return `${header}<div class="alert alert-error alert-soft" role="alert">${icon("circle-alert", "size-5")}<span>${safe(customerBookingsError)}</span><button class="btn btn-sm" onclick="customerBookingsState='idle';render()">${icon("refresh-cw")}Try again</button></div>`;
   }
   const mine = myBookingList(),
     myVisits = customerVisits,
@@ -1806,11 +1925,11 @@ function mybookings() {
   );
   const bookingMarkup =
     mine.map(customerBookingCard).join("") ||
-    '<div class="empty">No service bookings yet.</div>';
+    `<div class="empty">${icon("inbox", "size-8 mx-auto mb-2 text-base-content/40")}<p>No service bookings yet.</p><button class="btn btn-primary btn-sm mt-4" onclick="chooseBookingType('service')">Book a service</button></div>`;
   const visitMarkup =
     myVisits.map(visitCard).join("") ||
-    '<div class="empty">No visitations yet.</div>';
-  return `${header}<div class="panel"><div class="pill-row"><span class="pill">Signed in as ${safe(sessionCustomerName())}</span></div></div>${freshUpdatesMarkup(fresh)}<h2 style="margin-top:28px">Service bookings</h2>${bookingMarkup}<h2 style="margin-top:28px">Farm visitations</h2>${visitMarkup}<div class="notice" style="margin-top:16px">GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</div>`;
+    `<div class="empty">${icon("trees", "size-8 mx-auto mb-2 text-base-content/40")}<p>No visitations yet.</p><button class="btn btn-sm mt-4" onclick="chooseBookingType('visit')">Plan a farm visit</button></div>`;
+  return `${header}<div class="flex flex-wrap items-center gap-2"><span class="badge badge-ghost gap-1.5 py-3">${icon("user", "size-3.5")}Signed in as ${safe(sessionCustomerName())}</span><span class="badge badge-ghost py-3">${mine.length} service booking${mine.length === 1 ? "" : "s"}</span><span class="badge badge-ghost py-3">${myVisits.length} visitation${myVisits.length === 1 ? "" : "s"}</span></div>${freshUpdatesMarkup(fresh)}<section aria-labelledby="serviceBookingsTitle"><h2 id="serviceBookingsTitle" class="section-title mt-10 mb-4 text-2xl">Service bookings</h2><div class="space-y-4">${bookingMarkup}</div></section><section aria-labelledby="visitsTitle"><h2 id="visitsTitle" class="section-title mt-10 mb-4 text-2xl">Farm visitations</h2><div class="space-y-4">${visitMarkup}</div></section><div class="notice mt-8 flex items-start gap-2">${icon("shield-check", "size-4 mt-0.5 text-primary")}<span>GCash transfers happen outside this website. The owner manually verifies each transaction before any amount is recorded as received.</span></div>`;
 }
 
 function viewBooking(ref, admin, record = null) {
@@ -1824,7 +1943,7 @@ function viewBooking(ref, admin, record = null) {
   }
   const noticeMarkup = admin
     ? ""
-    : `<div class="notice" style="margin:8px 0 12px">${safe(customerMessage(b))}</div>`;
+    : `<div class="notice">${safe(customerMessage(b))}</div>`;
   const trackerMarkup = tracker(b, customerStage(b));
   const contactEmail = b.email ? " · " + safe(b.email) : "";
   const filtrationMarkup = b.pondWidth
@@ -1846,16 +1965,16 @@ function viewBooking(ref, admin, record = null) {
     })
     .join("");
   let paymentHistoryMarkup = payments
-    ? `<h4 style="margin:18px 0 4px">Verified payments</h4>${payments}`
+    ? `<h4 class="modal-section">Verified payments</h4>${payments}`
     : "";
   if (admin) {
     const account = b.account
       ? `<div class="summary-line"><span>Customer account</span><strong>${safe(b.account.name)} · ${safe(b.account.email || "—")}${b.account.active ? "" : " (inactive)"}</strong></div>`
       : "";
-    paymentHistoryMarkup = `${account}<h4 style="margin:18px 0 4px">Payment records</h4>${adminPaymentRecordsMarkup(b)}`;
+    paymentHistoryMarkup = `${account}<h4 class="modal-section">Payment records</h4>${adminPaymentRecordsMarkup(b)}`;
   }
-  const body = `${trackerMarkup}${noticeMarkup}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0"><span class="status ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="status ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div><h4 style="margin:16px 0 4px">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${contactEmail}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pondDetails}${filtrationMarkup}</strong></div>${freebieMarkup}${notesMarkup}<h4 style="margin:18px 0 4px">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${paymentHistoryMarkup}<h4 style="margin:18px 0 0">Status updates</h4>${timelineHtml(b, !admin)}`;
-  const actions = `<button class="secondary" onclick="closeModal()">Close</button>`;
+  const body = `<div class="flex flex-wrap gap-1.5"><span class="badge badge-soft ${bookingClass(b.booking)}">Booking: ${safe(b.booking)}</span><span class="badge badge-soft ${payClass(b.payment)}">Payment: ${safe(b.payment)}</span></div>${trackerMarkup}${noticeMarkup}<h4 class="modal-section">Booking</h4><div class="summary-line"><span>Customer</span><strong>${safe(b.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(b.phone || "—")}${contactEmail}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "—")}</strong></div><div class="summary-line"><span>Service date</span><strong>${safe(b.date)}</strong></div><div class="summary-line"><span>Pond</span><strong>${pondDetails}${filtrationMarkup}</strong></div>${freebieMarkup}${notesMarkup}<h4 class="modal-section">Pricing</h4><div class="summary-line"><span>Package price</span><strong>${money(b.servicePrice)}</strong></div><div class="summary-line"><span>Customization</span><strong>${money(b.customizationFee || 0)}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${deliveryFee}</strong></div><div class="summary-line"><span>Total</span><strong>${money(b.total)}</strong></div><div class="summary-line"><span>50% down payment</span><strong>${money(b.deposit)}</strong></div><div class="summary-line"><span>Verified paid</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="summary-line is-highlight"><span>Outstanding balance</span><strong>${money(b.balance)}</strong></div>${paymentHistoryMarkup}<h4 class="modal-section">Status updates</h4>${timelineHtml(b, !admin)}`;
+  const actions = `<button class="btn" onclick="closeModal()">Close</button>`;
   openModal(
     safe(b.pkg),
     `${b.ref}`,
@@ -1887,7 +2006,7 @@ function customerPaymentPage() {
   const b = customerBookingByRef(paymentTargetRef),
     target = window.paymentTarget || "deposit";
   if (!b)
-    return `<div class="panel"><h2>Payment details unavailable</h2><button class="primary" onclick="setPage('mybookings')">Return to My Bookings</button></div>`;
+    return `<div class="panel"><h2 class="step-title">Payment details unavailable</h2><button class="btn btn-primary mt-4" onclick="setPage('mybookings')">Return to My Bookings</button></div>`;
   const amount =
     target === "balance" ? b.balance : r2(b.deposit - Number(b.paidAmount || 0));
   const isBalancePayment = target === "balance";
@@ -1898,7 +2017,7 @@ function customerPaymentPage() {
   const paymentDetails = isBalancePayment
     ? `<div class="summary-line"><span>Package / customization</span><strong>${money(Number(b.servicePrice) + Number(b.customizationFee || 0))}</strong></div><div class="summary-line"><span>Delivery fee</span><strong>${money(b.deliveryFee || 0)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount)}</strong></div>`
     : `<div class="summary-line"><span>Total service price</span><strong>${money(b.total)}</strong></div>`;
-  return `<div class="breadcrumbs">Customer Portal / My Bookings / GCash Payment</div><div class="panel" style="max-width:900px;margin:0 auto"><div class="admin-header"><div><h1 class="page-title">${pageTitle}</h1><p class="muted">Booking ${safe(b.ref)} · ${safe(b.pkg)}</p></div><span class="status green">${paymentType}</span></div><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner’s GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner’s GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner’s GCash number]</strong></div>${paymentDetails}<div class="summary-line"><span>Amount to pay now</span><strong style="font-size:23px;color:var(--green)">${money(amount)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.</div></div></div><div class="panel" style="margin-top:20px"><h3 style="margin-top:0">Upload payment receipt</h3><p class="muted">The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: JPG, PNG, WEBP, HEIC image or PDF, up to 8 MB.</p></div>${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="secondary" onclick="setPage('mybookings')">Cancel</button><button class="primary" id="submitPaymentButton" onclick="submitPaymentProof('${b.ref}','${target}')">I’ve Paid — Submit Receipt</button></div></div></div>`;
+  return `<div class="mx-auto max-w-4xl">${pageHead(["Customer Portal", "My Bookings", "GCash Payment"], pageTitle, `Booking ${safe(b.ref)} · ${safe(b.pkg)}`, `<span class="badge badge-soft badge-success">${paymentType}</span>`)}${gcashDetailsMarkup(paymentDetails, amount, "Open GCash, scan the QR or use the details above, and pay the exact amount. After the transfer succeeds, upload your receipt below.")}<div class="panel">${receiptUploadMarkup("The owner compares the reference, receipt and amount with the actual GCash transaction. You will see a status update here once it is verified.")}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="btn" onclick="setPage('mybookings')">Cancel</button><button class="btn btn-primary" id="submitPaymentButton" onclick="submitPaymentProof('${b.ref}','${target}')">${icon("upload")}I’ve Paid — Submit Receipt</button></div></div></div>`;
 }
 async function submitPaymentProof(ref, target) {
   if (submitting) return;
@@ -2047,7 +2166,7 @@ function adminVisitByRef(ref) {
 /** Loading or error panel for tabs that depend on booking records. */
 function adminDataStatusPanel() {
   if (adminDataState === "error") {
-    return `<div class="panel" role="alert"><h3 style="margin-top:0">Booking records could not be loaded</h3><p class="muted">${safe(adminDataError)}</p><button class="secondary" onclick="reloadAdminData()">Try again</button></div>`;
+    return `<div class="panel" role="alert"><h3 style="margin-top:0">Booking records could not be loaded</h3><p class="muted">${safe(adminDataError)}</p><button class="btn" onclick="reloadAdminData()">Try again</button></div>`;
   }
   if (adminDataState !== "loaded") {
     return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading booking records…</p></div>';
@@ -2073,12 +2192,12 @@ function adminBookingPath(ref) {
   return `/api/admin/service-bookings/${encodeURIComponent(ref)}`;
 }
 async function adminViewBooking(ref) {
-  openModal("Booking details", safe(ref), '<p class="muted" aria-busy="true">Loading booking…</p>', '<button class="secondary" onclick="closeModal()">Close</button>', true);
+  openModal("Booking details", safe(ref), '<p class="muted" aria-busy="true">Loading booking…</p>', '<button class="btn" onclick="closeModal()">Close</button>', true);
   try {
     const { booking, payments } = await bookingApiRequest(adminBookingPath(ref));
     viewBooking(ref, true, toAdminBooking({ ...booking, paymentRecords: payments }));
   } catch (error) {
-    openModal("Booking details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this booking.")}</p>`, '<button class="secondary" onclick="closeModal()">Close</button>');
+    openModal("Booking details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this booking.")}</p>`, '<button class="btn" onclick="closeModal()">Close</button>');
   }
 }
 function adminPaymentRecordsMarkup(b) {
@@ -2086,9 +2205,9 @@ function adminPaymentRecordsMarkup(b) {
   return b.payments
     .map((payment) => {
       const label = payment.paymentTarget === "deposit" ? "50% down payment" : "Balance payment";
-      let statusClass = "";
-      if (payment.status === "Verified") statusClass = "green";
-      else if (payment.status === "Rejected") statusClass = "red";
+      let statusClass = "badge-warning";
+      if (payment.status === "Verified") statusClass = "badge-success";
+      else if (payment.status === "Rejected") statusClass = "badge-error";
       const reviewer = staffName(payment.verifiedBy);
       const reviewed = payment.verifiedAt
         ? `<div class="summary-line"><span>${payment.status === "Verified" ? "Verified" : "Reviewed"}</span><strong>${safe(serverTime(payment.verifiedAt))}${reviewer ? ` · ${safe(reviewer)}` : ""}</strong></div>`
@@ -2096,7 +2215,7 @@ function adminPaymentRecordsMarkup(b) {
       const reason = payment.rejectionReason
         ? `<div class="summary-line"><span>Rejection reason</span><strong>${safe(payment.rejectionReason)}</strong></div>`
         : "";
-      return `<div class="card" style="margin:10px 0"><div class="admin-header"><strong>${label}</strong><span class="status ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}<div style="margin-top:10px"><button class="secondary small" onclick="viewPaymentReceipt('${b.ref}','${payment._id}')">View receipt</button></div></div>`;
+      return `<div class="tile" style="margin:10px 0"><div class="admin-header"><strong>${label}</strong><span class="badge badge-soft ${statusClass}">${safe(payment.status)}</span></div><div class="summary-line"><span>Submitted amount · required</span><strong>${money(payment.amount)} · ${money(payment.expectedAmount)}</strong></div><div class="summary-line"><span>GCash reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div>${reviewed}${reason}<div style="margin-top:10px"><button class="btn btn-sm" onclick="viewPaymentReceipt('${b.ref}','${payment._id}')">View receipt</button></div></div>`;
     })
     .join("");
 }
@@ -2237,13 +2356,13 @@ function adminActionMarkup(todo, specialVisits) {
   const bookingItems = todo
     .map((booking) => {
       const action = nextAction(booking);
-      return `<div class="todo"><div><strong>${booking.ref} · ${safe(booking.name)}</strong><div class="muted">${safe(booking.pkg)} · ${safe(booking.date)} · ${safe(booking.booking)} / ${safe(booking.payment)}</div></div><button class="primary small" onclick="${action.fn}">${action.label}</button></div>`;
+      return `<div class="todo"><div><strong>${booking.ref} · ${safe(booking.name)}</strong><div class="muted">${safe(booking.pkg)} · ${safe(booking.date)} · ${safe(booking.booking)} / ${safe(booking.payment)}</div></div><button class="btn btn-primary btn-sm" onclick="${action.fn}">${action.label}</button></div>`;
     })
     .join("");
   const visitItems = specialVisits
     .map(
       (visit) =>
-        `<div class="todo"><div><strong>${visit.ref} · ${safe(visit.name)}</strong><div class="muted">Special-date visit request · ${fmtDate(visit.date)}</div></div><button class="primary small" onclick="adminTab='special';render()">Review request</button></div>`,
+        `<div class="todo"><div><strong>${visit.ref} · ${safe(visit.name)}</strong><div class="muted">Special-date visit request · ${fmtDate(visit.date)}</div></div><button class="btn btn-primary btn-sm" onclick="adminTab='special';render()">Review request</button></div>`,
     )
     .join("");
   if (!bookingItems && !visitItems) {
@@ -2258,7 +2377,7 @@ function comingUpMarkup(items) {
   return items
     .map(
       (item) =>
-        `<div class="summary-line"><span><span class="status gray">${item.t}</span> &nbsp;${safe(item.l)}</span><strong>${fmtDate(item.d)}</strong></div>`,
+        `<div class="summary-line"><span><span class="badge badge-soft badge-neutral">${item.t}</span> &nbsp;${safe(item.l)}</span><strong>${fmtDate(item.d)}</strong></div>`,
     )
     .join("");
 }
@@ -2305,7 +2424,7 @@ function bookingRow(b) {
     left = Math.max(0, Number(b.total || 0) - Number(b.paidAmount || 0));
   let actionMarkup;
   if (na.fn) {
-    actionMarkup = `<button class="${na.cls} small" onclick="${na.fn}">${na.label}</button>`;
+    actionMarkup = `<button class="btn ${na.cls} btn-sm" onclick="${na.fn}">${na.label}</button>`;
   } else if (na.wait) {
     actionMarkup = `<span class="muted">⏳ ${na.wait}</span>`;
   } else {
@@ -2324,13 +2443,13 @@ function bookingRow(b) {
   const awaitingReview = b.payment === "Verification Pending";
   const rejectMarkup =
     !awaitingReview && ["Pending", "Approved"].includes(b.booking)
-      ? `<button class="danger small" onclick="updateBooking('${b.ref}','Rejected')">Reject</button>`
+      ? `<button class="btn btn-soft btn-error btn-sm" onclick="updateBooking('${b.ref}','Rejected')">Reject</button>`
       : "";
   const cancelMarkup =
     !closed && !awaitingReview && ["Pending", "Approved", "Confirmed"].includes(b.booking)
-      ? `<button class="danger small" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`
+      ? `<button class="btn btn-soft btn-error btn-sm" onclick="updateBooking('${b.ref}','Cancelled')">Cancel</button>`
       : "";
-  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="status ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="status ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${deliveryLabel}</span></td><td>${actionMarkup}</td><td><div class="actions"><button class="secondary small" onclick="adminViewBooking('${b.ref}')">View</button>${rejectMarkup}${cancelMarkup}</div></td></tr>`;
+  return `<tr><td><strong>${b.ref}</strong><br>${safe(b.pkg)}<br><span class="muted">${safe(b.layers || "—")}${pondMarkup}</span>${freebieMarkup}</td><td>${safe(b.name)}<br><span class="muted">${safe(b.phone || "")}</span><br><span class="muted">${safe(b.location || "")}</span></td><td>${safe(b.date)}</td><td><span class="badge badge-soft ${bookingClass(b.booking)}">${safe(b.booking)}</span><br><span class="badge badge-soft ${payClass(b.payment)}" style="margin-top:5px">${safe(b.payment)}</span></td><td><strong>${money(b.total)}</strong><br><span class="muted">Paid ${money(b.paidAmount || 0)} · Left ${money(left)}</span><br><span class="muted">Delivery: ${deliveryLabel}</span></td><td>${actionMarkup}</td><td><div class="actions"><button class="btn btn-sm" onclick="adminViewBooking('${b.ref}')">View</button>${rejectMarkup}${cancelMarkup}</div></td></tr>`;
 }
 function bookingTableHtml() {
   const list = adminServiceBookings.filter(bookingMatches);
@@ -2354,7 +2473,7 @@ function adminBookings() {
     ["closed", "Cancelled / Rejected"],
   ];
   const filters = F.map(bookingFilterButton).join("");
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Approved → Confirmed (when the down payment is verified) → Ongoing → Completed (service done) → balance paid</span></div></div><div class="toolbar"><input type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Bookings</h3><span class="muted" style="font-size:12px">Approved → Confirmed (when the down payment is verified) → Ongoing → Completed (service done) → balance paid</span></div></div><div class="toolbar"><input class="input w-full" type="search" placeholder="Search ref, customer, package, location…" value="${safe(bSearch)}" oninput="bSearch=this.value;refreshBookingTable()" aria-label="Search bookings"><div class="filters">${filters}</div></div><div id="bkHost">${bookingTableHtml()}</div></div><div class="notice" style="margin-top:14px">The big buttons in <strong>Next step</strong> walk you through each booking. The customer sees a status update each time you verify a payment, complete the service or add a delivery fee.</div>`;
 }
 function bookingFilterButton(filter) {
   const activeClass = bFilter === filter[0] ? "active" : "";
@@ -2402,8 +2521,8 @@ function openPricing(ref) {
   openModal(
     "Delivery fee",
     `${b.ref} · ${safe(b.name)}`,
-    `<p class="muted" style="margin-top:0">The service is done. Enter the confirmed Lalamove quote (enter 0 if there is no delivery). It is added to the outstanding balance, and the customer can then pay the balance from My Bookings.</p><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not provided")}</strong></div><div class="summary-line"><span>Package and customization</span><strong>${money(base)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="field"><label for="deliveryFeeInput">Lalamove delivery fee (₱)</label><input id="deliveryFeeInput" type="number" min="0" step="0.01" value="${b.deliveryFee ?? ""}" placeholder="Enter confirmed delivery quote" oninput="pricePreview('${b.ref}')"></div><div class="notice" id="pricePreview">Enter a non-negative delivery fee to preview the new balance.</div>`,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" id="savePricingButton" onclick="savePricing('${b.ref}')">Save & notify customer</button>`,
+    `<p class="muted" style="margin-top:0">The service is done. Enter the confirmed Lalamove quote (enter 0 if there is no delivery). It is added to the outstanding balance, and the customer can then pay the balance from My Bookings.</p><div class="summary-line"><span>Service location</span><strong>${safe(b.location || "Not provided")}</strong></div><div class="summary-line"><span>Package and customization</span><strong>${money(base)}</strong></div><div class="summary-line"><span>Already paid (verified)</span><strong>${money(b.paidAmount || 0)}</strong></div><div class="field"><label for="deliveryFeeInput">Lalamove delivery fee (₱)</label><input class="input w-full" id="deliveryFeeInput" type="number" min="0" step="0.01" value="${b.deliveryFee ?? ""}" placeholder="Enter confirmed delivery quote" oninput="pricePreview('${b.ref}')"></div><div class="notice" id="pricePreview">Enter a non-negative delivery fee to preview the new balance.</div>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="savePricingButton" onclick="savePricing('${b.ref}')">Save & notify customer</button>`,
   );
   pricePreview(ref);
 }
@@ -2453,8 +2572,8 @@ function adminPayments() {
   const owedMarkup = owed.length
     ? owedPaymentTable(owed)
     : '<p class="muted">No customer payments are currently due.</p>';
-  const waitingClass = waiting.length ? "" : "green";
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Needs verification</h3><p class="muted" style="margin:6px 0 0">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="status ${waitingClass}">${waiting.length} waiting</span></div><div class="callout" style="margin-top:14px"><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</div>${waitingMarkup}</div><div class="panel"><div class="admin-header"><h3 style="margin:0">Waiting on the customer</h3><span class="muted" style="font-size:12px">${owed.length}</span></div>${owedMarkup}</div>`;
+  const waitingClass = waiting.length ? "badge-warning" : "badge-success";
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Needs verification</h3><p class="muted" style="margin:6px 0 0">Check each receipt against the actual GCash transaction before verifying.</p></div><span class="badge badge-soft ${waitingClass}">${waiting.length} waiting</span></div><div class="callout" style="margin-top:14px"><strong>Important:</strong> this website does not connect to GCash. Do not verify from the uploaded receipt alone — confirm the money arrived, the reference matches, and the amount is correct.</div>${waitingMarkup}</div><div class="panel"><div class="admin-header"><h3 style="margin:0">Waiting on the customer</h3><span class="muted" style="font-size:12px">${owed.length}</span></div>${owedMarkup}</div>`;
 }
 /** What verifying this payment would do, per the backend's rules. */
 function paymentReviewOutcome(b, payment) {
@@ -2471,7 +2590,7 @@ function paymentMismatchMarkup(payment) {
 function pendingPaymentCard(b) {
   const p = b.pendingPayment;
   const paymentType = p.paymentTarget === "balance" ? "Balance payment" : "50% down payment";
-  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="status">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div><div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="primary" onclick="reviewPayment('${b.ref}')">Review payment</button><button class="secondary" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button></div></div>`;
+  return `<div class="tile" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${safe(b.ref)} · Submitted ${safe(serverTime(p.submittedAt))}</div><h3 style="margin:6px 0">${safe(b.name)} — ${safe(b.pkg)}</h3></div><span class="badge badge-soft badge-warning">${paymentType}</span></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(p.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(p.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(p.expectedAmount)}</strong></div>${paymentMismatchMarkup(p)}<div class="summary-line"><span>Receipt file</span><strong>${safe(p.receiptFileName)}</strong></div><div class="summary-line"><span>If verified</span><strong>${paymentReviewOutcome(b, p)}</strong></div><div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="reviewPayment('${b.ref}')">Review payment</button><button class="btn" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button></div></div>`;
 }
 function owedPaymentTable(owed) {
   const rows = owed.map(owedPaymentRow).join("");
@@ -2481,7 +2600,7 @@ function owedPaymentRow(b) {
   const isBalance = customerCanPay(b) === "balance";
   const paymentDue = isBalance ? "Outstanding balance" : "50% down payment";
   const amount = isBalance ? b.balance : r2(b.deposit - Number(b.paidAmount || 0));
-  return `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${paymentDue}</td><td>${money(amount)}</td><td><span class="status ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
+  return `<tr><td><strong>${b.ref}</strong><br><span class="muted">${safe(b.pkg)}</span></td><td>${safe(b.name)}</td><td>${paymentDue}</td><td>${money(amount)}</td><td><span class="badge badge-soft ${payClass(b.payment)}">${safe(b.payment)}</span></td></tr>`;
 }
 function paymentAmountsDiffer(payment) {
   return Math.abs(Number(payment.amount) - Number(payment.expectedAmount)) > 0.001;
@@ -2499,14 +2618,14 @@ function reviewPayment(ref) {
     "Verify GCash payment",
     `${safe(b.ref)} · ${safe(b.name)} · ${safe(b.pkg)}`,
     body,
-    `<button class="secondary" onclick="closeModal()">Close</button><button class="secondary" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button><button class="danger" id="rejectPaymentButton" onclick="verifyPayment('${b.ref}','${p._id}',false)">Reject proof</button><button class="primary" id="verifyPaymentButton" onclick="verifyPayment('${b.ref}','${p._id}',true)">Verify payment</button>`,
+    `<button class="btn" onclick="closeModal()">Close</button><button class="btn" onclick="viewPaymentReceipt('${b.ref}','${p._id}')">View receipt</button><button class="btn btn-soft btn-error" id="rejectPaymentButton" onclick="verifyPayment('${b.ref}','${p._id}',false)">Reject proof</button><button class="btn btn-primary" id="verifyPaymentButton" onclick="verifyPayment('${b.ref}','${p._id}',true)">Verify payment</button>`,
   );
 }
 function paymentReviewBody(b, payment, paymentType) {
   const mismatchConfirmation = paymentAmountsDiffer(payment)
-    ? `<label class="check-row"><input type="checkbox" id="m_mismatch"><span>The submitted amount (${money(payment.amount)}) differs from the required amount (${money(payment.expectedAmount)}). I confirm this is the amount actually received.</span></label>`
+    ? `<label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_mismatch"><span>The submitted amount (${money(payment.amount)}) differs from the required amount (${money(payment.expectedAmount)}). I confirm this is the amount actually received.</span></label>`
     : "";
-  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div><label class="check-row"><input type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label>${mismatchConfirmation}<div class="field" style="margin-top:14px"><label for="m_reason">Reason (required to reject; shown to the customer)</label><input id="m_reason" maxlength="500" placeholder="e.g. Reference number not found in GCash"></div>${FORM_ERROR_MARKUP}`;
+  return `<div class="callout">Open your GCash transaction history and confirm the money was actually received before verifying.</div><div class="summary-line"><span>Payment type</span><strong>${paymentType}</strong></div><div class="summary-line"><span>Transaction reference</span><strong>${safe(payment.gcashReference || "—")}</strong></div><div class="summary-line"><span>Submitted amount</span><strong>${money(payment.amount)}</strong></div><div class="summary-line"><span>Required amount</span><strong>${money(payment.expectedAmount)}</strong></div>${paymentMismatchMarkup(payment)}<div class="summary-line"><span>Receipt file</span><strong>${safe(payment.receiptFileName)}</strong></div><div class="summary-line"><span>Submitted</span><strong>${safe(serverTime(payment.submittedAt))}</strong></div><div class="summary-line"><span>Result if verified</span><strong>${paymentReviewOutcome(b, payment)}</strong></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_checked"><span>I checked the actual GCash transaction: the money arrived and the reference and amount match.</span></label>${mismatchConfirmation}<div class="field" style="margin-top:14px"><label for="m_reason">Reason (required to reject; shown to the customer)</label><input class="input w-full" id="m_reason" maxlength="500" placeholder="e.g. Reference number not found in GCash"></div>${FORM_ERROR_MARKUP}`;
 }
 /**
  * Verifies or rejects a submitted payment through the backend, which applies
@@ -2607,32 +2726,32 @@ function visitFilterButton(filter) {
 }
 function visitTableRow(visit) {
   const typeLabel = visit.type === "Special" ? "Special date" : "Regular";
-  return `<tr><td><strong>${visit.ref}</strong><br><span class="muted">Submitted ${safe(visit.submittedAt)}</span></td><td>${safe(visit.name)}<br><span class="muted">${safe(visit.email)}</span><br><span class="muted">${safe(visit.phone)}</span></td><td>${safe(visit.farm || "—")}</td><td>${fmtDate(visit.date, true)}</td><td>${visit.visitors}</td><td>${typeLabel}</td><td><span class="status ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></td><td><div class="actions">${visitManageButtons(visit)}</div></td></tr>`;
+  return `<tr><td><strong>${visit.ref}</strong><br><span class="muted">Submitted ${safe(visit.submittedAt)}</span></td><td>${safe(visit.name)}<br><span class="muted">${safe(visit.email)}</span><br><span class="muted">${safe(visit.phone)}</span></td><td>${safe(visit.farm || "—")}</td><td>${fmtDate(visit.date, true)}</td><td>${visit.visitors}</td><td>${typeLabel}</td><td><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></td><td><div class="actions">${visitManageButtons(visit)}</div></td></tr>`;
 }
 function visitManageButtons(visit) {
   const statusActions = ["Booked", "Approved"].includes(visit.status)
-    ? `<button class="primary small" onclick="updateVisit('${visit.ref}','Completed')">Mark completed</button><button class="danger small" onclick="updateVisit('${visit.ref}','Cancelled')">Cancel</button>`
+    ? `<button class="btn btn-primary btn-sm" onclick="updateVisit('${visit.ref}','Completed')">Mark completed</button><button class="btn btn-soft btn-error btn-sm" onclick="updateVisit('${visit.ref}','Cancelled')">Cancel</button>`
     : "";
-  return `<button class="secondary small" onclick="adminViewVisit('${visit.ref}')">View</button>${statusActions}`;
+  return `<button class="btn btn-sm" onclick="adminViewVisit('${visit.ref}')">View</button>${statusActions}`;
 }
 function adminSpecial() {
   const list = adminVisitations.filter((v) => v.type === "Special"),
     pend = list.filter((v) => v.status === "Pending Review").length;
-  const statusClass = pend ? "" : "green";
+  const statusClass = pend ? "badge-warning" : "badge-success";
   const requests = list.length
     ? list.map(specialVisitCard).join("")
     : '<div class="empty"><h3>No special-date requests</h3><p>Requests for dates outside the regular schedule will appear here.</p></div>';
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Special-Date Requests</h3><p class="muted" style="margin:6px 0 0">Visit requests for dates outside the regular weekend schedule. Approve or decline each one.</p></div><span class="status ${statusClass}">${pend} awaiting review</span></div>${requests}</div>`;
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Special-Date Requests</h3><p class="muted" style="margin:6px 0 0">Visit requests for dates outside the regular weekend schedule. Approve or decline each one.</p></div><span class="badge badge-soft ${statusClass}">${pend} awaiting review</span></div>${requests}</div>`;
 }
 function specialVisitCard(visit) {
   const reviewActions =
     visit.status === "Pending Review"
-      ? `<button class="primary" onclick="updateVisit('${visit.ref}','Approved')">Approve special date</button><button class="danger" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
+      ? `<button class="btn btn-primary" onclick="updateVisit('${visit.ref}','Approved')">Approve special date</button><button class="btn btn-soft btn-error" onclick="updateVisit('${visit.ref}','Declined')">Decline request</button>`
       : "";
   const reviewed = visit.reviewedAt
     ? `<div class="summary-line"><span>Reviewed</span><strong>${safe(serverTime(visit.reviewedAt))}${visit.reviewerName ? ` · ${safe(visit.reviewerName)}` : ""}</strong></div>`
     : "";
-  return `<div class="card" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${visit.ref} · Submitted ${safe(visit.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(visit.date, true)}</h3></div><span class="status ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}<div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${reviewActions}<button class="secondary" onclick="adminViewVisit('${visit.ref}')">View</button></div></div>`;
+  return `<div class="tile" style="margin-top:15px"><div class="admin-header"><div><div class="muted" style="font-size:12px">${visit.ref} · Submitted ${safe(visit.submittedAt)}</div><h3 style="margin:6px 0">${fmtDate(visit.date, true)}</h3></div><span class="badge badge-soft ${visitStatusClass(visit.status)}">${safe(visit.status)}</span></div><div class="summary-line"><span>Visitor</span><strong>${safe(visit.name)} · ${safe(visit.email)} · ${safe(visit.phone)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(visit.farm || "Not provided")}</strong></div><div class="summary-line"><span>Visitors</span><strong>${visit.visitors}</strong></div><div class="summary-line"><span>Reason</span><strong>${safe(visit.reason)}</strong></div>${reviewed}<div class="actions" style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">${reviewActions}<button class="btn" onclick="adminViewVisit('${visit.ref}')">View</button></div></div>`;
 }
 const VISIT_STATUS_PROMPTS = {
   Approved: (ref) => `Approve special-date request ${ref}? The customer will see it as approved.`,
@@ -2656,7 +2775,7 @@ async function updateVisit(ref, status) {
   );
 }
 async function adminViewVisit(ref) {
-  const close = '<button class="secondary" onclick="closeModal()">Close</button>';
+  const close = '<button class="btn" onclick="closeModal()">Close</button>';
   openModal("Visitation details", safe(ref), '<p class="muted" aria-busy="true">Loading visitation…</p>', close);
   try {
     const { visit: server } = await bookingApiRequest(
@@ -2680,7 +2799,7 @@ async function adminViewVisit(ref) {
         return `<li>${safe(entry.status)}${entry.note ? ` · ${safe(entry.note)}` : ""}${by ? ` · by ${safe(by)}` : ""}<span class="when">${safe(serverTime(entry.changedAt))}</span></li>`;
       })
       .join("");
-    const body = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px"><span class="status ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="status gray">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 style="margin:18px 0 0">Status updates</h4>${history ? `<ul class="timeline">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
+    const body = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px"><span class="badge badge-soft ${visitStatusClass(v.status)}">${safe(v.status)}</span><span class="badge badge-soft badge-neutral">${v.type === "Special" ? "Special date request" : "Regular schedule"}</span></div><div class="summary-line"><span>Visit date</span><strong>${fmtDate(v.date, true)}</strong></div><div class="summary-line"><span>Visitors</span><strong>${v.visitors}</strong></div><div class="summary-line"><span>Visitor</span><strong>${safe(v.name)}</strong></div><div class="summary-line"><span>Contact</span><strong>${safe(v.phone)} · ${safe(v.email)}</strong></div><div class="summary-line"><span>Farm name</span><strong>${safe(v.farm || "Not provided")}</strong></div>${account}${reason}<div class="summary-line"><span>Submitted</span><strong>${safe(v.submittedAt)}</strong></div>${reviewed}<h4 style="margin:18px 0 0">Status updates</h4>${history ? `<ul class="updates">${history}</ul>` : '<p class="muted">No updates yet.</p>'}`;
     openModal("Visitation details", safe(ref), body, close);
   } catch (error) {
     openModal("Visitation details", safe(ref), `<p role="alert">${safe(error instanceof Error ? error.message : "Unable to load this visitation.")}</p>`, close);
@@ -2707,7 +2826,7 @@ function customersTableHtml() {
       ? list
           .map((c) => {
             const s = custStats(c);
-            return `<tr><td><strong>${safe(c.name)}</strong><br><span class="muted">${c.id} · ${safe(c.address || "No address")}</span></td><td>${safe(c.phone || "—")}<br><span class="muted">${safe(c.email || "No email")}</span></td><td>${s.bs.length}</td><td>${s.vs.length}</td><td>${s.done}</td><td><span class="status ${s.done >= 2 ? "green" : "gray"}">${s.done >= 2 ? "Repeat customer" : "Regular / new"}</span></td><td><div class="actions"><button class="secondary small" onclick="viewCustomer('${c.id}')">View</button><button class="secondary small" onclick="openCustomerForm('${c.id}')">Edit</button><button class="danger small" onclick="deleteCustomer('${c.id}')">Delete</button></div></td></tr>`;
+            return `<tr><td><strong>${safe(c.name)}</strong><br><span class="muted">${c.id} · ${safe(c.address || "No address")}</span></td><td>${safe(c.phone || "—")}<br><span class="muted">${safe(c.email || "No email")}</span></td><td>${s.bs.length}</td><td>${s.vs.length}</td><td>${s.done}</td><td><span class="badge badge-soft ${s.done >= 2 ? "badge-success" : "badge-neutral"}">${s.done >= 2 ? "Repeat customer" : "Regular / new"}</span></td><td><div class="actions"><button class="btn btn-sm" onclick="viewCustomer('${c.id}')">View</button><button class="btn btn-sm" onclick="openCustomerForm('${c.id}')">Edit</button><button class="btn btn-soft btn-error btn-sm" onclick="deleteCustomer('${c.id}')">Delete</button></div></td></tr>`;
           })
           .join("")
       : '<tr><td colspan="7" class="muted">No customers match.</td></tr>'
@@ -2718,7 +2837,7 @@ function refreshCustomers() {
   if (h) h.innerHTML = customersTableHtml();
 }
 function adminCustomers() {
-  return `${sampleDataNotice("These customers and their booking counts are example records kept in this browser. Real customer accounts and bookings are in Package Bookings, Payments and Visitations.")}<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Customers</h3><p class="muted" style="margin:6px 0 0">${customers.length} customers · repeat customer = at least two completed purchases.</p></div><button class="primary" onclick="openCustomerForm()">＋ Add customer</button></div><div class="toolbar"><input type="search" placeholder="Search name, phone, email, address…" value="${safe(cSearch)}" oninput="cSearch=this.value;refreshCustomers()" aria-label="Search customers"></div><div id="custHost">${customersTableHtml()}</div></div>`;
+  return `${sampleDataNotice("These customers and their booking counts are example records kept in this browser. Real customer accounts and bookings are in Package Bookings, Payments and Visitations.")}<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Customers</h3><p class="muted" style="margin:6px 0 0">${customers.length} customers · repeat customer = at least two completed purchases.</p></div><button class="btn btn-primary" onclick="openCustomerForm()">＋ Add customer</button></div><div class="toolbar"><input class="input w-full" type="search" placeholder="Search name, phone, email, address…" value="${safe(cSearch)}" oninput="cSearch=this.value;refreshCustomers()" aria-label="Search customers"></div><div id="custHost">${customersTableHtml()}</div></div>`;
 }
 function openCustomerForm(id) {
   const c = id ? customers.find((x) => x.id === id) : null;
@@ -2726,8 +2845,8 @@ function openCustomerForm(id) {
   openModal(
     c ? "Edit customer" : "Add customer",
     c ? c.id : "",
-    `<div class="field-grid">${fld("m_cname", "Full name", c?.name)}${fld("m_cphone", "Contact number", c?.phone)}${fld("m_cemail", "Email", c?.email, "email")}${fld("m_caddr", "Address", c?.address)}</div><div class="field"><label for="m_cnotes">Notes</label><textarea id="m_cnotes">${safe(c?.notes || "")}</textarea></div>${c ? '<p class="muted" style="font-size:12px;margin:0">Renaming a customer also updates their bookings and visits.</p>' : ""}`,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveCustomer('${c ? c.id : ""}')">${c ? "Save changes" : "Add customer"}</button>`,
+    `<div class="field-grid">${fld("m_cname", "Full name", c?.name)}${fld("m_cphone", "Contact number", c?.phone)}${fld("m_cemail", "Email", c?.email, "email")}${fld("m_caddr", "Address", c?.address)}</div><div class="field"><label for="m_cnotes">Notes</label><textarea class="textarea w-full" id="m_cnotes">${safe(c?.notes || "")}</textarea></div>${c ? '<p class="muted" style="font-size:12px;margin:0">Renaming a customer also updates their bookings and visits.</p>' : ""}`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCustomer('${c ? c.id : ""}')">${c ? "Save changes" : "Add customer"}</button>`,
   );
 }
 function saveCustomer(id) {
@@ -2816,7 +2935,7 @@ function viewCustomer(id) {
     safe(c.name),
     c.id,
     body,
-    `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openCustomerForm('${c.id}')">Edit</button>`,
+    `<button class="btn" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="openCustomerForm('${c.id}')">Edit</button>`,
   );
 }
 function customerBookingSummary(booking) {
@@ -2903,7 +3022,7 @@ function packageMatchesFilters(x) {
 function pkgCardAdmin(x) {
   const inactive = !x.active;
   const code = safe(x.id);
-  return `<article class="pkg-card ${inactive ? "is-hidden" : ""}"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ FEATURED</span>' : ""}${inactive ? '<span class="pkg-badge hidden-b" style="left:auto;right:12px">INACTIVE</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><div class="mini-actions"><button class="secondary small" onclick="movePackage('${code}','up')" aria-label="Move earlier" title="Move earlier">←</button><button class="secondary small" onclick="movePackage('${code}','down')" aria-label="Move later" title="Move later">→</button></div></div><div class="pkg-actions"><button class="secondary small" onclick="viewPackage('${code}')">Details</button><button class="primary small" onclick="openPackageForm('${code}')">Edit</button><button class="secondary small" onclick="togglePackage('${code}')">${inactive ? "Activate" : "Deactivate"}</button><button class="secondary small" onclick="duplicatePackage('${code}')">Duplicate</button></div></div></article>`;
+  return `<article class="pkg-card ${inactive ? "is-hidden" : ""}"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ FEATURED</span>' : ""}${inactive ? '<span class="pkg-badge hidden-b" style="left:auto;right:12px">INACTIVE</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="badge badge-soft badge-primary">${safe(x.layers)}</span><span class="badge badge-soft badge-primary">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><div class="mini-actions"><button class="btn btn-sm" onclick="movePackage('${code}','up')" aria-label="Move earlier" title="Move earlier">←</button><button class="btn btn-sm" onclick="movePackage('${code}','down')" aria-label="Move later" title="Move later">→</button></div></div><div class="pkg-actions"><button class="btn btn-sm" onclick="viewPackage('${code}')">Details</button><button class="btn btn-primary btn-sm" onclick="openPackageForm('${code}')">Edit</button><button class="btn btn-sm" onclick="togglePackage('${code}')">${inactive ? "Activate" : "Deactivate"}</button><button class="btn btn-sm" onclick="duplicatePackage('${code}')">Duplicate</button></div></div></article>`;
 }
 function catalogGridMarkup() {
   if (!adminPackages.length) return '<div class="empty">No packages yet. Add your first package.</div>';
@@ -2919,7 +3038,7 @@ function customPondPricingPanel() {
 }
 function adminCatalog() {
   if (adminPackagesState === "error") {
-    return `<div class="panel" role="alert"><h3 style="margin-top:0">Packages could not be loaded</h3><p class="muted">${safe(adminPackagesError)}</p><button class="secondary" onclick="reloadAdminPackages()">Try again</button></div>`;
+    return `<div class="panel" role="alert"><h3 style="margin-top:0">Packages could not be loaded</h3><p class="muted">${safe(adminPackagesError)}</p><button class="btn" onclick="reloadAdminPackages()">Try again</button></div>`;
   }
   if (adminPackagesState !== "loaded") {
     return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading packages…</p></div>';
@@ -2927,7 +3046,7 @@ function adminCatalog() {
   const act = adminPackages.filter((x) => x.active);
   const avg = act.length ? act.reduce((s, x) => s + Number(x.price), 0) / act.length : 0;
   const filters = [["all", "All"], ["active", "Active"], ["inactive", "Inactive"]].map(pkgFilterButton).join("");
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Catalog</h3><p class="muted" style="margin:6px 0 0">Add, edit, activate, deactivate, duplicate and reorder pond packages. Active packages appear on the Shop page and in the booking selector.</p></div><button class="primary" onclick="openPackageForm()">＋ Add package</button></div><div class="stat-grid" style="margin-top:16px"><div class="stat"><div class="label">Active packages</div><div class="value">${act.length}</div></div><div class="stat"><div class="label">Inactive</div><div class="value">${adminPackages.length - act.length}</div></div><div class="stat"><div class="label">Average active price</div><div class="value" style="font-size:22px">${money(r2(avg))}</div></div></div></div>${customPondPricingPanel()}<div class="panel"><div class="toolbar" style="margin-top:0"><h3 style="margin:0">Packages (${adminPackages.length})</h3><input type="search" placeholder="Search packages…" value="${safe(pkgSearch)}" oninput="pkgSearch=this.value;refreshCatalogGrid()" aria-label="Search packages"><div class="filters">${filters}</div></div><div id="pkgHost" class="pkg-grid">${catalogGridMarkup()}</div></div>`;
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Catalog</h3><p class="muted" style="margin:6px 0 0">Add, edit, activate, deactivate, duplicate and reorder pond packages. Active packages appear on the Shop page and in the booking selector.</p></div><button class="btn btn-primary" onclick="openPackageForm()">＋ Add package</button></div><div class="stat-grid" style="margin-top:16px"><div class="stat"><div class="label">Active packages</div><div class="value">${act.length}</div></div><div class="stat"><div class="label">Inactive</div><div class="value">${adminPackages.length - act.length}</div></div><div class="stat"><div class="label">Average active price</div><div class="value" style="font-size:22px">${money(r2(avg))}</div></div></div></div>${customPondPricingPanel()}<div class="panel"><div class="toolbar" style="margin-top:0"><h3 style="margin:0">Packages (${adminPackages.length})</h3><input class="input w-full" type="search" placeholder="Search packages…" value="${safe(pkgSearch)}" oninput="pkgSearch=this.value;refreshCatalogGrid()" aria-label="Search packages"><div class="filters">${filters}</div></div><div id="pkgHost" class="pkg-grid">${catalogGridMarkup()}</div></div>`;
 }
 function refreshCatalogGrid() {
   const host = document.getElementById("pkgHost");
@@ -2938,8 +3057,8 @@ function viewPackage(code) {
   if (!x) return;
   const line = (label, value) => `<div class="summary-line"><span>${label}</span><strong>${value}</strong></div>`;
   const inclusions = x.inclusions.map((item) => `<li>${safe(item)}</li>`).join("");
-  const body = `${packagePhoto(x)}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0"><span class="status ${x.active ? "green" : "gray"}">${safe(x.status)}</span>${x.featured ? '<span class="status">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p>${safe(x.description)}</p><h4 style="margin:12px 0 4px">Inclusions</h4><ul>${inclusions}</ul>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
-  openModal("Package details", safe(x.name), body, `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openPackageForm('${safe(x.id)}')">Edit</button>`, true);
+  const body = `${packagePhoto(x)}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0"><span class="badge badge-soft ${x.active ? "badge-success" : "badge-neutral"}">${safe(x.status)}</span>${x.featured ? '<span class="badge badge-soft badge-warning">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p>${safe(x.description)}</p><h4 style="margin:12px 0 4px">Inclusions</h4><ul>${inclusions}</ul>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
+  openModal("Package details", safe(x.name), body, `<button class="btn" onclick="closeModal()">Close</button><button class="btn btn-primary" onclick="openPackageForm('${safe(x.id)}')">Edit</button>`, true);
 }
 function releasePackageFormPhoto() {
   if (packageFormPhoto?.url) URL.revokeObjectURL(packageFormPhoto.url);
@@ -2954,8 +3073,8 @@ function packagePhotoPreview(x) {
   const preview = hasPhoto
     ? `<img id="m_pprev" src="${safe(src)}" alt="Photo preview" style="width:100%;height:100%;object-fit:cover">`
     : photoPlaceholder("", "No photo yet");
-  const remove = hasPhoto ? '<button type="button" class="danger small" onclick="removePackagePhoto()">Remove photo</button>' : "";
-  return `<div class="pkg-media" id="m_pphoto" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px">${preview}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="secondary small" style="cursor:pointer">${hasPhoto ? "Replace photo" : "Upload photo"}<input id="m_pimg" type="file" accept="image/jpeg,image/png,image/webp" onchange="choosePackagePhoto(this)" hidden></label>${remove}</div>`;
+  const remove = hasPhoto ? '<button type="button" class="btn btn-soft btn-error btn-sm" onclick="removePackagePhoto()">Remove photo</button>' : "";
+  return `<div class="pkg-media" id="m_pphoto" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px">${preview}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="btn btn-sm" style="cursor:pointer">${hasPhoto ? "Replace photo" : "Upload photo"}<input class="file-input w-full" id="m_pimg" type="file" accept="image/jpeg,image/png,image/webp" onchange="choosePackagePhoto(this)" hidden></label>${remove}</div>`;
 }
 function refreshPackagePhoto(code) {
   const host = document.getElementById("m_pphotoHost");
@@ -2968,13 +3087,13 @@ function openPackageForm(code) {
   const inclusions = safe((x?.inclusions || []).join("\n"));
   const statusField = x
     ? `<p class="muted">Status: <strong>${safe(x.status)}</strong> — use Activate / Deactivate on the package card to change it.</p>`
-    : '<label class="check-row"><input type="checkbox" id="m_pact" checked><span>Active (available to customers)</span></label>';
-  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0.01" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="40" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div><div class="field"><label for="m_pincl">Inclusions (one per line, up to 10)</label><textarea id="m_pincl" maxlength="1300" placeholder="e.g. Free starter water-test kit">${inclusions}</textarea></div><div class="field"><label for="m_pdesc">Description</label><textarea id="m_pdesc" maxlength="500">${safe(x?.description || "")}</textarea></div><div class="field"><label>Package photo</label><small class="muted">JPG, PNG or WEBP, up to 8 MB. Large photos are resized to 1,200 px.</small><div id="m_pphotoHost">${packagePhotoPreview(x)}</div></div><label class="check-row"><input type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>${statusField}${FORM_ERROR_MARKUP}`;
+    : '<label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_pact" checked><span>Active (available to customers)</span></label>';
+  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0.01" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="40" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div><div class="field"><label for="m_pincl">Inclusions (one per line, up to 10)</label><textarea class="textarea w-full" id="m_pincl" maxlength="1300" placeholder="e.g. Free starter water-test kit">${inclusions}</textarea></div><div class="field"><label for="m_pdesc">Description</label><textarea class="textarea w-full" id="m_pdesc" maxlength="500">${safe(x?.description || "")}</textarea></div><div class="field"><label>Package photo</label><small class="muted">JPG, PNG or WEBP, up to 8 MB. Large photos are resized to 1,200 px.</small><div id="m_pphotoHost">${packagePhotoPreview(x)}</div></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>${statusField}${FORM_ERROR_MARKUP}`;
   openModal(
     x ? "Edit package" : "Add package",
     x ? safe(x.name) : "",
     body,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" id="savePackageButton" onclick="savePackage('${x ? safe(x.id) : ""}')">${x ? "Save package" : "Add package"}</button>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" id="savePackageButton" onclick="savePackage('${x ? safe(x.id) : ""}')">${x ? "Save package" : "Add package"}</button>`,
     true,
   );
   document.getElementById("modalHost").dataset.packageCode = x ? x.id : "";
@@ -3197,18 +3316,18 @@ function faqCardMarkup(faq) {
   const active = faq.active !== false;
   const faqId = safe(faq._id);
   const keywords = Array.isArray(faq.keywords) ? faq.keywords : [];
-  const statusClass = active ? "green" : "";
+  const statusClass = active ? "badge-success" : "badge-neutral";
   const statusLabel = active ? "Active" : "Inactive";
   const actionLabel = active ? "Deactivate" : "Activate";
-  return `<div class="card" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(faq.question)}</h3><span class="status ${statusClass}">${statusLabel}</span><div class="chips" style="margin-top:8px">${keywords
-    .map((keyword) => `<span class="chip">${safe(keyword)}</span>`)
-    .join("")}</div></div><div class="mini-actions"><button class="secondary small" onclick="openFaqForm('${faqId}')">Edit</button><button class="secondary small" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${actionLabel}</button><button class="danger small" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>Delete</button></div></div><p class="muted" style="margin-bottom:0;white-space:pre-wrap">${safe(faq.answer)}</p></div>`;
+  return `<div class="tile" style="margin-top:14px"><div class="admin-header"><div><h3 style="margin:0">${safe(faq.question)}</h3><span class="badge badge-soft ${statusClass}">${statusLabel}</span><div class="chips" style="margin-top:8px">${keywords
+    .map((keyword) => `<span class="badge badge-soft badge-primary">${safe(keyword)}</span>`)
+    .join("")}</div></div><div class="mini-actions"><button class="btn btn-sm" onclick="openFaqForm('${faqId}')">Edit</button><button class="btn btn-sm" onclick="toggleFaq('${faqId}',${!active})" ${faqSaving ? "disabled" : ""}>${actionLabel}</button><button class="btn btn-soft btn-error btn-sm" onclick="deleteFaq('${faqId}')" ${faqSaving ? "disabled" : ""}>Delete</button></div></div><p class="muted" style="margin-bottom:0;white-space:pre-wrap">${safe(faq.answer)}</p></div>`;
 }
 
 function faqContentMarkup() {
   if (faqLoading) return '<div class="notice">Loading FAQs...</div>';
   if (faqLoadError) {
-    return `<div class="notice">${safe(faqLoadError)} <button class="secondary small" onclick="loadFaqs(true)">Retry</button></div>`;
+    return `<div class="notice">${safe(faqLoadError)} <button class="btn btn-sm" onclick="loadFaqs(true)">Retry</button></div>`;
   }
   const cards = faqs.map(faqCardMarkup).join("");
   return cards || '<div class="empty">No FAQs yet.</div>';
@@ -3217,7 +3336,7 @@ function faqContentMarkup() {
 function adminFaqs() {
   if (!faqsLoaded && !faqLoading && !faqLoadError) void loadFaqs();
   const faqContent = faqContentMarkup();
-  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Assistant FAQs</h3><p class="muted" style="margin:6px 0 0">The assistant matches customer questions to active, administrator-maintained FAQ answers.</p></div><div class="mini-actions"><button class="secondary" onclick="loadFaqs(true)" ${faqLoading ? "disabled" : ""}>Refresh</button><button class="primary" onclick="openFaqForm()">＋ Add FAQ</button></div></div><div class="card" style="margin-top:16px"><h3 style="margin-top:0">Test the assistant</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="faqTestInput" placeholder="Type a customer question…" style="flex:1;min-width:200px;padding:10px;border:1px solid #cfd9d0;border-radius:9px" onkeydown="if(event.key==='Enter')testFaq()"><button class="secondary" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice" style="margin-top:10px">The answer will appear here.</div></div>${faqContent}</div>`;
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Assistant FAQs</h3><p class="muted" style="margin:6px 0 0">The assistant matches customer questions to active, administrator-maintained FAQ answers.</p></div><div class="mini-actions"><button class="btn" onclick="loadFaqs(true)" ${faqLoading ? "disabled" : ""}>Refresh</button><button class="btn btn-primary" onclick="openFaqForm()">＋ Add FAQ</button></div></div><div class="tile" style="margin-top:16px"><h3 style="margin-top:0">Test the assistant</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input w-full" id="faqTestInput" placeholder="Type a customer question…" style="flex:1;min-width:200px;padding:10px;border:1px solid #cfd9d0;border-radius:9px" onkeydown="if(event.key==='Enter')testFaq()"><button class="btn" onclick="testFaq()">Test</button></div><div id="faqTest" class="notice" style="margin-top:10px">The answer will appear here.</div></div>${faqContent}</div>`;
 }
 
 async function testFaq() {
@@ -3247,8 +3366,8 @@ function openFaqForm(id) {
   openModal(
     faq ? "Edit FAQ" : "Add FAQ",
     "",
-    `${fld("m_fq", "Question", faq?.question, "text", 'maxlength="300"')}${fld("m_fk", "Keywords (comma-separated)", keywords, "text", 'maxlength="1000" placeholder="e.g. crayfish, craylings"')}<div class="field"><label for="m_fa">Predefined answer shown to the customer</label><textarea id="m_fa" maxlength="5000" style="min-height:120px">${safe(faq?.answer || "")}</textarea></div><label class="check-row"><input type="checkbox" id="m_factive" ${faq?.active === false ? "" : "checked"}><span>Active and available to customers</span></label>`,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveFaq('${faq ? safe(faq._id) : ""}')">${faq ? "Save FAQ" : "Add FAQ"}</button>`,
+    `${fld("m_fq", "Question", faq?.question, "text", 'maxlength="300"')}${fld("m_fk", "Keywords (comma-separated)", keywords, "text", 'maxlength="1000" placeholder="e.g. crayfish, craylings"')}<div class="field"><label for="m_fa">Predefined answer shown to the customer</label><textarea class="textarea w-full" id="m_fa" maxlength="5000" style="min-height:120px">${safe(faq?.answer || "")}</textarea></div><label class="check-row"><input class="checkbox checkbox-primary checkbox-sm mt-0.5" type="checkbox" id="m_factive" ${faq?.active === false ? "" : "checked"}><span>Active and available to customers</span></label>`,
+    `<button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveFaq('${faq ? safe(faq._id) : ""}')">${faq ? "Save FAQ" : "Add FAQ"}</button>`,
   );
 }
 
@@ -3367,7 +3486,7 @@ function salesPaymentRow({ booking, payment }) {
   const paymentType =
     payment.paymentTarget === "deposit" ? "50% down payment" : "Remaining balance";
   const verifier = staffName(payment.verifiedBy);
-  return `<tr><td>${safe(booking.ref)}</td><td>${safe(booking.name)}</td><td>${paymentType}</td><td>${money(payment.amount)}</td><td>${safe(payment.gcashReference || "—")}</td><td>${safe(payment.receiptFileName)}</td><td>${safe(serverTime(payment.verifiedAt))}${verifier ? `<br><span class="muted">by ${safe(verifier)}</span>` : ""}<br><span class="muted">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td><span class="status green">${safe(payment.status)}</span></td></tr>`;
+  return `<tr><td>${safe(booking.ref)}</td><td>${safe(booking.name)}</td><td>${paymentType}</td><td>${money(payment.amount)}</td><td>${safe(payment.gcashReference || "—")}</td><td>${safe(payment.receiptFileName)}</td><td>${safe(serverTime(payment.verifiedAt))}${verifier ? `<br><span class="muted">by ${safe(verifier)}</span>` : ""}<br><span class="muted">Submitted ${safe(serverTime(payment.submittedAt))}</span></td><td><span class="badge badge-soft badge-success">${safe(payment.status)}</span></td></tr>`;
 }
 
 /* ----- render ----- */

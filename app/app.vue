@@ -45,17 +45,21 @@ useHead(() => ({
 </script>
 
 <template>
-  <a href="#content" class="btn btn-primary btn-sm fixed top-2 left-2 z-[100] -translate-y-20 focus:translate-y-0">Skip to content</a>
+  <a href="#content" class="btn btn-primary btn-sm fixed top-2 left-2 z-100 -translate-y-20 focus:translate-y-0">Skip to content</a>
 
   <SiteHeader v-if="headerVisible" :overlay="currentPage === 'home'" />
 
   <div id="content" class="min-h-[60vh]">
-    <main id="app" v-show="legacyPageVisible" class="legacy-view" />
+    <main
+      id="app"
+      v-show="legacyPageVisible"
+      class="legacy-view mx-auto w-full max-w-7xl px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:pt-8"
+    />
     <div v-show="!legacyPageVisible"><NuxtPage /></div>
   </div>
 
   <div id="modalHost" />
-  <div class="pointer-events-none fixed inset-x-0 top-4 z-[90] flex justify-center px-4 sm:justify-end sm:px-6">
+  <div class="pointer-events-none fixed inset-x-0 top-4 z-90 flex justify-center px-4 sm:justify-end sm:px-6">
     <output id="toast" class="app-toast" aria-live="polite" />
   </div>
 

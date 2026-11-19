@@ -16,7 +16,7 @@
 
 @plugin "daisyui" {
   themes: false;
-  exclude: breadcrumbs, calendar, label, modal, stat, status, timeline, toast;
+  exclude: label, stat;
 }
 
 /* Customer website: welcoming, rounded, generous spacing. */
@@ -144,5 +144,296 @@
   .app-toast.toast-success {
     background: var(--color-success);
     color: var(--color-success-content);
+  }
+}
+
+/*
+ * App components used by the views rendered from HTML strings in
+ * app/legacy/script.js. DaisyUI supplies buttons, badges, inputs, alerts,
+ * steps, breadcrumbs and modals; these classes cover the layouts DaisyUI
+ * does not provide.
+ */
+@layer components {
+  /* Page structure */
+  .page-head {
+    @apply mt-3 mb-6 flex flex-wrap items-end justify-between gap-4;
+  }
+  .page-title {
+    @apply font-display text-3xl leading-tight font-semibold tracking-tight text-base-content sm:text-4xl;
+  }
+  .page-sub {
+    @apply mt-2 max-w-3xl text-base-content/70;
+  }
+  .section-title {
+    @apply font-display text-2xl leading-tight font-semibold tracking-tight text-base-content sm:text-3xl;
+  }
+  .step-title {
+    @apply text-xl font-semibold text-base-content;
+  }
+  .eyebrow {
+    @apply text-sm font-semibold tracking-[0.14em] text-primary uppercase;
+  }
+  .muted {
+    @apply text-base-content/65;
+  }
+  .icon-chip {
+    @apply grid size-10 place-items-center rounded-xl bg-primary/10 text-primary;
+  }
+
+  /* Surfaces */
+  .panel {
+    @apply mt-5 rounded-box border border-base-300 bg-base-100 p-5 sm:p-7;
+  }
+  .tile {
+    @apply rounded-box border border-base-300 bg-base-100 p-5;
+  }
+  .tile h3,
+  .panel h3 {
+    @apply font-semibold text-base-content;
+  }
+  .tile-title {
+    @apply mb-2 flex items-center gap-2 text-base font-semibold text-base-content;
+  }
+  .notice {
+    @apply rounded-field border border-primary/15 bg-primary/5 px-4 py-3 text-sm leading-relaxed text-base-content/80;
+  }
+  .callout {
+    @apply rounded-field border border-warning/30 bg-warning/10 px-4 py-3 text-sm leading-relaxed text-base-content;
+  }
+  .empty {
+    @apply rounded-box border border-dashed border-base-300 bg-base-100 px-6 py-10 text-center text-sm text-base-content/60;
+  }
+  .admin-header {
+    @apply flex flex-wrap items-start justify-between gap-3;
+  }
+
+  /* Key/value rows */
+  .summary-line {
+    @apply flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-dashed border-base-300 py-2.5 text-sm last:border-b-0;
+  }
+  .summary-line > span:first-child {
+    @apply text-base-content/65;
+  }
+  .summary-line > strong {
+    @apply text-right font-semibold text-base-content;
+  }
+  .summary-line.is-highlight > strong {
+    @apply text-base text-primary;
+  }
+  .amount-due {
+    @apply mt-3 flex flex-wrap items-center justify-between gap-2 rounded-field bg-primary/10 px-4 py-3;
+  }
+  .amount-due > span {
+    @apply text-sm font-medium text-base-content/75;
+  }
+  .amount-due > strong {
+    @apply text-2xl font-bold text-primary;
+  }
+
+  /* Forms */
+  .field {
+    @apply mt-4;
+  }
+  .field > label,
+  .field > .field-label {
+    @apply mb-1.5 block text-sm font-medium text-base-content;
+  }
+  .field-grid {
+    @apply grid gap-x-4 sm:grid-cols-2;
+  }
+  .check-row {
+    @apply mt-3 flex cursor-pointer items-start gap-3 text-sm;
+  }
+  .wizard-actions {
+    @apply mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-5;
+  }
+  .modal-head {
+    @apply flex items-start justify-between gap-3 border-b border-base-300 px-5 py-4 sm:px-6;
+  }
+  .modal-body {
+    @apply overflow-y-auto px-5 py-4 sm:px-6;
+  }
+  .modal-foot {
+    @apply flex flex-wrap justify-end gap-2 border-t border-base-300 px-5 py-4 sm:px-6;
+  }
+  .modal-section {
+    @apply mt-5 mb-1 text-xs font-semibold tracking-wider text-base-content/60 uppercase;
+  }
+
+  /* Status update list */
+  .updates {
+    @apply mt-2 space-y-0 border-l-2 border-base-300 pl-4;
+  }
+  .updates > li {
+    @apply relative pb-4 text-sm last:pb-0;
+  }
+  .updates > li::before {
+    content: "";
+    @apply absolute top-1.5 -left-[1.3rem] size-2.5 rounded-full border-2 border-base-100 bg-primary;
+  }
+  .updates time {
+    @apply mt-0.5 block text-xs text-base-content/55;
+  }
+
+  /* Progress steps */
+  .tracker .step,
+  .wizard-steps .step {
+    @apply min-w-16;
+  }
+
+  /* Calendar */
+  .cal-wrap {
+    @apply grid items-start gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)];
+  }
+  .cal {
+    @apply rounded-box border border-base-300 bg-base-100 p-4 sm:p-5;
+  }
+  .cal-head {
+    @apply mb-3 flex items-center justify-between gap-2;
+  }
+  .cal-grid {
+    @apply grid grid-cols-7 gap-1 sm:gap-1.5;
+  }
+  .cal-dayname {
+    @apply py-1 text-center text-xs font-semibold text-base-content/55;
+  }
+  .cal-day {
+    @apply grid h-10 place-items-center rounded-field text-sm text-base-content/35 select-none sm:h-11;
+  }
+  .cal-day.is-blank {
+    @apply invisible;
+  }
+  .cal-day.is-available {
+    @apply cursor-pointer border border-success/30 bg-success/10 font-semibold text-success hover:bg-success/20;
+  }
+  .cal-day.is-unavailable {
+    @apply border border-error/25 bg-error/10 text-error/80 line-through;
+  }
+  .cal-day.is-unavailable[role="button"] {
+    @apply cursor-pointer no-underline hover:bg-error/20;
+  }
+  .cal-day.is-selected {
+    @apply border-primary bg-primary text-primary-content hover:bg-primary;
+  }
+  .cal-legend {
+    @apply mt-4 flex flex-wrap gap-4 text-xs text-base-content/65;
+  }
+  .cal-legend > span {
+    @apply inline-flex items-center gap-1.5;
+  }
+  .cal-dot {
+    @apply inline-block size-3 rounded-sm bg-base-300;
+  }
+  .cal-dot.is-available {
+    @apply bg-success/40;
+  }
+  .cal-dot.is-unavailable {
+    @apply bg-error/40;
+  }
+
+  /* Package cards */
+  .pkg-grid {
+    @apply grid gap-5 sm:grid-cols-2 xl:grid-cols-3;
+  }
+  .pkg-card {
+    @apply relative flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 transition-shadow;
+  }
+  .pkg-card:hover {
+    @apply shadow-lg;
+  }
+  .pkg-card.is-selectable {
+    @apply cursor-pointer;
+  }
+  .pkg-card.selected {
+    @apply border-primary ring-2 ring-primary/30;
+  }
+  .pkg-card.is-hidden {
+    @apply opacity-70;
+  }
+  .pkg-media {
+    @apply relative grid h-44 place-items-center overflow-hidden bg-gradient-to-br from-primary/10 to-accent/20 text-primary/45;
+  }
+  .pkg-media > img {
+    @apply size-full object-cover;
+  }
+  .pkg-placeholder {
+    @apply grid size-full place-items-center bg-gradient-to-br from-primary/10 to-accent/20 text-primary/45;
+  }
+  .package-photo {
+    @apply block h-56 w-full object-cover;
+  }
+  .pkg-badge {
+    @apply absolute top-3 left-3;
+  }
+  .pkg-tick {
+    @apply absolute top-3 right-3 grid size-8 place-items-center rounded-full bg-primary text-primary-content shadow;
+  }
+  .pkg-body {
+    @apply flex flex-1 flex-col gap-3 p-5;
+  }
+  .pkg-body > h3 {
+    @apply text-lg font-semibold text-base-content;
+  }
+  .pkg-desc {
+    @apply text-sm leading-relaxed text-base-content/70;
+  }
+  .chips {
+    @apply flex flex-wrap gap-1.5;
+  }
+  .freebie {
+    @apply space-y-1.5 rounded-field bg-secondary/5 px-3 py-2.5 text-sm text-base-content/80;
+  }
+  .freebie > li {
+    @apply flex items-start gap-2;
+  }
+  .pkg-foot {
+    @apply mt-auto flex flex-wrap items-end justify-between gap-3 border-t border-base-300 pt-4;
+  }
+  .price-big {
+    @apply text-xl font-bold text-primary;
+  }
+  .price-big small {
+    @apply block text-xs font-medium text-base-content/55;
+  }
+  .pkg-actions,
+  .mini-actions {
+    @apply flex flex-wrap gap-1.5;
+  }
+
+  /* Booking choice */
+  .choice-grid {
+    @apply grid gap-5 md:grid-cols-2;
+  }
+  .choice {
+    @apply flex flex-col gap-3 p-6 sm:p-8;
+  }
+  .choice > h2 {
+    @apply text-xl font-semibold text-base-content;
+  }
+  .service-icon {
+    @apply grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary;
+  }
+  .choice-points {
+    @apply mb-4 space-y-2 text-sm text-base-content/80;
+  }
+  .choice-points > li {
+    @apply flex items-start gap-2;
+  }
+
+  /* Payment and review */
+  .pay-grid {
+    @apply grid gap-5 md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)];
+  }
+  .review-grid {
+    @apply grid items-start gap-5 md:grid-cols-[16rem_minmax(0,1fr)];
+  }
+  .result-panel {
+    @apply text-center;
+  }
+  .result-icon {
+    @apply mx-auto grid size-16 place-items-center rounded-full bg-success/15 text-success;
+  }
+  .booking-card {
+    @apply p-5 sm:p-6;
   }
 }
