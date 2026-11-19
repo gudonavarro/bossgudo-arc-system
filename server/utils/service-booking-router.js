@@ -1,7 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { createRequire } from "node:module";
-import { depositFor, fromCents, parseAmountInput } from "./money.js";
+import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
 import {
   MAX_RECEIPT_BYTES,
   RECEIPT_CONTENT_TYPES,
@@ -14,8 +14,9 @@ import { PAYMENT_METHODS, PAYMENT_TARGETS } from "../models/payment.js";
 import {
   CUSTOM_POND_PRICING,
   calculateCustomPondCents,
-  findActivePackage,
 } from "./service-catalog.js";
+import { PACKAGE_CODE_PATTERN } from "../models/service-package.js";
+import { packageSnapshot } from "./service-package.js";
 import { BOOKING_STATUSES } from "../models/service-booking.js";
 import {
   HttpError,
@@ -143,25 +144,20 @@ function validateServiceBookingInput(body, authUser) {
 
   let pricing;
   if (body.serviceType === "Pond Package") {
-    const servicePackage =
-      typeof body.packageId === "string"
-        ? findActivePackage(body.packageId)
-        : null;
-    if (!servicePackage) {
+    // The package (and its price) is resolved from MongoDB by the route.
+    const packageCode =
+      typeof body.packageId === "string" ? body.packageId.trim().toLowerCase() : "";
+    if (!PACKAGE_CODE_PATTERN.test(packageCode)) {
       return { error: "Select an available service package." };
     }
-    pricing = {
-      packageNameSnapshot: servicePackage.name,
-      packagePriceCents: servicePackage.priceCents,
-      customizationFeeCents: 0,
-      customConfiguration: null,
-    };
+    pricing = { packageCode, customizationFeeCents: 0, customConfiguration: null };
   } else if (body.serviceType === "Custom Pond Design") {
     const configuration = validateCustomConfiguration(body.customConfiguration);
     if (configuration.error) return configuration;
     pricing = {
       packageNameSnapshot: CUSTOM_POND_PRICING.name,
       packagePriceCents: 0,
+      packageSnapshot: null,
       customizationFeeCents: calculateCustomPondCents(configuration.value),
       customConfiguration: configuration.value,
     };
@@ -310,7 +306,7 @@ function createServiceBookingRouter() {
       return response.status(400).json({ error: validation.error });
     }
 
-    const { ServiceBooking, AvailableDate } = request.bookingModels;
+    const { ServiceBooking, AvailableDate, ServicePackage } = request.bookingModels;
     const input = validation.value;
     try {
       if (await isDateClosed(AvailableDate, "service", input.serviceDate)) {
@@ -318,6 +314,19 @@ function createServiceBookingRouter() {
           409,
           "That service date is closed. Please choose another date.",
         );
+      }
+      if (input.packageCode) {
+        // Only active catalog packages can be booked, at their stored price.
+        const servicePackage = await ServicePackage.findOne({
+          code: input.packageCode,
+          status: "Active",
+        }).lean();
+        if (!servicePackage) {
+          throw new HttpError(400, "Select an available service package.");
+        }
+        input.packageNameSnapshot = servicePackage.name;
+        input.packagePriceCents = toCents(servicePackage.price);
+        input.packageSnapshot = packageSnapshot(servicePackage);
       }
       const duplicate = await ServiceBooking.exists({
         customer_id: authUser.id,
@@ -342,6 +351,7 @@ function createServiceBookingRouter() {
             serviceType: input.serviceType,
             packageNameSnapshot: input.packageNameSnapshot,
             packagePrice: fromCents(input.packagePriceCents),
+            packageSnapshot: input.packageSnapshot,
             serviceDate: input.serviceDate,
             serviceLocation: input.serviceLocation,
             customerName: input.customerName,

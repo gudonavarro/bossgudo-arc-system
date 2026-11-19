@@ -1,41 +1,11 @@
 /**
- * Server-side source of truth for service booking prices.
- *
- * These values mirror the package catalog and custom pond pricing that the
- * storefront currently displays (app/legacy/script.js). Booking amounts are
- * always computed from this catalog and never from client-supplied prices.
- * Replace this module with a database-backed catalog when package management
- * is implemented.
+ * Server-side custom pond pricing. Predefined packages and their prices are
+ * stored in MongoDB (`service_packages`); custom pond designs are priced from
+ * this fixed formula. Booking amounts are always computed on the server and
+ * never from client-supplied prices.
  *
  * All monetary values are stored in centavos.
  */
-const SERVICE_PACKAGES = Object.freeze([
-  Object.freeze({
-    id: "pk1",
-    name: "Pond Starter Package",
-    priceCents: 6_500_00,
-    layers: "1 layer",
-    dimensions: "2 m × 2 m",
-    active: true,
-  }),
-  Object.freeze({
-    id: "pk2",
-    name: "Pond Grower Package",
-    priceCents: 9_500_00,
-    layers: "2 layers",
-    dimensions: "2 m × 3 m",
-    active: true,
-  }),
-  Object.freeze({
-    id: "pk3",
-    name: "Pond Pro Package",
-    priceCents: 14_500_00,
-    layers: "3 layers",
-    dimensions: "3 m × 3 m",
-    active: true,
-  }),
-]);
-
 const CUSTOM_POND_PRICING = Object.freeze({
   name: "Custom Pond Design",
   ratePerSquareMetrePerLayerCents: 450_00,
@@ -45,14 +15,6 @@ const CUSTOM_POND_PRICING = Object.freeze({
   minDimensionMetres: 1,
   maxDimensionMetres: 10,
 });
-
-function findActivePackage(packageId) {
-  return (
-    SERVICE_PACKAGES.find(
-      (servicePackage) => servicePackage.id === packageId && servicePackage.active,
-    ) ?? null
-  );
-}
 
 /**
  * Computes the custom pond price from layers, width, and length (metres,
@@ -73,9 +35,17 @@ function calculateCustomPondCents({ layers, width, length, filtration }) {
   );
 }
 
-export {
-  CUSTOM_POND_PRICING,
-  SERVICE_PACKAGES,
-  calculateCustomPondCents,
-  findActivePackage,
-};
+/** Read-only custom pond pricing for display (pesos). */
+function publicCustomPondPricing() {
+  return {
+    name: CUSTOM_POND_PRICING.name,
+    ratePerSquareMetrePerLayer: CUSTOM_POND_PRICING.ratePerSquareMetrePerLayerCents / 100,
+    filtration: CUSTOM_POND_PRICING.filtrationCents / 100,
+    minLayers: CUSTOM_POND_PRICING.minLayers,
+    maxLayers: CUSTOM_POND_PRICING.maxLayers,
+    minDimensionMetres: CUSTOM_POND_PRICING.minDimensionMetres,
+    maxDimensionMetres: CUSTOM_POND_PRICING.maxDimensionMetres,
+  };
+}
+
+export { CUSTOM_POND_PRICING, calculateCustomPondCents, publicCustomPondPricing };

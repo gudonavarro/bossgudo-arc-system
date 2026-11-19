@@ -38,6 +38,24 @@ const statusHistorySchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * Copy of the catalog package at booking time. Later catalog edits or
+ * deactivation never change it. Custom pond designs have no package.
+ */
+const packageSnapshotSchema = new mongoose.Schema(
+  {
+    code: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    description: { type: String, trim: true, default: "" },
+    category: { type: String, trim: true, default: "Pond Package" },
+    layers: { type: String, trim: true, default: "" },
+    dimensions: { type: String, trim: true, default: "" },
+    inclusions: { type: [String], default: [] },
+    price: money({ required: true }),
+  },
+  { _id: false },
+);
+
 const serviceBookingSchema = new mongoose.Schema(
   {
     customer_id: {
@@ -54,6 +72,7 @@ const serviceBookingSchema = new mongoose.Schema(
       maxlength: 120,
     },
     packagePrice: money({ required: true }),
+    packageSnapshot: { type: packageSnapshotSchema, default: null },
     serviceDate: { type: Date, required: true },
     serviceLocation: {
       type: String,

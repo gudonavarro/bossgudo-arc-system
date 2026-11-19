@@ -282,6 +282,18 @@ function serializeBooking(document, { includeAudit = false } = {}) {
     serviceType: booking.serviceType,
     packageNameSnapshot: booking.packageNameSnapshot,
     packagePrice: decimalToNumber(booking.packagePrice),
+    packageSnapshot: booking.packageSnapshot
+      ? {
+          code: booking.packageSnapshot.code,
+          name: booking.packageSnapshot.name,
+          description: booking.packageSnapshot.description,
+          category: booking.packageSnapshot.category,
+          layers: booking.packageSnapshot.layers,
+          dimensions: booking.packageSnapshot.dimensions,
+          inclusions: [...(booking.packageSnapshot.inclusions ?? [])],
+          price: decimalToNumber(booking.packageSnapshot.price),
+        }
+      : null,
     serviceDate: booking.serviceDate,
     serviceLocation: booking.serviceLocation,
     customerName: booking.customerName,
