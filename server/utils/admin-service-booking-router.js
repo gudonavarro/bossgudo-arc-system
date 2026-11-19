@@ -6,7 +6,9 @@ import {
   SERVICE_TYPES,
 } from "../models/service-booking.js";
 import {
+  HttpError,
   OBJECT_ID_PATTERN,
+  bookingCents,
   bookingIdentifierFilter,
   handleRouteError,
   paginationMeta,
@@ -145,6 +147,64 @@ async function summarizePayments(Payment, bookingIds) {
   );
 }
 
+/**
+ * Allowed administrator-driven booking status transitions. "Confirmed" is
+ * normally set automatically when the initial deposit is verified; a manual
+ * move to "Confirmed" still requires the deposit to be verified.
+ */
+const BOOKING_STATUS_TRANSITIONS = Object.freeze({
+  Pending: ["Approved", "Rejected", "Cancelled"],
+  Approved: ["Confirmed", "Rejected", "Cancelled"],
+  Confirmed: ["Ongoing", "Cancelled"],
+  Ongoing: ["Completed"],
+  Completed: [],
+  Rejected: [],
+  Cancelled: [],
+});
+const CLOSING_STATUSES = new Set(["Rejected", "Cancelled"]);
+
+function validateStatusInput(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Provide the new booking status." };
+  }
+  if (!BOOKING_STATUSES.includes(body.status)) {
+    return { error: "Invalid booking status." };
+  }
+  let note = "";
+  if (body.note !== undefined && body.note !== null) {
+    if (typeof body.note !== "string" || body.note.trim().length > 500) {
+      return { error: "Note must be text of at most 500 characters." };
+    }
+    note = body.note.trim();
+  }
+  return { value: { status: body.status, note } };
+}
+
+function assertStatusTransition(booking, nextStatus) {
+  const allowed = BOOKING_STATUS_TRANSITIONS[booking.bookingStatus] ?? [];
+  if (!allowed.includes(nextStatus)) {
+    throw new HttpError(
+      409,
+      `A ${booking.bookingStatus} booking cannot be changed to ${nextStatus}.`,
+    );
+  }
+  if (CLOSING_STATUSES.has(nextStatus) && booking.paymentStatus === "Verification Pending") {
+    throw new HttpError(
+      409,
+      "Review the payment awaiting verification before closing this booking.",
+    );
+  }
+  if (nextStatus === "Confirmed") {
+    const { deposit, paid } = bookingCents(booking);
+    if (paid < deposit) {
+      throw new HttpError(
+        409,
+        "A booking is confirmed only after its initial deposit is verified.",
+      );
+    }
+  }
+}
+
 function createAdminServiceBookingRouter() {
   const router = express.Router();
   const authenticateAdmin = createAuthenticationMiddleware({
@@ -228,6 +288,41 @@ function createAdminServiceBookingRouter() {
       });
     } catch (error) {
       return handleRouteError(response, error, "Admin service booking lookup");
+    }
+  });
+
+  router.patch("/:identifier/status", async (request, response) => {
+    const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+    if (!identifierFilter) {
+      return response.status(400).json({ error: "Invalid booking id or reference." });
+    }
+    const validation = validateStatusInput(request.body);
+    if (validation.error) {
+      return response.status(400).json({ error: validation.error });
+    }
+
+    const { ServiceBooking } = request.bookingModels;
+    const { status, note } = validation.value;
+    try {
+      const booking = await ServiceBooking.findOne(identifierFilter);
+      if (!booking) {
+        return response.status(404).json({ error: "Booking not found." });
+      }
+      assertStatusTransition(booking, status);
+
+      booking.bookingStatus = status;
+      booking.statusHistory.push({
+        status,
+        changedBy: request.authUser.id,
+        changedAt: new Date(),
+        note: note || undefined,
+      });
+      // Optimistic concurrency rejects the save if the booking changed
+      // since it was read (for example, a concurrent payment verification).
+      await booking.save();
+      return response.status(200).json({ booking: serializeBooking(booking) });
+    } catch (error) {
+      return handleRouteError(response, error, "Booking status update");
     }
   });
 
