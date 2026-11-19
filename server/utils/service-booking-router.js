@@ -6,10 +6,13 @@ import {
   calculateCustomPondCents,
   findActivePackage,
 } from "./service-catalog.js";
+import { BOOKING_STATUSES } from "../models/service-booking.js";
 import {
   HttpError,
   handleRouteError,
+  paginationMeta,
   parseFutureServiceDate,
+  parsePagination,
   saveWithUniqueReference,
   serializeBooking,
 } from "./service-booking.js";
@@ -225,6 +228,40 @@ function createServiceBookingRouter() {
       return response.status(201).json({ booking: serializeBooking(booking) });
     } catch (error) {
       return handleRouteError(response, error, "Service booking creation");
+    }
+  });
+
+  router.get("/", async (request, response) => {
+    const pagination = parsePagination(request.query);
+    if (pagination.error) {
+      return response.status(400).json({ error: pagination.error });
+    }
+    const filter = { customer_id: request.authUser.id };
+    const { bookingStatus } = request.query;
+    if (bookingStatus !== undefined) {
+      if (!BOOKING_STATUSES.includes(bookingStatus)) {
+        return response.status(400).json({ error: "Invalid booking status." });
+      }
+      filter.bookingStatus = bookingStatus;
+    }
+
+    const { ServiceBooking } = request.bookingModels;
+    const { skip, limit } = pagination.value;
+    try {
+      const [bookings, total] = await Promise.all([
+        ServiceBooking.find(filter)
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        ServiceBooking.countDocuments(filter),
+      ]);
+      return response.status(200).json({
+        bookings: bookings.map(serializeBooking),
+        pagination: paginationMeta(pagination.value, total),
+      });
+    } catch (error) {
+      return handleRouteError(response, error, "Service booking list");
     }
   });
 
