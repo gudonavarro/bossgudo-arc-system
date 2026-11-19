@@ -6,14 +6,14 @@ defineProps<{
 </script>
 
 <template>
-  <section class="feature-page">
-    <div class="section-head">
+  <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div class="page-head">
       <div>
         <h1 class="page-title">{{ title }}</h1>
-        <p class="muted">{{ description }}</p>
+        <p class="page-sub">{{ description }}</p>
       </div>
     </div>
-    <div class="feature-page-content">
+    <div>
       <slot />
     </div>
   </section>

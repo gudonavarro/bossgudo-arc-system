@@ -4,7 +4,7 @@ definePageMeta({ middleware: ["admin"] });
 
 <template>
   <FeaturePage title="Admin Dashboard" description="The administration dashboard is not connected to booking records in this version.">
-    <p class="panel booking-notice">
+    <p class="notice mt-5">
       No customer or booking management actions are available from this page yet.
     </p>
   </FeaturePage>

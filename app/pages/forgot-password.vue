@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { getApiErrorMessage } from "~/utils/api-error";
 
+useHead({ title: "Forgot Password | BOSSGUDO A.R.C. AQUA FARM" });
+
 const email = ref("");
 const code = ref("");
 const step = ref<"request" | "verify">("request");
@@ -58,76 +60,85 @@ function changeEmail() {
 </script>
 
 <template>
-  <main class="recovery-shell">
-    <section class="login-visual" aria-label="Boss Gudo farm preview">
-      <div class="login-visual-content">
-        <div class="brand-chip">
-          <img class="brand-mark" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
-          <div>
-            <strong>BOSSGUDO</strong>
-            <small>A.R.C. AQUA FARM</small>
-          </div>
+  <AuthLayout label="Forgot password form">
+    <div class="mb-6">
+      <span class="mb-4 grid size-11 place-items-center rounded-xl bg-primary/10 text-primary">
+        <AppIcon :name="step === 'request' ? 'mail' : 'shield-check'" />
+      </span>
+      <h1 class="text-2xl font-semibold tracking-tight">Forgot password</h1>
+      <p class="mt-1 text-sm text-base-content/65">
+        {{ step === "request" ? "Enter your account email to receive a password reset verification code." : "Enter the 6-digit code sent to your email address." }}
+      </p>
+    </div>
+
+    <ul class="steps mb-6 w-full text-xs" aria-label="Password reset progress">
+      <li class="step step-primary">Email</li>
+      <li class="step" :class="{ 'step-primary': step === 'verify' }">Verify code</li>
+      <li class="step">New password</li>
+    </ul>
+
+    <form v-if="step === 'request'" class="space-y-4" @submit.prevent="requestCode">
+      <div>
+        <label for="email" class="mb-1.5 block text-sm font-medium">Email address</label>
+        <div class="input w-full">
+          <AppIcon name="mail" size="size-4 text-base-content/40" />
+          <input id="email" v-model="email" class="grow" type="email" autocomplete="email" placeholder="name@example.com" required>
         </div>
-
-        <p class="eyebrow login-eyebrow">Sustainable aquaculture support</p>
-        <h1>Welcome to Boss Gudo.</h1>
-        <p class="login-visual-copy">
-          From pond packages to farm visits, we help growers build healthy, productive Australian Red Claw systems with practical support at every stage.
-        </p>
-
-        <ul class="login-benefits" aria-label="Business highlights">
-          <li>Pond packages and custom design</li>
-          <li>Farm guidance and setup support</li>
-          <li>Track services and bookings</li>
-        </ul>
       </div>
-    </section>
-    <section class="recovery-panel" aria-label="Forgot password form">
-      <section class="panel auth-card recovery-card">
-        <h1 class="page-title">Forgot Password</h1>
-        <p class="recovery-subtitle">
-          {{ step === "request" ? "Enter your account email to receive a password reset verification code." : "Enter the 6-digit code sent to your email address." }}
-        </p>
-        <form v-if="step === 'request'" @submit.prevent="requestCode">
-          <div class="field"><label for="email">EMAIL ADDRESS</label><input id="email" v-model="email" type="email" required></div>
-          <button class="primary recovery-submit" type="submit" :disabled="submitting" :aria-busy="submitting">
-            {{ submitting ? "Sending..." : "Send Verification Code" }}
-          </button>
-        </form>
-        <form v-else @submit.prevent="verifyCode">
-          <div class="field">
-            <label for="verification-email">EMAIL ADDRESS</label>
-            <input id="verification-email" :value="email" type="email" readonly>
-          </div>
-          <div class="field">
-            <label for="verification-code">6-DIGIT CODE</label>
-            <input
-              id="verification-code"
-              v-model="code"
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              required
-            >
-          </div>
-          <button class="primary recovery-submit" type="submit" :disabled="submitting" :aria-busy="submitting">
-            {{ submitting ? "Verifying..." : "Verify Code" }}
-          </button>
-          <button class="recovery-text-button" type="button" :disabled="submitting" @click="requestCode">
-            Resend code
-          </button>
-          <button class="recovery-text-button" type="button" :disabled="submitting" @click="changeEmail">
-            Use a different email
-          </button>
-        </form>
-        <output v-if="feedback" class="form-feedback show" :class="{ success: feedbackStatus === 'success' }" aria-live="polite">{{ feedback }}</output>
-        <p class="auth-card-footer recovery-login-link">
-          Remember your password?
-          <NuxtLink to="/customer-login">Login</NuxtLink>
-        </p>
-      </section>
-    </section>
-  </main>
+      <button class="btn btn-primary w-full" type="submit" :disabled="submitting" :aria-busy="submitting">
+        <span v-if="submitting" class="loading loading-spinner loading-sm" aria-hidden="true" />
+        {{ submitting ? "Sending..." : "Send Verification Code" }}
+      </button>
+    </form>
+    <form v-else class="space-y-4" @submit.prevent="verifyCode">
+      <div>
+        <label for="verification-email" class="mb-1.5 block text-sm font-medium">Email address</label>
+        <input id="verification-email" :value="email" class="input w-full bg-base-200" type="email" readonly>
+      </div>
+      <div>
+        <label for="verification-code" class="mb-1.5 block text-sm font-medium">6-digit code</label>
+        <input
+          id="verification-code"
+          v-model="code"
+          class="input input-lg w-full text-center font-mono tracking-[0.5em]"
+          type="text"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          pattern="[0-9]{6}"
+          maxlength="6"
+          placeholder="000000"
+          required
+        >
+      </div>
+      <button class="btn btn-primary w-full" type="submit" :disabled="submitting" :aria-busy="submitting">
+        <span v-if="submitting" class="loading loading-spinner loading-sm" aria-hidden="true" />
+        {{ submitting ? "Verifying..." : "Verify Code" }}
+      </button>
+      <div class="flex flex-wrap justify-center gap-2">
+        <button class="btn btn-ghost btn-sm" type="button" :disabled="submitting" @click="requestCode">
+          <AppIcon name="refresh-cw" size="size-4" />
+          Resend code
+        </button>
+        <button class="btn btn-ghost btn-sm" type="button" :disabled="submitting" @click="changeEmail">
+          <AppIcon name="pencil" size="size-4" />
+          Use a different email
+        </button>
+      </div>
+    </form>
+
+    <output
+      v-if="feedback"
+      class="alert alert-soft mt-4 text-sm"
+      :class="feedbackStatus === 'success' ? 'alert-success' : 'alert-error'"
+      aria-live="polite"
+    >
+      <AppIcon :name="feedbackStatus === 'success' ? 'circle-check' : 'circle-alert'" size="size-4" />
+      <span>{{ feedback }}</span>
+    </output>
+
+    <p class="mt-6 border-t border-base-300 pt-5 text-center text-sm text-base-content/70">
+      Remember your password?
+      <NuxtLink to="/customer-login" class="link link-primary font-semibold">Log in</NuxtLink>
+    </p>
+  </AuthLayout>
 </template>

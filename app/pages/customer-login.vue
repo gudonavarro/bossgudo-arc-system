@@ -14,7 +14,6 @@ const email = ref("");
 const password = ref("");
 const errorMessage = ref("");
 const pending = ref(false);
-const showPassword = ref(false);
 const { login } = useAuth();
 const { showToast } = useToast();
 
@@ -65,84 +64,51 @@ async function submit() {
 </script>
 
 <template>
-  <main class="login-shell">
-    <section class="login-visual" aria-label="Boss Gudo farm preview">
-      <div class="login-visual-content">
-        <div class="brand-chip">
-          <img class="brand-mark" src="/images/boss-gudo-logo.png" alt="BOSSGUDO A.R.C. AQUA FARM logo">
-          <div>
-            <strong>BOSSGUDO</strong>
-            <small>A.R.C. AQUA FARM</small>
-          </div>
+  <AuthLayout with-header label="Customer login form">
+    <div class="mb-6">
+      <h1 class="text-2xl font-semibold tracking-tight">Customer login</h1>
+      <p class="mt-1 text-sm text-base-content/65">Log in to book services and track your bookings.</p>
+    </div>
+
+    <form class="space-y-4" novalidate @submit.prevent="submit">
+      <div>
+        <label for="email" class="mb-1.5 block text-sm font-medium">Email address</label>
+        <div class="input w-full">
+          <AppIcon name="mail" size="size-4 text-base-content/40" />
+          <input id="email" v-model="email" class="grow" type="email" autocomplete="email" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
         </div>
-
-        <p class="eyebrow login-eyebrow">Sustainable aquaculture support</p>
-        <h1>Welcome to Boss Gudo.</h1>
-        <p class="login-visual-copy">
-          From pond packages to farm visits, we help growers build healthy, productive Australian Red Claw systems with practical support at every stage.
-        </p>
-
-        <ul class="login-benefits" aria-label="Business highlights">
-          <li>Pond packages and custom design</li>
-          <li>Farm guidance and setup support</li>
-          <li>Track services and bookings</li>
-        </ul>
       </div>
-    </section>
 
-    <section class="login-panel" aria-label="Customer Login form">
-      <div class="login-card">
-        <div class="login-card-header">
-          <h2>Customer Login</h2>
+      <div>
+        <div class="mb-1.5 flex items-center justify-between gap-2">
+          <label for="password" class="block text-sm font-medium">Password</label>
+          <NuxtLink to="/forgot-password" class="link link-primary text-sm">Forgot password?</NuxtLink>
         </div>
-
-        <form novalidate @submit.prevent="submit">
-          <div class="field">
-            <label for="email">Email address</label>
-            <input id="email" v-model="email" type="email" autocomplete="email" placeholder="name@example.com" required :disabled="pending" @blur="email = normalizeLoginEmail(email)" @input="errorMessage = ''">
-          </div>
-
-          <div class="field">
-            <label for="password">Password</label>
-            <div class="password-input-wrap">
-              <input
-                id="password"
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="••••••••"
-                required
-                :disabled="pending"
-                @input="errorMessage = ''"
-              >
-              <button
-                class="password-toggle"
-                type="button"
-                :disabled="pending"
-                :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                @click="showPassword = !showPassword"
-              >
-                {{ showPassword ? "Hide" : "Show" }}
-              </button>
-            </div>
-          </div>
-
-          <div class="login-form-actions">
-            <NuxtLink to="/forgot-password">Forgot password?</NuxtLink>
-          </div>
-
-          <button class="primary login-submit" type="submit" :disabled="pending" :aria-busy="pending">
-            {{ pending ? "Logging in..." : "Log In" }}
-          </button>
-
-          <output v-if="errorMessage" class="form-feedback show" aria-live="polite">{{ errorMessage }}</output>
-        </form>
-
-        <p class="auth-card-footer login-signup">
-          Need an account?
-          <NuxtLink :to="registerTarget">Create Account</NuxtLink>
-        </p>
+        <PasswordInput
+          id="password"
+          v-model="password"
+          autocomplete="current-password"
+          placeholder="Enter your password"
+          required
+          :disabled="pending"
+          @input="errorMessage = ''"
+        />
       </div>
-    </section>
-  </main>
+
+      <output v-if="errorMessage" class="alert alert-error alert-soft text-sm" role="alert" aria-live="polite">
+        <AppIcon name="circle-alert" size="size-4" />
+        <span>{{ errorMessage }}</span>
+      </output>
+
+      <button class="btn btn-primary w-full" type="submit" :disabled="pending" :aria-busy="pending">
+        <span v-if="pending" class="loading loading-spinner loading-sm" aria-hidden="true" />
+        {{ pending ? "Logging in..." : "Log In" }}
+      </button>
+    </form>
+
+    <p class="mt-6 border-t border-base-300 pt-5 text-center text-sm text-base-content/70">
+      Need an account?
+      <NuxtLink :to="registerTarget" class="link link-primary font-semibold">Create Account</NuxtLink>
+    </p>
+  </AuthLayout>
 </template>
