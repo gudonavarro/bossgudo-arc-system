@@ -9,12 +9,14 @@ import {
 import { BOOKING_STATUSES } from "../models/service-booking.js";
 import {
   HttpError,
+  bookingIdentifierFilter,
   handleRouteError,
   paginationMeta,
   parseFutureServiceDate,
   parsePagination,
   saveWithUniqueReference,
   serializeBooking,
+  serializePayment,
 } from "./service-booking.js";
 
 const require = createRequire(import.meta.url);
@@ -262,6 +264,35 @@ function createServiceBookingRouter() {
       });
     } catch (error) {
       return handleRouteError(response, error, "Service booking list");
+    }
+  });
+
+  router.get("/:identifier", async (request, response) => {
+    const identifierFilter = bookingIdentifierFilter(request.params.identifier);
+    if (!identifierFilter) {
+      return response.status(400).json({ error: "Invalid booking id or reference." });
+    }
+
+    const { ServiceBooking, Payment } = request.bookingModels;
+    try {
+      // Ownership is part of the query so other customers' bookings are
+      // indistinguishable from missing ones.
+      const booking = await ServiceBooking.findOne({
+        ...identifierFilter,
+        customer_id: request.authUser.id,
+      }).lean();
+      if (!booking) {
+        return response.status(404).json({ error: "Booking not found." });
+      }
+      const payments = await Payment.find({ service_booking_id: booking._id })
+        .sort({ submittedAt: -1, _id: -1 })
+        .lean();
+      return response.status(200).json({
+        booking: serializeBooking(booking),
+        payments: payments.map((payment) => serializePayment(payment)),
+      });
+    } catch (error) {
+      return handleRouteError(response, error, "Service booking lookup");
     }
   });
 
