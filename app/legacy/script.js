@@ -1,7 +1,7 @@
 ﻿const app = document.getElementById("app");
 let page = document.body.dataset.page || "home",
   wizardStep = 1,
-  selectedPackage = "Pond Grower Package",
+  selectedPackageCode = "",
   selectedLayers = "2 layers",
   filtration = "Yes",
   pondWidth = 2,
@@ -107,6 +107,7 @@ function closeModal() {
   document.getElementById("modalHost").innerHTML = "";
   document.body.style.overflow = "";
   releaseReceiptUrl();
+  releasePackageFormPhoto();
 }
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();
@@ -362,66 +363,82 @@ let faqLoading = false;
 let faqLoadError = "";
 let faqSaving = false;
 
-/* ---------- package catalog ---------- */
-let pondPackageCatalog = [
-  {
-    id: "pk1",
-    name: "Pond Starter Package",
-    image:
-      "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=900&q=80",
-    description: "A compact starter pond setup for new growers.",
-    price: 6500,
-    layers: "1 layer",
-    dimensions: "2 m × 2 m",
-    freebie: "Free starter water-test kit",
-    featured: false,
+/* ---------- package catalog ----------
+   Packages and custom pond rates come from GET /api/service-packages (active
+   packages only). The server prices every booking from MongoDB; these values
+   are for display and estimates. Packages are selected by their stable code. */
+let pondPackageCatalog = [],
+  packageCatalogState = "idle",
+  packageCatalogError = "";
+let pondRatePerSqmPerLayer = 0,
+  filtrationEstimate = 0;
+const CUSTOM_POND_CODE = "custom";
+const CUSTOM_POND_NAME = "Custom Pond Design";
+function toCatalogPackage(server) {
+  return {
+    id: server.code,
+    name: server.name,
+    description: server.description,
+    price: server.price,
+    layers: server.layers,
+    dimensions: server.dimensions,
+    inclusions: server.inclusions || [],
+    freebie: (server.inclusions || []).join(" · "),
+    featured: Boolean(server.featured),
+    image: server.imageUrl || null,
     active: true,
-  },
-  {
-    id: "pk2",
-    name: "Pond Grower Package",
-    image:
-      "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=80",
-    description: "A larger pond setup for customers ready to expand.",
-    price: 9500,
-    layers: "2 layers",
-    dimensions: "2 m × 3 m",
-    freebie: "Free 500 g starter crayfish feed",
-    featured: true,
-    active: true,
-  },
-  {
-    id: "pk3",
-    name: "Pond Pro Package",
-    image:
-      "https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=900&q=80",
-    description: "A larger three-layer setup for more advanced use.",
-    price: 14500,
-    layers: "3 layers",
-    dimensions: "3 m × 3 m",
-    freebie: "Free 10 juvenile crayfish",
-    featured: false,
-    active: true,
-  },
-];
-let pondRatePerSqmPerLayer = 450,
-  filtrationEstimate = 1500;
-const FALLBACK_IMG =
-  "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=80";
+  };
+}
+async function loadServicePackages() {
+  if (packageCatalogState === "loading") return;
+  packageCatalogState = "loading";
+  packageCatalogError = "";
+  try {
+    const result = await bookingApiRequest("/api/service-packages");
+    pondPackageCatalog = (result.packages || []).map(toCatalogPackage);
+    pondRatePerSqmPerLayer = Number(result.customPondPricing?.ratePerSquareMetrePerLayer || 0);
+    filtrationEstimate = Number(result.customPondPricing?.filtration || 0);
+    packageCatalogState = "loaded";
+  } catch (error) {
+    packageCatalogState = "error";
+    packageCatalogError = error instanceof Error ? error.message : "Packages could not be loaded.";
+  }
+  if (["home", "shop", "booking"].includes(page)) render();
+}
+/** Loading or error markup for package views; empty string once loaded. */
+function packageCatalogStatusMarkup() {
+  if (packageCatalogState === "error") {
+    return `<div class="panel" role="alert"><p style="margin-top:0">${safe(packageCatalogError)}</p><button class="secondary" onclick="packageCatalogState='idle';render()">Try again</button></div>`;
+  }
+  if (packageCatalogState !== "loaded") {
+    return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading packages…</p></div>';
+  }
+  return "";
+}
 function activePackages() {
   return pondPackageCatalog.filter((x) => x.active !== false);
 }
 function isCustomPond() {
-  return selectedPackage === "Custom Pond Design";
+  return selectedPackageCode === CUSTOM_POND_CODE;
 }
 function selectedPondPackage() {
-  return activePackages().find((x) => x.name === selectedPackage) || null;
+  return activePackages().find((x) => x.id === selectedPackageCode) || null;
+}
+function selectedPackageName() {
+  if (isCustomPond()) return CUSTOM_POND_NAME;
+  return selectedPondPackage()?.name || "";
+}
+/** Placeholder shown wherever a package has no uploaded photo. */
+function photoPlaceholder(cls, label, icon = "🦞") {
+  return `<div class="${cls}" role="img" aria-label="${safe(label)}" style="display:flex;align-items:center;justify-content:center;font-size:64px;background:linear-gradient(145deg,#e3eee2,#a9c9ad);min-height:180px">${icon}</div>`;
 }
 function packagePhoto(x, cls = "package-photo") {
-  return `<img class="${cls}" src="${safe(x.image || FALLBACK_IMG)}" alt="${safe(x.name)} photo" onerror="this.onerror=null;this.src='${FALLBACK_IMG}'">`;
+  if (!x.image) return photoPlaceholder(cls, `${x.name} (no photo yet)`);
+  return `<img class="${cls}" src="${safe(x.image)}" alt="${safe(x.name)} photo" onerror="this.onerror=null;this.style.display='none'">`;
 }
 function pkgImg(x) {
-  return `<img src="${safe(x.image || FALLBACK_IMG)}" alt="${safe(x.name)}" loading="lazy" onerror="this.style.display='none'">`;
+  if (!x.image) return `<span role="img" aria-label="${safe(x.name)} (no photo yet)">🦞</span>`;
+  return `<img src="${safe(x.image)}" alt="${safe(x.name)}" loading="lazy" onerror="this.style.display='none'">`;
 }
 function customPrice(layersStr, w, h, filt) {
   const layers = Math.min(3, Math.max(1, Number.parseInt(layersStr, 10) || 1));
@@ -456,10 +473,8 @@ function currentPricing() {
   return { base, cust, total, deposit, balance: r2(total - deposit) };
 }
 function pickPkg(id) {
-  if (id === "custom") selectedPackage = "Custom Pond Design";
-  else {
-    const p = pondPackageCatalog.find((x) => x.id === id);
-    if (p) selectedPackage = p.name;
+  if (id === CUSTOM_POND_CODE || pondPackageCatalog.some((x) => x.id === id)) {
+    selectedPackageCode = id;
   }
   render();
 }
@@ -590,7 +605,9 @@ function toCustomerBooking(server) {
   const payments = server.payments || [];
   const latestPayment = payments[0] || null;
   const isoDate = serverDateIso(server.serviceDate);
-  const preset = pondPackageCatalog.find((x) => x.name === server.packageNameSnapshot);
+  // Package details come from the booking's own snapshot, never the live
+  // catalog, so later catalog edits cannot change past bookings.
+  const preset = server.packageSnapshot || null;
   const custom = server.customConfiguration;
   return {
     server: true,
@@ -602,7 +619,7 @@ function toCustomerBooking(server) {
     location: server.serviceLocation,
     notes: server.notes || "",
     pkg: server.packageNameSnapshot,
-    freebie: preset?.freebie || "",
+    freebie: (preset?.inclusions || []).join(" · "),
     packageLayers: preset && !custom ? preset.layers : "",
     packageDimensions: preset && !custom ? preset.dimensions : "",
     layers: custom ? `${custom.layers} ${custom.layers === 1 ? "layer" : "layers"}` : "",
@@ -986,6 +1003,13 @@ function syncPageChrome(nextPage) {
   if (nextPage === "admin" && adminDataState !== "loading") {
     adminDataState = "idle";
   }
+  if (nextPage === "admin" && adminPackagesState !== "loading") {
+    adminPackagesState = "idle";
+  }
+  // Opening a storefront page refreshes packages and prices from the server.
+  if (["home", "shop", "booking"].includes(nextPage) && packageCatalogState !== "loading") {
+    packageCatalogState = "idle";
+  }
   document.body.dataset.page = nextPage;
   document.title = nextPage === "shop"
     ? "Shop | Boss Gudo A.R.C. Aqua Farm"
@@ -1228,10 +1252,8 @@ function readDetails() {
   };
 }
 function servicePhoto() {
-  let p = selectedPondPackage();
-  return p
-    ? packagePhoto(p)
-    : `<img class="package-photo" src="https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=85" alt="Custom pond design">`;
+  const p = selectedPondPackage();
+  return p ? packagePhoto(p) : photoPlaceholder("package-photo", "Custom pond design", "📐");
 }
 function reviewStep() {
   let d = window.bookingDraft || {},
@@ -1249,11 +1271,11 @@ function reviewStep() {
   const preferredDate = selectedDate
     ? fmtDate(selectedDate, true)
     : "Not selected";
-  return `<h2>Review your booking</h2><p class="muted">Check the package, booking information, and price. Then continue to payment.</p><div class="review-grid"><div>${servicePhoto()}</div><div><h3 style="margin-top:0">${safe(selectedPackage)}</h3>${packageDetails}${notes}</div></div><div class="panel"><h3>Booking information</h3><div class="summary-line"><span>Preferred date</span><strong>${preferredDate}</strong></div><div class="summary-line"><span>Name</span><strong>${safe(d.name || "")}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone || "")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email || "Not provided")}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(d.location || "")}</strong></div></div><div class="panel"><h3>Price</h3>${priceDetails}<div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment due now</span><strong style="color:var(--green)">${money(p.deposit)}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(p.balance)}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings.</p></div><div class="callout" style="margin-top:18px"><strong>No-refund policy.</strong> ${NO_REFUND_POLICY}<label class="check-row"><input type="checkbox" id="policyBox" ${policyAccepted ? "checked" : ""} onchange="policyAccepted=this.checked"><span>I understand and accept the no-refund policy.</span></label></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=3;render()">← Back</button><button class="primary" onclick="goPayment()">Continue to Payment →</button></div>`;
+  return `<h2>Review your booking</h2><p class="muted">Check the package, booking information, and price. Then continue to payment.</p><div class="review-grid"><div>${servicePhoto()}</div><div><h3 style="margin-top:0">${safe(selectedPackageName())}</h3>${packageDetails}${notes}</div></div><div class="panel"><h3>Booking information</h3><div class="summary-line"><span>Preferred date</span><strong>${preferredDate}</strong></div><div class="summary-line"><span>Name</span><strong>${safe(d.name || "")}</strong></div><div class="summary-line"><span>Contact number</span><strong>${safe(d.phone || "")}</strong></div><div class="summary-line"><span>Email</span><strong>${safe(d.email || "Not provided")}</strong></div><div class="summary-line"><span>Service location</span><strong>${safe(d.location || "")}</strong></div></div><div class="panel"><h3>Price</h3>${priceDetails}<div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment due now</span><strong style="color:var(--green)">${money(p.deposit)}</strong></div><div class="summary-line"><span>Remaining balance</span><strong>${money(p.balance)}</strong></div><p class="muted" style="font-size:12px;margin-bottom:0">After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance in My Bookings.</p></div><div class="callout" style="margin-top:18px"><strong>No-refund policy.</strong> ${NO_REFUND_POLICY}<label class="check-row"><input type="checkbox" id="policyBox" ${policyAccepted ? "checked" : ""} onchange="policyAccepted=this.checked"><span>I understand and accept the no-refund policy.</span></label></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=3;render()">← Back</button><button class="primary" onclick="goPayment()">Continue to Payment →</button></div>`;
 }
 function paymentStep() {
   let p = currentPricing();
-  return `<h2>Payment</h2><p class="muted">Pay the 50% down payment in GCash, then upload your receipt. Your booking and receipt are submitted together, and your booking is confirmed once the owner verifies your payment.</p><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner's GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner's GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner's GCash number]</strong></div><div class="summary-line"><span>Package</span><strong>${safe(selectedPackage)}</strong></div><div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment to pay now</span><strong style="font-size:23px;color:var(--green)">${money(p.deposit)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the account details above, and pay the exact amount. After the transfer succeeds, upload your receipt below and submit.</div></div></div><div class="panel" style="margin-top:20px"><h3>Upload payment receipt</h3><p class="muted">Your booking is submitted together with this receipt. The owner checks the receipt against the actual GCash transaction.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: JPG, PNG, WEBP, HEIC image or PDF, up to 8 MB.</p></div>${pendingBookingNotice()}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="secondary" onclick="wizardStep=4;render()">← Back</button><button class="primary" id="submitBookingButton" onclick="submitBooking()">Submit Booking and Receipt</button></div></div>`;
+  return `<h2>Payment</h2><p class="muted">Pay the 50% down payment in GCash, then upload your receipt. Your booking and receipt are submitted together, and your booking is confirmed once the owner verifies your payment.</p><div class="pay-grid"><div class="card" style="text-align:center"><h3>Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted" style="font-size:12px">Scan the QR code or use the owner’s GCash account details.</p></div><div class="card"><h3>Owner's GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner's GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner's GCash number]</strong></div><div class="summary-line"><span>Package</span><strong>${safe(selectedPackageName())}</strong></div><div class="summary-line"><span>Total service price</span><strong>${money(p.total)}</strong></div><div class="summary-line"><span>50% down payment to pay now</span><strong style="font-size:23px;color:var(--green)">${money(p.deposit)}</strong></div><div class="notice" style="margin-top:15px">Open GCash, scan the QR or use the account details above, and pay the exact amount. After the transfer succeeds, upload your receipt below and submit.</div></div></div><div class="panel" style="margin-top:20px"><h3>Upload payment receipt</h3><p class="muted">Your booking is submitted together with this receipt. The owner checks the receipt against the actual GCash transaction.</p><div class="field"><label for="gcashReference">GCash transaction reference number *</label><input id="gcashReference" placeholder="Enter the transaction reference number" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot *</label><input id="gcashProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" required><p class="muted" style="font-size:12px;margin-top:6px">Accepted: JPG, PNG, WEBP, HEIC image or PDF, up to 8 MB.</p></div>${pendingBookingNotice()}${FORM_ERROR_MARKUP}<div class="wizard-actions"><button class="secondary" onclick="wizardStep=4;render()">← Back</button><button class="primary" id="submitBookingButton" onclick="submitBooking()">Submit Booking and Receipt</button></div></div>`;
 }
 function booking() {
   if (!loggedIn) {
@@ -1449,11 +1471,17 @@ function pkgCardCustom() {
 }
 function shop() {
   const act = activePackages();
-  return `<div class="breadcrumbs">Home / Shop</div><h1 class="page-title">Shop</h1><p class="muted">Browse the owner’s predefined pond packages, each with one included freebie. Choose one option per booking, or design your own pond.</p><div class="pkg-grid" style="margin-top:24px">${act.map(pkgCardPublic).join("")}${pkgCardCustom()}</div><div class="notice" style="margin-top:22px"><strong>How pricing works.</strong> Custom pond price = width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected. You pay 50% when you book; your booking is confirmed once the owner verifies that payment. After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance.</div>`;
+  const status = packageCatalogStatusMarkup();
+  const empty =
+    !status && !act.length
+      ? '<div class="notice" style="margin-top:18px">No predefined packages are available right now. You can still book a Custom Pond Design.</div>'
+      : "";
+  const cards = status ? "" : act.map(pkgCardPublic).join("") + pkgCardCustom();
+  return `<div class="breadcrumbs">Home / Shop</div><h1 class="page-title">Shop</h1><p class="muted">Browse the owner’s predefined pond packages, each with one included freebie. Choose one option per booking, or design your own pond.</p>${status}${empty}<div class="pkg-grid" style="margin-top:24px">${cards}</div><div class="notice" style="margin-top:22px"><strong>How pricing works.</strong> Custom pond price = width × length × ${money(pondRatePerSqmPerLayer)} per m² per layer, plus ${money(filtrationEstimate)} if filtration is selected. You pay 50% when you book; your booking is confirmed once the owner verifies that payment. After the service is done, the owner adds any Lalamove delivery fee and you pay the remaining balance.</div>`;
 }
 
 function pkgCardSelect(x, custom) {
-  const selected = custom ? isCustomPond() : selectedPackage === x.name;
+  const selected = custom ? isCustomPond() : selectedPackageCode === x.id;
   const id = custom ? "custom" : x.id;
   const name = custom ? "Custom Pond Design" : x.name;
   const cardClass = custom ? "pkg-card custom" : "pkg-card";
@@ -1480,6 +1508,10 @@ function pkgCardSelect(x, custom) {
   return `<div class="${cardClass}${selectedClass}" role="button" tabindex="0" aria-pressed="${selected}" onclick="pickPkg('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pickPkg('${id}')}"><div class="pkg-media">${media}${featuredBadge}${selectedBadge}</div><div class="pkg-body"><h3>${safe(name)}</h3><p>${description}</p>${packageDetails}<div class="pkg-foot"><div class="price-big"><small>${priceLabel}</small>${price}</div>${selectionLabel}</div></div></div>`;
 }
 function packageStep() {
+  const status = packageCatalogStatusMarkup();
+  if (status) {
+    return `<h2>Choose one service option</h2>${status}<div class="wizard-actions"><button class="secondary" onclick="changeBookingType()">← Back</button></div>`;
+  }
   const predefined = selectedPondPackage();
   const packageCards = activePackages()
     .map((item) => pkgCardSelect(item, false))
@@ -1524,7 +1556,7 @@ function continueToSchedule() {
 }
 function dateStep() {
   const p = currentPricing();
-  return `<h2>Choose your service date</h2><p class="muted">Pick your preferred date first, then enter your details. Service dates are open on weekends only. Calendar availability is managed by the farm.</p><div class="calendar-wrap" style="margin-top:14px">${calendarBlock("service")}<div><div class="card"><h3 style="margin-top:0">Selected date</h3><p>${selectedDate ? fmtDate(selectedDate, true) : "Choose an available green date"}</p><div class="notice">Choose any open weekend date. Closed dates cannot be selected. Your date is reserved once your 50% down payment is verified.</div></div><div class="card" style="margin-top:12px"><h3 style="margin-top:0">Your option</h3><p style="margin:0"><strong>${safe(selectedPackage)}</strong><br><span class="muted">${money(p.total)} · 50% down payment ${money(p.deposit)}</span></p></div></div></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=1;render()">← Back</button><button class="primary" onclick="goDetails()">Continue to Details →</button></div>`;
+  return `<h2>Choose your service date</h2><p class="muted">Pick your preferred date first, then enter your details. Service dates are open on weekends only. Calendar availability is managed by the farm.</p><div class="calendar-wrap" style="margin-top:14px">${calendarBlock("service")}<div><div class="card"><h3 style="margin-top:0">Selected date</h3><p>${selectedDate ? fmtDate(selectedDate, true) : "Choose an available green date"}</p><div class="notice">Choose any open weekend date. Closed dates cannot be selected. Your date is reserved once your 50% down payment is verified.</div></div><div class="card" style="margin-top:12px"><h3 style="margin-top:0">Your option</h3><p style="margin:0"><strong>${safe(selectedPackageName())}</strong><br><span class="muted">${money(p.total)} · 50% down payment ${money(p.deposit)}</span></p></div></div></div><div class="wizard-actions"><button class="secondary" onclick="wizardStep=1;render()">← Back</button><button class="primary" onclick="goDetails()">Continue to Details →</button></div>`;
 }
 function goDetails() {
   if (!selectedDate || blockedDates.service.has(selectedDate)) {
@@ -1538,7 +1570,7 @@ function goDetails() {
 }
 function detailsStep() {
   const d = window.bookingDraft || {};
-  return `<h2>Your details</h2><div class="notice" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><span>📅 Service date: <strong>${selectedDate ? fmtDate(selectedDate, true) : "Not selected"}</strong> · ${safe(selectedPackage)}</span><button class="secondary small" onclick="readDetails();wizardStep=2;render()">Change date</button></div><div class="panel"><h3 style="margin-top:0">Customer details</h3><div class="field-grid"><div class="field"><label for="customerName">Full name</label><input id="customerName" value="${safe(d.name || sessionCustomerName())}" placeholder="Full name"></div><div class="field"><label for="phone">Contact number</label><input id="phone" value="${safe(d.phone || sessionCustomer?.phoneNumber || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="email">Email (optional)</label><input id="email" type="email" value="${safe(d.email || sessionCustomer?.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="location">Service location</label><input id="location" value="${safe(d.location || "")}" placeholder="Complete service address"></div></div></div><div class="wizard-actions"><button class="secondary" onclick="readDetails();wizardStep=2;render()">← Back</button><button class="primary" onclick="goReview()">Continue to Review →</button></div>`;
+  return `<h2>Your details</h2><div class="notice" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><span>📅 Service date: <strong>${selectedDate ? fmtDate(selectedDate, true) : "Not selected"}</strong> · ${safe(selectedPackageName())}</span><button class="secondary small" onclick="readDetails();wizardStep=2;render()">Change date</button></div><div class="panel"><h3 style="margin-top:0">Customer details</h3><div class="field-grid"><div class="field"><label for="customerName">Full name</label><input id="customerName" value="${safe(d.name || sessionCustomerName())}" placeholder="Full name"></div><div class="field"><label for="phone">Contact number</label><input id="phone" value="${safe(d.phone || sessionCustomer?.phoneNumber || "")}" placeholder="09XX XXX XXXX"></div><div class="field"><label for="email">Email (optional)</label><input id="email" type="email" value="${safe(d.email || sessionCustomer?.email || "")}" placeholder="you@example.com"></div><div class="field"><label for="location">Service location</label><input id="location" value="${safe(d.location || "")}" placeholder="Complete service address"></div></div></div><div class="wizard-actions"><button class="secondary" onclick="readDetails();wizardStep=2;render()">← Back</button><button class="primary" onclick="goReview()">Continue to Review →</button></div>`;
 }
 function goReview() {
   readDetails();
@@ -1688,7 +1720,7 @@ async function submitBooking() {
 }
 function serviceBooking() {
   if (!isCustomPond() && !selectedPondPackage())
-    selectedPackage = activePackages()[0]?.name || "Custom Pond Design";
+    selectedPackageCode = activePackages()[0]?.id || CUSTOM_POND_CODE;
   let stepContent = paymentStep();
   if (wizardStep === 1) stepContent = packageStep();
   else if (wizardStep === 2) stepContent = dateStep();
@@ -2797,217 +2829,316 @@ function customerVisitSummary(visit) {
 
 /* ----- package catalog ----- */
 window.pendingPkgImage = null;
-function pkgCardAdmin(x, i) {
-  const hid = x.active === false;
-  return `<article class="pkg-card ${hid ? "is-hidden" : ""}"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ FEATURED</span>' : ""}${hid ? '<span class="pkg-badge hidden-b" style="left:auto;right:12px">HIDDEN</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><div class="mini-actions"><button class="secondary small" onclick="movePackage(${i},-1)" aria-label="Move earlier" title="Move earlier">←</button><button class="secondary small" onclick="movePackage(${i},1)" aria-label="Move later" title="Move later">→</button></div></div><div class="pkg-actions"><button class="primary small" onclick="openPackageForm(${i})">Edit</button><button class="secondary small" onclick="togglePackage(${i})">${hid ? "Show" : "Hide"}</button><button class="secondary small" onclick="duplicatePackage(${i})">Duplicate</button><button class="danger small" onclick="deletePackage(${i})">Delete</button></div></div></article>`;
+/* ----- package catalog (admin) -----
+   Packages are managed through /api/admin/service-packages. Photos are
+   uploaded to the server; custom pond pricing is fixed on the server. */
+let adminPackages = [],
+  adminPackagesState = "idle",
+  adminPackagesError = "",
+  adminCustomPondPricing = null,
+  pkgStatusFilter = "all",
+  packageFormPhoto = null;
+const PACKAGE_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_PACKAGE_PHOTO_ORIGINAL = 8 * 1024 * 1024;
+const MAX_PACKAGE_PHOTO_UPLOAD = 5 * 1024 * 1024;
+const MAX_PACKAGE_PHOTO_DIMENSION = 1200;
+function adminPackagePath(code) {
+  return `/api/admin/service-packages/${encodeURIComponent(code)}`;
+}
+function toAdminCatalogPackage(server) {
+  return {
+    ...toCatalogPackage(server),
+    status: server.status,
+    active: server.status === "Active",
+    sortOrder: server.sortOrder,
+    imageMeta: server.image,
+    createdAt: server.createdAt,
+    updatedAt: server.updatedAt,
+    createdBy: staffName(server.createdBy),
+    updatedBy: staffName(server.updatedBy),
+  };
+}
+async function loadAdminPackages() {
+  if (adminPackagesState === "loading") return;
+  adminPackagesState = "loading";
+  adminPackagesError = "";
+  try {
+    const result = await bookingApiRequest("/api/admin/service-packages");
+    adminPackages = (result.packages || []).map(toAdminCatalogPackage);
+    adminCustomPondPricing = result.customPondPricing || null;
+    adminPackagesState = "loaded";
+  } catch (error) {
+    adminPackagesState = "error";
+    adminPackagesError = error instanceof Error ? error.message : "Packages could not be loaded.";
+  }
+  if (page === "admin" && adminTab === "catalog") render();
+}
+function reloadAdminPackages() {
+  adminPackagesState = "idle";
+  return loadAdminPackages();
+}
+function adminPackageByCode(code) {
+  return adminPackages.find((x) => x.id === code) || null;
+}
+async function runPackageAction(action, successMessage) {
+  if (adminActionPending) return false;
+  adminActionPending = true;
+  try {
+    await action();
+    if (successMessage) toast(successMessage);
+    return true;
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "The request could not be completed.");
+    return false;
+  } finally {
+    adminActionPending = false;
+    await reloadAdminPackages();
+  }
+}
+function packageMatchesFilters(x) {
+  if (pkgStatusFilter === "active" && !x.active) return false;
+  if (pkgStatusFilter === "inactive" && x.active) return false;
+  const q = pkgSearch.trim().toLowerCase();
+  return !q || `${x.name} ${x.description} ${x.freebie} ${x.id}`.toLowerCase().includes(q);
+}
+function pkgCardAdmin(x) {
+  const inactive = !x.active;
+  const code = safe(x.id);
+  return `<article class="pkg-card ${inactive ? "is-hidden" : ""}"><div class="pkg-media">${pkgImg(x)}${x.featured ? '<span class="pkg-badge">★ FEATURED</span>' : ""}${inactive ? '<span class="pkg-badge hidden-b" style="left:auto;right:12px">INACTIVE</span>' : ""}</div><div class="pkg-body"><h3>${safe(x.name)}</h3><p>${safe(x.description)}</p><div class="chips"><span class="chip">${safe(x.layers)}</span><span class="chip">${safe(x.dimensions)}</span></div><div class="freebie"><span>🎁</span><span>${safe(x.freebie)}</span></div><div class="pkg-foot"><div class="price-big"><small>Package price</small>${money(x.price)}</div><div class="mini-actions"><button class="secondary small" onclick="movePackage('${code}','up')" aria-label="Move earlier" title="Move earlier">←</button><button class="secondary small" onclick="movePackage('${code}','down')" aria-label="Move later" title="Move later">→</button></div></div><div class="pkg-actions"><button class="secondary small" onclick="viewPackage('${code}')">Details</button><button class="primary small" onclick="openPackageForm('${code}')">Edit</button><button class="secondary small" onclick="togglePackage('${code}')">${inactive ? "Activate" : "Deactivate"}</button><button class="secondary small" onclick="duplicatePackage('${code}')">Duplicate</button></div></div></article>`;
+}
+function catalogGridMarkup() {
+  if (!adminPackages.length) return '<div class="empty">No packages yet. Add your first package.</div>';
+  return adminPackages.filter(packageMatchesFilters).map(pkgCardAdmin).join("") || '<div class="empty">No packages match.</div>';
+}
+function pkgFilterButton([value, label]) {
+  return `<button class="${pkgStatusFilter === value ? "active" : ""}" onclick="pkgStatusFilter='${value}';render()">${label}</button>`;
+}
+function customPondPricingPanel() {
+  const p = adminCustomPondPricing;
+  if (!p) return "";
+  return `<div class="panel"><h3 style="margin-top:0">Custom pond pricing</h3><p class="muted" style="margin-top:0">Used by Custom Pond Design: width × length × rate per m² per layer, plus the filtration fee when selected. These rates are fixed on the server.</p><div class="summary-line"><span>Rate per m² per layer</span><strong>${money(p.ratePerSquareMetrePerLayer)}</strong></div><div class="summary-line"><span>Filtration fee</span><strong>${money(p.filtration)}</strong></div><div class="summary-line"><span>Layers · size per side</span><strong>${p.minLayers}–${p.maxLayers} layers · ${p.minDimensionMetres}–${p.maxDimensionMetres} m</strong></div></div>`;
 }
 function adminCatalog() {
-  const act = activePackages(),
-    avg = act.length ? act.reduce((s, x) => s + x.price, 0) / act.length : 0,
-    q = pkgSearch.toLowerCase(),
-    items = pondPackageCatalog
-      .map((x, i) => [x, i])
-      .filter(
-        ([x]) =>
-          !q ||
-          (x.name + " " + x.description + " " + x.freebie)
-            .toLowerCase()
-            .includes(q),
-      );
-  return `${sampleDataNotice("Package edits here only change this browser's view. They are not saved, and bookings are always priced by the server's own package list.")}<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Catalog</h3><p class="muted" style="margin:6px 0 0">Add, edit, hide, reorder and delete pond packages. Visible packages appear on the Packages page and in the booking selector.</p></div><button class="primary" onclick="openPackageForm(-1)">＋ Add package</button></div><div class="stat-grid" style="margin-top:16px"><div class="stat"><div class="label">Visible packages</div><div class="value">${act.length}</div></div><div class="stat"><div class="label">Hidden</div><div class="value">${pondPackageCatalog.length - act.length}</div></div><div class="stat"><div class="label">Average visible price</div><div class="value" style="font-size:22px">${money(avg)}</div></div></div></div><div class="panel"><h3 style="margin-top:0">Custom pond pricing</h3><p class="muted" style="margin-top:0">Used by Custom Pond Design: width × length × rate per m² per layer, plus the filtration fee when selected.</p><div class="field-grid">${fld("set_rate", "Rate per m² per layer (₱)", pondRatePerSqmPerLayer, "number", 'min="0" step="1"')}${fld("set_filt", "Filtration fee (₱)", filtrationEstimate, "number", 'min="0" step="1"')}</div><button class="primary" onclick="savePricingSettings()">Save pricing settings</button></div><div class="panel"><div class="toolbar" style="margin-top:0"><h3 style="margin:0">Packages (${pondPackageCatalog.length})</h3><input type="search" placeholder="Search packages…" value="${safe(pkgSearch)}" oninput="pkgSearch=this.value;refreshCatalogGrid()" aria-label="Search packages"></div><div id="pkgHost" class="pkg-grid">${items.map(([x, i]) => pkgCardAdmin(x, i)).join("") || '<div class="empty">No packages yet. Add your first package.</div>'}</div></div>`;
+  if (adminPackagesState === "error") {
+    return `<div class="panel" role="alert"><h3 style="margin-top:0">Packages could not be loaded</h3><p class="muted">${safe(adminPackagesError)}</p><button class="secondary" onclick="reloadAdminPackages()">Try again</button></div>`;
+  }
+  if (adminPackagesState !== "loaded") {
+    return '<div class="panel" aria-busy="true"><p class="muted" style="margin:0">Loading packages…</p></div>';
+  }
+  const act = adminPackages.filter((x) => x.active);
+  const avg = act.length ? act.reduce((s, x) => s + Number(x.price), 0) / act.length : 0;
+  const filters = [["all", "All"], ["active", "Active"], ["inactive", "Inactive"]].map(pkgFilterButton).join("");
+  return `<div class="panel"><div class="admin-header"><div><h3 style="margin:0">Package Catalog</h3><p class="muted" style="margin:6px 0 0">Add, edit, activate, deactivate, duplicate and reorder pond packages. Active packages appear on the Shop page and in the booking selector.</p></div><button class="primary" onclick="openPackageForm()">＋ Add package</button></div><div class="stat-grid" style="margin-top:16px"><div class="stat"><div class="label">Active packages</div><div class="value">${act.length}</div></div><div class="stat"><div class="label">Inactive</div><div class="value">${adminPackages.length - act.length}</div></div><div class="stat"><div class="label">Average active price</div><div class="value" style="font-size:22px">${money(r2(avg))}</div></div></div></div>${customPondPricingPanel()}<div class="panel"><div class="toolbar" style="margin-top:0"><h3 style="margin:0">Packages (${adminPackages.length})</h3><input type="search" placeholder="Search packages…" value="${safe(pkgSearch)}" oninput="pkgSearch=this.value;refreshCatalogGrid()" aria-label="Search packages"><div class="filters">${filters}</div></div><div id="pkgHost" class="pkg-grid">${catalogGridMarkup()}</div></div>`;
 }
 function refreshCatalogGrid() {
-  const h = document.getElementById("pkgHost");
-  if (!h) return;
-  const q = pkgSearch.toLowerCase();
-  h.innerHTML =
-    pondPackageCatalog
-      .map((x, i) => [x, i])
-      .filter(
-        ([x]) =>
-          !q ||
-          (x.name + " " + x.description + " " + x.freebie)
-            .toLowerCase()
-            .includes(q),
-      )
-      .map(([x, i]) => pkgCardAdmin(x, i))
-      .join("") || '<div class="empty">No packages match.</div>';
+  const host = document.getElementById("pkgHost");
+  if (host) host.innerHTML = catalogGridMarkup();
 }
-function savePricingSettings() {
-  const r = Number(V("set_rate")),
-    f = Number(V("set_filt"));
-  if (
-    !Number.isFinite(r) ||
-    r < 0 ||
-    !Number.isFinite(f) ||
-    f < 0 ||
-    V("set_rate") === "" ||
-    V("set_filt") === ""
-  ) {
-    toast("Enter valid non-negative amounts.");
-    return;
-  }
-  pondRatePerSqmPerLayer = r;
-  filtrationEstimate = f;
-  toast("Custom pond pricing updated.");
-  render();
+function viewPackage(code) {
+  const x = adminPackageByCode(code);
+  if (!x) return;
+  const line = (label, value) => `<div class="summary-line"><span>${label}</span><strong>${value}</strong></div>`;
+  const inclusions = x.inclusions.map((item) => `<li>${safe(item)}</li>`).join("");
+  const body = `${packagePhoto(x)}<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0"><span class="status ${x.active ? "green" : "gray"}">${safe(x.status)}</span>${x.featured ? '<span class="status">Featured</span>' : ""}</div>${line("Code", safe(x.id))}${line("Price", money(x.price))}${line("Layers", safe(x.layers))}${line("Dimensions", safe(x.dimensions))}<p>${safe(x.description)}</p><h4 style="margin:12px 0 4px">Inclusions</h4><ul>${inclusions}</ul>${line("Created", `${safe(serverTime(x.createdAt))}${x.createdBy ? ` · ${safe(x.createdBy)}` : ""}`)}${line("Last updated", `${safe(serverTime(x.updatedAt))}${x.updatedBy ? ` · ${safe(x.updatedBy)}` : ""}`)}`;
+  openModal("Package details", safe(x.name), body, `<button class="secondary" onclick="closeModal()">Close</button><button class="primary" onclick="openPackageForm('${safe(x.id)}')">Edit</button>`, true);
 }
-function openPackageForm(i) {
-  const x = i >= 0 ? pondPackageCatalog[i] : null;
-  window.pendingPkgImage = null;
-  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="30" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div>${fld("m_pfree", "Included freebie", x?.freebie, "text", 'maxlength="120"')}<div class="field"><label for="m_pdesc">Description</label><textarea id="m_pdesc" maxlength="180">${safe(x?.description || "")}</textarea></div><div class="field"><label for="m_pimg">Package photo</label><input id="m_pimg" type="file" accept="image/*" onchange="uploadPackageImage(this)"><small class="muted">JPG, PNG or WebP, up to 8 MB. Leave empty to keep the current photo.</small><div class="pkg-media" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px"><img id="m_pprev" src="${safe(x?.image || "")}" alt="Photo preview" style="${x?.image ? "" : "display:none"}"></div></div><label class="check-row"><input type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>  <label class="check-row"><input type="checkbox" id="m_pact" ${x?.active === false ? "" : "checked"}><span>Visible to customers</span></label>`;
+function releasePackageFormPhoto() {
+  if (packageFormPhoto?.url) URL.revokeObjectURL(packageFormPhoto.url);
+  packageFormPhoto = null;
+}
+function packagePhotoPreview(x) {
+  const pending = packageFormPhoto;
+  let src = x?.image || "";
+  if (pending === "remove") src = "";
+  else if (pending?.url) src = pending.url;
+  const hasPhoto = Boolean(src);
+  const preview = hasPhoto
+    ? `<img id="m_pprev" src="${safe(src)}" alt="Photo preview" style="width:100%;height:100%;object-fit:cover">`
+    : photoPlaceholder("", "No photo yet");
+  const remove = hasPhoto ? '<button type="button" class="danger small" onclick="removePackagePhoto()">Remove photo</button>' : "";
+  return `<div class="pkg-media" id="m_pphoto" style="height:160px;border-radius:12px;overflow:hidden;margin-top:8px">${preview}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="secondary small" style="cursor:pointer">${hasPhoto ? "Replace photo" : "Upload photo"}<input id="m_pimg" type="file" accept="image/jpeg,image/png,image/webp" onchange="choosePackagePhoto(this)" hidden></label>${remove}</div>`;
+}
+function refreshPackagePhoto(code) {
+  const host = document.getElementById("m_pphotoHost");
+  if (host) host.innerHTML = packagePhotoPreview(code ? adminPackageByCode(code) : null);
+}
+function openPackageForm(code) {
+  const x = code ? adminPackageByCode(code) : null;
+  if (code && !x) return;
+  releasePackageFormPhoto();
+  const inclusions = safe((x?.inclusions || []).join("\n"));
+  const statusField = x
+    ? `<p class="muted">Status: <strong>${safe(x.status)}</strong> — use Activate / Deactivate on the package card to change it.</p>`
+    : '<label class="check-row"><input type="checkbox" id="m_pact" checked><span>Active (available to customers)</span></label>';
+  const body = `<div class="field-grid">${fld("m_pname", "Package name", x?.name, "text", 'maxlength="70"')}${fld("m_pprice", "Package price (₱)", x?.price ?? "", "number", 'min="0.01" step="0.01"')}${fld("m_players", "Included layers", x?.layers, "text", 'maxlength="40" placeholder="e.g. 2 layers"')}${fld("m_pdim", "Standard dimensions", x?.dimensions, "text", 'maxlength="40" placeholder="e.g. 2 m × 3 m"')}</div><div class="field"><label for="m_pincl">Inclusions (one per line, up to 10)</label><textarea id="m_pincl" maxlength="1300" placeholder="e.g. Free starter water-test kit">${inclusions}</textarea></div><div class="field"><label for="m_pdesc">Description</label><textarea id="m_pdesc" maxlength="500">${safe(x?.description || "")}</textarea></div><div class="field"><label>Package photo</label><small class="muted">JPG, PNG or WEBP, up to 8 MB. Large photos are resized to 1,200 px.</small><div id="m_pphotoHost">${packagePhotoPreview(x)}</div></div><label class="check-row"><input type="checkbox" id="m_pfeat" ${x?.featured ? "checked" : ""}><span>Feature this package (shows a “Most popular” badge)</span></label>${statusField}${FORM_ERROR_MARKUP}`;
   openModal(
     x ? "Edit package" : "Add package",
     x ? safe(x.name) : "",
     body,
-    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="savePackage(${i})">${x ? "Save package" : "Add package"}</button>`,
+    `<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" id="savePackageButton" onclick="savePackage('${x ? safe(x.id) : ""}')">${x ? "Save package" : "Add package"}</button>`,
     true,
   );
+  document.getElementById("modalHost").dataset.packageCode = x ? x.id : "";
 }
-function uploadPackageImage(input) {
-  const file = input.files?.[0];
-  if (!file) return;
-  if (!file.type.startsWith("image/")) {
-    alert("Please choose an image file.");
-    input.value = "";
-    return;
-  }
-  if (file.size > 8 * 1024 * 1024) {
-    alert("Please choose an image smaller than 8 MB.");
-    input.value = "";
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
+function resizePackagePhoto(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const max = 1200,
-        scale = Math.min(1, max / Math.max(img.width, img.height)),
-        canvas = document.createElement("canvas");
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, MAX_PACKAGE_PHOTO_DIMENSION / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(img.width * scale));
       canvas.height = Math.max(1, Math.round(img.height * scale));
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      const data = canvas.toDataURL("image/jpeg", 0.84);
-      window.pendingPkgImage = data;
-      const p = document.getElementById("m_pprev");
-      if (p) {
-        p.src = data;
-        p.style.display = "block";
-      }
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("The photo could not be processed."))),
+        file.type,
+        0.85,
+      );
     };
-    img.onerror = () =>
-      alert("That image could not be opened. Please choose another.");
-    img.src = reader.result;
-  };
-  reader.onerror = () => alert("Could not read the selected image.");
-  reader.readAsDataURL(file);
-}
-function savePackage(i) {
-  const old = i >= 0 ? pondPackageCatalog[i] : null,
-    name = V("m_pname"),
-    description = V("m_pdesc"),
-    priceRaw = V("m_pprice"),
-    price = Number(priceRaw),
-    layers = V("m_players"),
-    dimensions = V("m_pdim"),
-    freebie = V("m_pfree");
-  if (
-    !name ||
-    !description ||
-    priceRaw === "" ||
-    !Number.isFinite(price) ||
-    price < 0 ||
-    !layers ||
-    !dimensions ||
-    !freebie
-  ) {
-    toast("Complete every field and enter a valid non-negative price.");
-    return;
-  }
-  if (
-    pondPackageCatalog.some(
-      (x, j) => j !== i && x.name.toLowerCase() === name.toLowerCase(),
-    ) ||
-    name.toLowerCase() === "custom pond design"
-  ) {
-    toast("That package name is already in use.");
-    return;
-  }
-  const o = {
-    name,
-    description,
-    price,
-    layers,
-    dimensions,
-    freebie,
-    image: window.pendingPkgImage || old?.image || FALLBACK_IMG,
-    featured: document.getElementById("m_pfeat").checked,
-    active: document.getElementById("m_pact").checked,
-  };
-  if (old) {
-    if (selectedPackage === old.name) selectedPackage = name;
-    Object.assign(old, o);
-    toast("Package updated.");
-  } else {
-    o.id = "pk" + Date.now();
-    pondPackageCatalog.push(o);
-    toast("Package added.");
-  }
-  window.pendingPkgImage = null;
-  closeModal();
-  render();
-}
-function togglePackage(i) {
-  const x = pondPackageCatalog[i];
-  if (!x) return;
-  x.active = x.active === false;
-  toast(
-    x.active
-      ? "Package is now visible to customers."
-      : "Package hidden from customers.",
-  );
-  render();
-}
-function duplicatePackage(i) {
-  const x = pondPackageCatalog[i];
-  if (!x) return;
-  let n = x.name + " (Copy)",
-    k = 2;
-  while (pondPackageCatalog.some((y) => y.name === n))
-    n = x.name + " (Copy " + k++ + ")";
-  pondPackageCatalog.splice(i + 1, 0, {
-    ...x,
-    id: "pk" + Date.now(),
-    name: n,
-    active: false,
-    featured: false,
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("That image could not be opened. Please choose another."));
+    };
+    img.src = url;
   });
-  toast("Duplicated as hidden. Edit it, then show it.");
-  render();
 }
-function movePackage(i, d) {
-  const j = i + d;
-  if (j < 0 || j >= pondPackageCatalog.length) return;
-  const t = pondPackageCatalog[i];
-  pondPackageCatalog[i] = pondPackageCatalog[j];
-  pondPackageCatalog[j] = t;
-  render();
-}
-function deletePackage(i) {
-  const x = pondPackageCatalog[i];
-  if (!x) return;
-  if (
-    !confirm(
-      'Delete "' +
-        x.name +
-        '"? It disappears from the Packages page and booking choices. Existing bookings keep their details.',
-    )
-  )
+/** Validates, resizes (max 1,200 px) and previews a chosen photo. */
+async function choosePackagePhoto(input) {
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  clearFormError();
+  if (!PACKAGE_PHOTO_TYPES.has(file.type)) {
+    showFormError("Choose a JPG, PNG or WEBP photo.");
     return;
-  pondPackageCatalog.splice(i, 1);
-  if (selectedPackage === x.name) selectedPackage = "Custom Pond Design";
-  toast("Package deleted.");
-  render();
+  }
+  if (file.size > MAX_PACKAGE_PHOTO_ORIGINAL) {
+    showFormError("Choose a photo smaller than 8 MB.");
+    return;
+  }
+  try {
+    const blob = await resizePackagePhoto(file);
+    if (blob.size > MAX_PACKAGE_PHOTO_UPLOAD) {
+      showFormError("This photo is still larger than 5 MB after resizing. Choose a smaller photo.");
+      return;
+    }
+    releasePackageFormPhoto();
+    packageFormPhoto = { blob, type: blob.type || file.type, url: URL.createObjectURL(blob) };
+    refreshPackagePhoto(document.getElementById("modalHost").dataset.packageCode);
+  } catch (error) {
+    showFormError(error instanceof Error ? error.message : "The photo could not be processed.");
+  }
+}
+function removePackagePhoto() {
+  if (!confirm("Remove this photo? Customers will see the default placeholder.")) return;
+  const code = document.getElementById("modalHost").dataset.packageCode;
+  const hadSaved = Boolean(code && adminPackageByCode(code)?.image);
+  releasePackageFormPhoto();
+  packageFormPhoto = hadSaved ? "remove" : null;
+  refreshPackagePhoto(code);
+}
+function readPackageForm(isNew) {
+  const priceRaw = V("m_pprice");
+  const values = {
+    name: V("m_pname"),
+    price: priceRaw,
+    layers: V("m_players"),
+    dimensions: V("m_pdim"),
+    description: V("m_pdesc"),
+    inclusions: (document.getElementById("m_pincl")?.value || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+    featured: Boolean(document.getElementById("m_pfeat")?.checked),
+  };
+  if (isNew) values.status = document.getElementById("m_pact")?.checked ? "Active" : "Inactive";
+  if (!values.name || !values.layers || !values.dimensions || !values.description) {
+    return { error: "Complete the name, layers, dimensions and description." };
+  }
+  if (!/^\d+(?:\.\d{1,2})?$/.test(priceRaw) || Number(priceRaw) <= 0) {
+    return { error: "Enter a price greater than zero with at most two decimals." };
+  }
+  if (!values.inclusions.length || values.inclusions.length > 10) {
+    return { error: "Enter between 1 and 10 inclusions, one per line." };
+  }
+  return { value: values };
+}
+/** Uploads or removes the package photo when the form changed it. */
+async function applyPackagePhotoChange(code) {
+  try {
+    if (packageFormPhoto && packageFormPhoto !== "remove") {
+      await bookingApiRequest(`${adminPackagePath(code)}/image`, {
+        method: "PUT",
+        headers: { "Content-Type": packageFormPhoto.type },
+        body: packageFormPhoto.blob,
+      });
+    } else if (packageFormPhoto === "remove") {
+      await bookingApiRequest(`${adminPackagePath(code)}/image`, { method: "DELETE" });
+    }
+  } catch (photoError) {
+    throw new Error(`The package was saved, but the photo was not updated: ${photoError.message} Edit the package to try again.`);
+  }
+}
+function continueAsEdit(savedCode) {
+  const button = document.getElementById("savePackageButton");
+  if (button) button.setAttribute("onclick", `savePackage('${safe(savedCode)}')`);
+  document.getElementById("modalHost").dataset.packageCode = savedCode;
+}
+/** Saves package details, then uploads or removes the photo if changed. */
+async function savePackage(code) {
+  if (adminActionPending) return;
+  clearFormError();
+  const form = readPackageForm(!code);
+  if (form.error) {
+    showFormError(form.error);
+    return;
+  }
+  adminActionPending = true;
+  setButtonBusy("savePackageButton", true, "Saving…");
+  let savedCode = code;
+  try {
+    const saved = await bookingApiRequest(code ? adminPackagePath(code) : "/api/admin/service-packages", {
+      method: code ? "PATCH" : "POST",
+      body: JSON.stringify(form.value),
+    });
+    savedCode = saved.package.code;
+    await applyPackagePhotoChange(savedCode);
+    closeModal();
+    toast(code ? "Package updated." : "Package added.");
+  } catch (error) {
+    setButtonBusy("savePackageButton", false);
+    showFormError(error instanceof Error ? error.message : "The package could not be saved.");
+    // A new package that saved before a photo failure continues as an edit.
+    if (!code && savedCode) continueAsEdit(savedCode);
+  } finally {
+    adminActionPending = false;
+    await reloadAdminPackages();
+  }
+}
+async function togglePackage(code) {
+  const x = adminPackageByCode(code);
+  if (!x || adminActionPending) return;
+  const next = x.active ? "Inactive" : "Active";
+  const prompt = x.active
+    ? `Deactivate "${x.name}"? Customers will no longer be able to choose it. Existing bookings keep their package details and price.`
+    : `Activate "${x.name}"? Customers will be able to choose it for new bookings.`;
+  if (!confirm(prompt)) return;
+  await runPackageAction(
+    () => bookingApiRequest(`${adminPackagePath(code)}/status`, { method: "PATCH", body: JSON.stringify({ status: next }) }),
+    next === "Active" ? "Package is now available to customers." : "Package is now inactive.",
+  );
+}
+async function duplicatePackage(code) {
+  if (!adminPackageByCode(code)) return;
+  await runPackageAction(
+    () => bookingApiRequest(`${adminPackagePath(code)}/duplicate`, { method: "POST" }),
+    "Duplicated as inactive. Edit it, then activate it.",
+  );
+}
+async function movePackage(code, direction) {
+  if (!adminPackageByCode(code)) return;
+  await runPackageAction(
+    () => bookingApiRequest(`${adminPackagePath(code)}/order`, { method: "PATCH", body: JSON.stringify({ direction }) }),
+  );
 }
 
 /* ----- assistant FAQs ----- */
@@ -3243,6 +3374,9 @@ function salesPaymentRow({ booking, payment }) {
 /* ----- render ----- */
 function render() {
   ensureNavigationShell();
+  if (["home", "shop", "booking"].includes(page) && packageCatalogState === "idle") {
+    void loadServicePackages();
+  }
   if (page === "home") {
     renderHomePage();
   }
@@ -3251,6 +3385,9 @@ function render() {
   }
   if (page === "admin" && adminDataState === "idle") {
     void loadAdminData();
+  }
+  if (page === "admin" && adminTab === "catalog" && adminPackagesState === "idle") {
+    void loadAdminPackages();
   }
   renderCurrentPage();
   syncNavigationLinks();
@@ -3265,9 +3402,11 @@ function renderHomePage() {
   const packages = activePackages();
   const price = document.getElementById("homePackagePrice");
   if (!price) return;
-  price.textContent = packages.length
-    ? `From ${money(Math.min(...packages.map((item) => item.price)))}`
-    : "Packages coming soon";
+  if (packages.length) {
+    price.textContent = `From ${money(Math.min(...packages.map((item) => item.price)))}`;
+  } else {
+    price.textContent = packageCatalogState === "loaded" ? "Packages coming soon" : "";
+  }
 }
 function renderCurrentPage() {
   if (page === "home") return;
