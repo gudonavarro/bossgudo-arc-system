@@ -28,7 +28,6 @@ export interface PackageImage {
 export interface ServicePackage {
   code: string;
   name: string;
-  nameKey: string;
   description: string;
   category: PackageCategory;
   price: Types.Decimal128;
@@ -69,9 +68,9 @@ const servicePackageSchema = new Schema<ServicePackage>(
       match: PACKAGE_CODE_PATTERN,
       immutable: true,
     },
+    // Names need not be unique: packages may share a name and differ in size
+    // and price. Each package is identified by its `code` (and `_id`).
     name: { type: String, required: true, trim: true, maxlength: PACKAGE_LIMITS.name },
-    // Case- and space-insensitive copy of the name, used for uniqueness.
-    nameKey: { type: String, required: true },
     description: {
       type: String,
       required: true,
@@ -131,13 +130,11 @@ const servicePackageSchema = new Schema<ServicePackage>(
 );
 
 servicePackageSchema.index({ code: 1 }, { unique: true });
-servicePackageSchema.index({ nameKey: 1 }, { unique: true });
 servicePackageSchema.index({ status: 1, sortOrder: 1 });
 servicePackageSchema.index({ "image.fileId": 1 }, { sparse: true });
 
 servicePackageSchema.pre("validate", function () {
-  this.nameKey = normalizePackageName(this.name);
-  if (RESERVED_PACKAGE_NAMES.includes(this.nameKey)) {
+  if (RESERVED_PACKAGE_NAMES.includes(normalizePackageName(this.name))) {
     this.invalidate("name", "That package name is reserved.");
   }
 });
@@ -149,6 +146,28 @@ function getServicePackageModel(connection: Connection): Model<ServicePackage> {
   );
 }
 
+const MISSING_INDEX_CODES = new Set([26, 27]); // NamespaceNotFound, IndexNotFound
+
+/**
+ * Databases created before names could repeat still have a unique index on
+ * the removed `nameKey` field, which would keep rejecting shared names.
+ * Drops that index and the stale field. Safe to run on every startup.
+ */
+async function removeLegacyPackageNameUniqueness(
+  ServicePackage: Model<ServicePackage>,
+): Promise<void> {
+  try {
+    await ServicePackage.collection.dropIndex("nameKey_1");
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (!MISSING_INDEX_CODES.has(code as number)) throw error;
+  }
+  await ServicePackage.collection.updateMany(
+    { nameKey: { $exists: true } },
+    { $unset: { nameKey: "" } },
+  );
+}
+
 export {
   PACKAGE_CATEGORIES,
   PACKAGE_CODE_PATTERN,
@@ -157,5 +176,6 @@ export {
   RESERVED_PACKAGE_NAMES,
   getServicePackageModel,
   normalizePackageName,
+  removeLegacyPackageNameUniqueness,
   servicePackageSchema,
 };

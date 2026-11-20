@@ -19,6 +19,7 @@ const {
   PACKAGE_CODE_PATTERN,
   PACKAGE_LIMITS,
   RESERVED_PACKAGE_NAMES,
+  removeLegacyPackageNameUniqueness,
 } = jiti("../server/models/service-package");
 
 const connection = mongoose.createConnection();
@@ -217,10 +218,11 @@ function servicePackage(overrides = {}) {
   });
 }
 
-test("service packages derive a normalized name key and apply defaults", async () => {
+test("service packages trim the name and apply defaults", async () => {
   const pkg = servicePackage();
   assert.deepEqual(await invalidPaths(pkg), []);
-  assert.equal(pkg.nameKey, "pond starter");
+  assert.equal(pkg.name, "Pond   Starter");
+  assert.equal(pkg.toObject().nameKey, undefined);
   assert.equal(pkg.status, "Active");
   assert.equal(pkg.category, "Pond Package");
   assert.equal(pkg.featured, false);
@@ -229,6 +231,42 @@ test("service packages derive a normalized name key and apply defaults", async (
   assert.equal(normalizePackageName(undefined), "");
   assert.ok(PACKAGE_CODE_PATTERN.test("pk1"));
   assert.ok(!PACKAGE_CODE_PATTERN.test("-pk"));
+});
+
+test("service package names are not unique; codes are", () => {
+  const uniqueIndexes = ServicePackage.schema
+    .indexes()
+    .filter(([, options]) => options?.unique)
+    .map(([keys]) => keys);
+  assert.deepEqual(uniqueIndexes, [{ code: 1 }]);
+});
+
+test("removeLegacyPackageNameUniqueness drops the old name index and field", async () => {
+  const calls = [];
+  const fakeModel = (dropError) => ({
+    collection: {
+      async dropIndex(name) {
+        calls.push(["dropIndex", name]);
+        if (dropError) throw dropError;
+      },
+      async updateMany(filter, update) {
+        calls.push(["updateMany", filter, update]);
+      },
+    },
+  });
+
+  await removeLegacyPackageNameUniqueness(fakeModel());
+  assert.deepEqual(calls, [
+    ["dropIndex", "nameKey_1"],
+    ["updateMany", { nameKey: { $exists: true } }, { $unset: { nameKey: "" } }],
+  ]);
+
+  // Already removed, or the collection does not exist yet: not an error.
+  for (const code of [26, 27]) {
+    await removeLegacyPackageNameUniqueness(fakeModel(Object.assign(new Error("missing"), { code })));
+  }
+  const failure = Object.assign(new Error("network"), { code: 6 });
+  await assert.rejects(removeLegacyPackageNameUniqueness(fakeModel(failure)), failure);
 });
 
 test("service packages reject reserved names, bad prices, codes and inclusions", async () => {

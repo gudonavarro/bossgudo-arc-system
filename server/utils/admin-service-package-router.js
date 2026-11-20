@@ -1,10 +1,6 @@
 import express from "express";
 import { createRequire } from "node:module";
-import {
-  PACKAGE_CODE_PATTERN,
-  PACKAGE_STATUSES,
-  normalizePackageName,
-} from "../models/service-package";
+import { PACKAGE_CODE_PATTERN, PACKAGE_STATUSES } from "../models/service-package";
 import {
   HttpError,
   escapeRegExp,
@@ -44,8 +40,11 @@ function handlePackageError(response, error, context) {
   if (error instanceof HttpError) {
     return response.status(error.status).json({ error: error.message });
   }
-  if (isDuplicateKeyError(error, "nameKey")) {
-    return response.status(409).json({ error: "A package with this name already exists." });
+  if (isDuplicateKeyError(error, "code")) {
+    // Two packages with the same name were saved at once and got the same code.
+    return response.status(409).json({
+      error: "Another package was saved at the same time. Please try again.",
+    });
   }
   const errorName = getErrorName(error);
   if (errorName === "ValidationError") {
@@ -91,15 +90,17 @@ async function nextSortOrder(ServicePackage) {
   return last ? last.sortOrder + 1 : 0;
 }
 
+/**
+ * Names a duplicate "X (Copy)", "X (Copy 2)", ... so it is easy to spot in
+ * the list. Names may repeat, so this is a convenience, not a rule.
+ */
 async function copyName(ServicePackage, name) {
-  for (let n = 1; n < 1000; n += 1) {
-    const suffix = n === 1 ? " (Copy)" : ` (Copy ${n})`;
-    const candidate = `${name.slice(0, 70 - suffix.length)}${suffix}`;
-    if (!(await ServicePackage.exists({ nameKey: normalizePackageName(candidate) }))) {
-      return candidate;
-    }
+  const withSuffix = (suffix) => `${name.slice(0, 70 - suffix.length)}${suffix}`;
+  for (let n = 1; n < 100; n += 1) {
+    const candidate = withSuffix(n === 1 ? " (Copy)" : ` (Copy ${n})`);
+    if (!(await ServicePackage.exists({ name: candidate }))) return candidate;
   }
-  throw new HttpError(409, "Could not create a unique copy name.");
+  return withSuffix(" (Copy)");
 }
 
 function createAdminServicePackageRouter() {
