@@ -1069,7 +1069,7 @@ function pkgChips(layers, dimensions) {
   return `<div class="chips"><span class="badge badge-soft badge-primary gap-1">${icon("layers", "size-3")}${layers}</span><span class="badge badge-soft badge-primary gap-1">${icon("ruler", "size-3")}${dimensions}</span></div>`;
 }
 function gcashDetailsMarkup(rows, amount, note) {
-  return `<div class="pay-grid"><div class="tile text-center"><h3 class="tile-title justify-center">${icon("qr-code", "size-4 text-primary")}Scan to pay with GCash</h3>${qrPlaceholder()}<p class="muted text-xs">Scan the QR code or use the owner’s GCash account details.</p></div><div class="tile"><h3 class="tile-title">${icon("smartphone", "size-4 text-primary")}Owner’s GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner’s GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner’s GCash number]</strong></div>${rows}<div class="amount-due"><span>Amount to pay now</span><strong>${money(amount)}</strong></div><div class="notice mt-4">${note}</div></div></div>`;
+  return `<div class="pay-grid"><div class="tile text-center"><h3 class="tile-title justify-center">${icon("qr-code", "size-4 text-primary")}Scan to pay with GCash</h3>${gcashQrCode()}<p class="muted text-xs">Scan the QR code or use the owner’s GCash account details.</p></div><div class="tile"><h3 class="tile-title">${icon("smartphone", "size-4 text-primary")}Owner’s GCash details</h3><div class="summary-line"><span>Account name</span><strong>[Owner’s GCash account name]</strong></div><div class="summary-line"><span>GCash number</span><strong>[Owner’s GCash number]</strong></div>${rows}<div class="amount-due"><span>Amount to pay now</span><strong>${money(amount)}</strong></div><div class="notice mt-4">${note}</div></div></div>`;
 }
 function receiptUploadMarkup(intro) {
   return `<h3 class="tile-title">${icon("receipt", "size-4 text-primary")}Upload payment receipt</h3><p class="muted text-sm">${intro}</p><div class="field-grid"><div class="field"><label for="gcashReference">GCash transaction reference number <span class="text-error">*</span></label><input class="input w-full" id="gcashReference" placeholder="Enter the transaction reference number" autocomplete="off" required></div><div class="field"><label for="gcashProof">Payment receipt / screenshot <span class="text-error">*</span></label><input class="file-input w-full" id="gcashProof" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" required aria-describedby="gcashProofHint"><p class="muted mt-1.5 text-xs" id="gcashProofHint">Accepted: JPG, PNG, WEBP, HEIC image or PDF, up to 8 MB.</p></div></div>`;
@@ -1262,7 +1262,7 @@ function aboutPhoto({ src, alt, width, height, title, caption = "", className = 
   const fit = framed ? "aspect-video object-contain" : "h-auto";
   return `<figure class="flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 ${className}"><a href="${src}" target="_blank" rel="noopener" data-lightbox data-lightbox-title="${title}" aria-haspopup="dialog" class="group relative block cursor-pointer bg-base-200" aria-label="${alt} (opens a larger view)"><img src="${src}" alt="${alt}" width="${width}" height="${height}" loading="lazy" class="block w-full ${fit} transition-opacity group-hover:opacity-90"><span class="badge pointer-events-none absolute right-3 bottom-3 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("eye", "size-3")}View larger</span></a>${figcaption}</figure>`;
 }
-/* ----- About page photo lightbox (styles: .lightbox in main.css) ----- */
+/* ----- Photo lightbox for About page photos and the GCash QR code (styles: .lightbox in main.css) ----- */
 let lightboxPhotos = [];
 let lightboxIndex = 0;
 let lightboxTrigger = null;
@@ -1516,20 +1516,14 @@ function changeBookingType() {
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
-function qrPlaceholder() {
-  return `<div class="mx-auto my-4 grid size-52 place-items-center rounded-box border border-base-300 bg-white p-3" role="img" aria-label="GCash QR code placeholder"><div style="width:100%;height:100%;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);gap:3px;opacity:.85">${Array.from(
-    { length: 121 },
-    (_, i) => {
-      let x = i % 11,
-        y = Math.floor(i / 11);
-      let on =
-        (x * 7 + y * 3 + x * y) % 5 < 2 ||
-        (x < 3 && y < 3) ||
-        (x > 7 && y < 3) ||
-        (x < 3 && y > 7);
-      return `<span style="background:${on ? "#15231b" : "#fff"};border-radius:1px"></span>`;
-    },
-  ).join("")}</div></div>`;
+/**
+ * The owner's GCash QR code. It opens in the photo lightbox so customers can
+ * see it full size; modified clicks still open the file in a new tab.
+ */
+function gcashQrCode() {
+  const src = "/images/boss-gudo-arc-payment-gcash-qr-code.jpeg";
+  const alt = "GCash QR code for paying BOSSGUDO A.R.C. AQUA FARM";
+  return `<a href="${src}" target="_blank" rel="noopener" data-lightbox data-lightbox-title="Scan to pay with GCash" aria-haspopup="dialog" aria-label="${alt} (opens a larger view)" class="group relative mx-auto my-4 block w-full max-w-52 cursor-pointer"><img src="${src}" alt="${alt}" class="h-auto w-full rounded-box border border-base-300 bg-white transition-opacity group-hover:opacity-90" width="1080" height="2020" loading="lazy" decoding="async"><span class="badge pointer-events-none absolute right-2 bottom-2 gap-1 border-base-300 bg-base-100/90 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">${icon("eye", "size-3")}View larger</span></a>`;
 }
 function readDetails() {
   if (!document.getElementById("customerName")) return;
