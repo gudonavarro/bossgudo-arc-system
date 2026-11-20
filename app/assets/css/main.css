@@ -548,7 +548,8 @@
 }
 
 /*
- * Photo lightbox for the About page (openLightbox in app/legacy/script.js).
+ * Photo lightbox for About page photos and the GCash QR code
+ * (openLightbox in app/legacy/script.js).
  * A modal <dialog>: the browser supplies Escape, focus trapping and an inert
  * page; these rules add the backdrop, the fade/scale transitions (open and
  * close, where supported) and the scroll lock.
