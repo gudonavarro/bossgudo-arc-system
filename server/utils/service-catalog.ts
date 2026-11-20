@@ -8,19 +8,27 @@
  */
 const CUSTOM_POND_PRICING = Object.freeze({
   name: "Custom Pond Design",
-  ratePerSquareMetrePerLayerCents: 450_00,
-  filtrationCents: 1_500_00,
+  ratePerSquareMetrePerLayerCents: 450 * 100,
+  filtrationCents: 1_500 * 100,
   minLayers: 1,
   maxLayers: 3,
   minDimensionMetres: 1,
   maxDimensionMetres: 10,
 });
 
+/** Custom pond inputs: metres with up to two decimal places. */
+export interface CustomPondDimensions {
+  layers: number;
+  width: number;
+  length: number;
+  filtration: boolean;
+}
+
 /**
  * Computes the custom pond price from layers, width, and length (metres,
  * up to two decimal places) and the filtration option.
  */
-function calculateCustomPondCents({ layers, width, length, filtration }) {
+function calculateCustomPondCents({ layers, width, length, filtration }: CustomPondDimensions): number {
   const widthCentimetres = Math.round(width * 100);
   const lengthCentimetres = Math.round(length * 100);
   const areaCents =

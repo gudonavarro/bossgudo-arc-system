@@ -4,20 +4,20 @@ import {
   PACKAGE_CODE_PATTERN,
   PACKAGE_STATUSES,
   normalizePackageName,
-} from "../models/service-package.js";
+} from "../models/service-package";
 import {
   HttpError,
   escapeRegExp,
   getErrorName,
   isDuplicateKeyError,
   withTransaction,
-} from "./service-booking.js";
+} from "./service-booking";
 import {
   generatePackageCode,
   serializeAdminPackage,
   validatePackageInput,
-} from "./service-package.js";
-import { publicCustomPondPricing } from "./service-catalog.js";
+} from "./service-package";
+import { publicCustomPondPricing } from "./service-catalog";
 import {
   MAX_PACKAGE_IMAGE_BYTES,
   PACKAGE_IMAGE_TYPES,
@@ -25,7 +25,7 @@ import {
   sendPackageImage,
   storePackageImage,
   validatePackageImage,
-} from "./package-image-storage.js";
+} from "./package-image-storage";
 
 const require = createRequire(import.meta.url);
 const path = require("node:path");

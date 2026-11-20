@@ -1,5 +1,10 @@
 import crypto from "node:crypto";
-import { decimalToNumber, toCents } from "./money.js";
+import type { ClientSession, Connection, Model, Types } from "mongoose";
+import { decimalToNumber, toCents } from "./money";
+import type { AvailableDate, BookingKind } from "../models/available-date";
+import type { Payment } from "../models/payment";
+import type { PaymentStatus, ServiceBooking } from "../models/service-booking";
+import type { FieldResult } from "./service-package";
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 const REFERENCE_SUFFIX_PATTERN = String.raw`\d{8}-[A-Z2-9]{6}`;
@@ -12,27 +17,67 @@ const MAX_PAGE_LIMIT = 50;
 const BUSINESS_TIME_ZONE = "Asia/Manila";
 const UNAVAILABLE_MESSAGE = "Service bookings are temporarily unavailable.";
 
+/** The part of an Express response the error handler uses. */
+export interface JsonResponse {
+  status(code: number): JsonResponse;
+  json(body: unknown): JsonResponse;
+}
+
+/** Fields a MongoDB driver error may carry. */
+interface MongoErrorLike {
+  code?: unknown;
+  keyPattern?: Record<string, unknown>;
+  message?: string;
+}
+
+/** The signed-in account a booking's contact details fall back to. */
+export interface ContactAccount {
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  email?: string;
+}
+
+export interface CustomerContact {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+  skip: number;
+}
+
+type StoredBooking = ServiceBooking & { _id?: Types.ObjectId };
+type StoredPayment = Payment & { _id?: Types.ObjectId };
+type Plain<T> = T | { toObject(options?: { depopulate?: boolean }): T };
+
 class HttpError extends Error {
-  constructor(status, message) {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
     super(message);
     this.name = "HttpError";
     this.status = status;
   }
 }
 
-function getErrorName(error) {
+function getErrorName(error: unknown): string {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
-function isDuplicateKeyError(error, field) {
+function isDuplicateKeyError(error: unknown, field?: string): boolean {
+  const mongoError = error as MongoErrorLike | null | undefined;
   return (
-    error?.code === 11000 &&
-    (!field || Object.hasOwn(error.keyPattern ?? {}, field))
+    mongoError?.code === 11000 &&
+    (!field || Object.hasOwn(mongoError.keyPattern ?? {}, field))
   );
 }
 
 /** Maps known failures to safe responses without leaking internals. */
-function handleRouteError(response, error, context) {
+function handleRouteError(response: JsonResponse, error: unknown, context: string): JsonResponse {
   if (error instanceof HttpError) {
     return response.status(error.status).json({ error: error.message });
   }
@@ -54,10 +99,11 @@ function handleRouteError(response, error, context) {
   return response.status(503).json({ error: UNAVAILABLE_MESSAGE });
 }
 
-function isTransactionUnsupported(error) {
+function isTransactionUnsupported(error: unknown): boolean {
+  const mongoError = error as MongoErrorLike | null | undefined;
   return (
-    error?.code === 20 ||
-    /Transaction numbers are only allowed/i.test(error?.message ?? "")
+    mongoError?.code === 20 ||
+    /Transaction numbers are only allowed/i.test(mongoError?.message ?? "")
   );
 }
 
@@ -67,8 +113,11 @@ function isTransactionUnsupported(error) {
  * without one; callers keep that path safe with atomic conditional updates,
  * optimistic concurrency, and compensation.
  */
-async function withTransaction(connection, work) {
-  let session;
+async function withTransaction<T>(
+  connection: Pick<Connection, "startSession">,
+  work: (session: ClientSession | null) => Promise<T>,
+): Promise<T> {
+  let session: ClientSession;
   try {
     session = await connection.startSession();
   } catch (error) {
@@ -77,11 +126,11 @@ async function withTransaction(connection, work) {
   }
 
   try {
-    let result;
+    let result: T | undefined;
     await session.withTransaction(async () => {
       result = await work(session);
     });
-    return result;
+    return result as T;
   } catch (error) {
     if (isTransactionUnsupported(error)) return work(null);
     throw error;
@@ -94,7 +143,10 @@ async function withTransaction(connection, work) {
  * Resolves a route identifier to a query filter. Accepts a MongoDB id or a
  * reference with the given prefix ("SB" service, "VS" visitation).
  */
-function bookingIdentifierFilter(identifier, prefix = "SB") {
+function bookingIdentifierFilter(
+  identifier: unknown,
+  prefix = "SB",
+): { _id: string } | { reference: string } | null {
   if (typeof identifier !== "string") return null;
   if (OBJECT_ID_PATTERN.test(identifier)) return { _id: identifier };
   const reference = identifier.trim().toUpperCase();
@@ -102,7 +154,7 @@ function bookingIdentifierFilter(identifier, prefix = "SB") {
   return pattern.test(reference) ? { reference } : null;
 }
 
-function generateBookingReference(prefix = "SB", now = new Date()) {
+function generateBookingReference(prefix = "SB", now = new Date()): string {
   const datePart = formatBusinessDate(now).replaceAll("-", "");
   const bytes = crypto.randomBytes(6);
   let suffix = "";
@@ -113,11 +165,14 @@ function generateBookingReference(prefix = "SB", now = new Date()) {
 }
 
 /** Saves a new booking, retrying when a generated reference collides. */
-async function saveWithUniqueReference(createBooking, prefix = "SB") {
+async function saveWithUniqueReference<T>(
+  createBooking: (reference: string) => { save(): Promise<T> },
+  prefix = "SB",
+): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     const booking = createBooking(generateBookingReference(prefix));
     try {
-      return await booking.save();
+      return await booking.save(); // NOSONAR: retries must run one after another
     } catch (error) {
       if (!isDuplicateKeyError(error, "reference") || attempt >= REFERENCE_ATTEMPTS) {
         throw error;
@@ -126,7 +181,7 @@ async function saveWithUniqueReference(createBooking, prefix = "SB") {
   }
 }
 
-function formatBusinessDate(date) {
+function formatBusinessDate(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: BUSINESS_TIME_ZONE,
     year: "numeric",
@@ -140,9 +195,9 @@ function formatBusinessDate(date) {
  * farm's time zone. Stored as UTC midnight of that calendar day.
  */
 function parseFutureServiceDate(
-  value,
-  { label = "Service date", now = new Date() } = {},
-) {
+  value: unknown,
+  { label = "Service date", now = new Date() }: { label?: string; now?: Date } = {},
+): FieldResult<Date> {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return { error: `${label} must use the YYYY-MM-DD format.` };
   }
@@ -157,7 +212,7 @@ function parseFutureServiceDate(
 }
 
 /** Parses any valid YYYY-MM-DD calendar date (UTC midnight), or null. */
-function parseCalendarDate(value) {
+function parseCalendarDate(value: unknown): Date | null {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return null;
   }
@@ -168,24 +223,31 @@ function parseCalendarDate(value) {
     : date;
 }
 
-function escapeRegExp(text) {
+function escapeRegExp(text: string): string {
   return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /** True for a Saturday or Sunday stored as UTC midnight of that day. */
-function isWeekendDate(date) {
+function isWeekendDate(date: Date): boolean {
   const day = date.getUTCDay();
   return day === 0 || day === 6;
 }
 
 /** True when the farm has closed this date for the given booking kind. */
-async function isDateClosed(AvailableDate, bookingKind, date) {
+async function isDateClosed(
+  AvailableDate: Pick<Model<AvailableDate>, "exists">,
+  bookingKind: BookingKind,
+  date: Date,
+): Promise<boolean> {
   return Boolean(
     await AvailableDate.exists({ date, bookingKind, status: "Closed" }),
   );
 }
 
-function readContactText(value, { label, maxLength }) {
+function readContactText(
+  value: unknown,
+  { label, maxLength }: { label: string; maxLength: number },
+): FieldResult<string> {
   if (value === undefined || value === null) return { value: "" };
   if (typeof value !== "string") return { error: `${label} must be text.` };
   const text = value.trim();
@@ -200,22 +262,26 @@ function readContactText(value, { label, maxLength }) {
  * blank field falls back to the signed-in account's value; ownership of the
  * booking always comes from the session, never from these fields.
  */
-function validateCustomerContact(body, authUser, { emailRequired = false } = {}) {
+function validateCustomerContact(
+  body: Record<string, unknown>,
+  authUser: ContactAccount,
+  { emailRequired = false }: { emailRequired?: boolean } = {},
+): FieldResult<CustomerContact> {
   const name = readContactText(body.customerName, {
     label: "Name",
     maxLength: 161,
   });
-  if (name.error) return name;
+  if (name.error !== undefined) return { error: name.error };
   const phone = readContactText(body.customerPhone, {
     label: "Contact number",
     maxLength: 20,
   });
-  if (phone.error) return phone;
+  if (phone.error !== undefined) return { error: phone.error };
   const email = readContactText(body.customerEmail, {
     label: "Email",
     maxLength: 254,
   });
-  if (email.error) return email;
+  if (email.error !== undefined) return { error: email.error };
   if (emailRequired && !email.value) {
     return { error: "Email is required." };
   }
@@ -235,7 +301,7 @@ function validateCustomerContact(body, authUser, { emailRequired = false } = {})
   return { value: { customerName, customerPhone, customerEmail } };
 }
 
-function parsePagination(query) {
+function parsePagination(query: Record<string, unknown>): FieldResult<Pagination> {
   const page = query.page === undefined ? 1 : Number(query.page);
   const limit =
     query.limit === undefined ? DEFAULT_PAGE_LIMIT : Number(query.limit);
@@ -248,27 +314,34 @@ function parsePagination(query) {
   return { value: { page, limit, skip: (page - 1) * limit } };
 }
 
-function paginationMeta({ page, limit }, total) {
+function paginationMeta({ page, limit }: Pick<Pagination, "page" | "limit">, total: number) {
   return { page, limit, total, totalPages: Math.ceil(total / limit) };
 }
 
 /** Payment status implied by verified amounts alone. */
-function derivePaymentStatus(paidCents, totalCents) {
+function derivePaymentStatus(
+  paidCents: number,
+  totalCents: number,
+): Extract<PaymentStatus, "Unpaid" | "Partially Paid" | "Paid"> {
   if (paidCents <= 0) return "Unpaid";
   return paidCents >= totalCents ? "Paid" : "Partially Paid";
 }
 
-function toPlain(document) {
-  return typeof document?.toObject === "function"
-    ? document.toObject({ depopulate: false })
-    : document;
+function toPlain<T>(document: Plain<T>): T {
+  const source = document as { toObject?: unknown };
+  return typeof source?.toObject === "function"
+    ? (document as { toObject(options: { depopulate: boolean }): T }).toObject({ depopulate: false })
+    : (document as T);
 }
 
 /**
  * Shapes a booking for API responses. Without `includeAudit`, the
  * administrator ids behind status and delivery fee changes are omitted.
  */
-function serializeBooking(document, { includeAudit = false } = {}) {
+function serializeBooking(
+  document: Plain<StoredBooking>,
+  { includeAudit = false }: { includeAudit?: boolean } = {},
+) {
   const booking = toPlain(document);
   const statusHistory = (booking.statusHistory ?? []).map((entry) =>
     includeAudit
@@ -316,17 +389,19 @@ function serializeBooking(document, { includeAudit = false } = {}) {
     createdAt: booking.createdAt,
     updatedAt: booking.updatedAt,
   };
-  if (includeAudit) {
-    serialized.deliveryFeeSetBy = booking.deliveryFeeSetBy ?? null;
-  }
-  return serialized;
+  return includeAudit
+    ? { ...serialized, deliveryFeeSetBy: booking.deliveryFeeSetBy ?? null }
+    : serialized;
 }
 
 /**
  * Shapes a payment for API responses. The receipt's storage key is never
  * returned; admins fetch the file through the payment's receipt endpoint.
  */
-function serializePayment(document, { includeAudit = false } = {}) {
+function serializePayment(
+  document: Plain<StoredPayment>,
+  { includeAudit = false }: { includeAudit?: boolean } = {},
+) {
   const payment = toPlain(document);
   const serialized = {
     _id: payment._id,
@@ -343,13 +418,17 @@ function serializePayment(document, { includeAudit = false } = {}) {
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt,
   };
-  if (includeAudit) {
-    serialized.verifiedBy = payment.verifiedBy ?? null;
-  }
-  return serialized;
+  return includeAudit
+    ? { ...serialized, verifiedBy: payment.verifiedBy ?? null }
+    : serialized;
 }
 
-function bookingCents(booking) {
+function bookingCents(
+  booking: Pick<
+    ServiceBooking,
+    "totalAmount" | "paidAmount" | "packageSnapshot" | "customizationFee" | "deliveryFee" | "depositAmount"
+  >,
+) {
   const total = toCents(booking.totalAmount);
   const paid = toCents(booking.paidAmount);
   return {

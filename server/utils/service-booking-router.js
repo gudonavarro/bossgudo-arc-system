@@ -1,7 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { createRequire } from "node:module";
-import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
+import { depositFor, fromCents, parseAmountInput, toCents } from "./money";
 import {
   MAX_RECEIPT_BYTES,
   RECEIPT_CONTENT_TYPES,
@@ -9,15 +9,15 @@ import {
   findOwnedReceipt,
   normalizeReceiptFileName,
   storeReceipt,
-} from "./receipt-storage.js";
-import { PAYMENT_TARGETS } from "../models/payment.js";
+} from "./receipt-storage";
+import { PAYMENT_TARGETS } from "../models/payment";
 import {
   CUSTOM_POND_PRICING,
   calculateCustomPondCents,
-} from "./service-catalog.js";
-import { PACKAGE_CODE_PATTERN } from "../models/service-package.js";
-import { packageSnapshot } from "./service-package.js";
-import { BOOKING_STATUSES } from "../models/service-booking.js";
+} from "./service-catalog";
+import { PACKAGE_CODE_PATTERN } from "../models/service-package";
+import { packageSnapshot } from "./service-package";
+import { BOOKING_STATUSES } from "../models/service-booking";
 import {
   HttpError,
   OBJECT_ID_PATTERN,
@@ -35,7 +35,7 @@ import {
   serializePayment,
   validateCustomerContact,
   withTransaction,
-} from "./service-booking.js";
+} from "./service-booking";
 
 const require = createRequire(import.meta.url);
 const path = require("node:path");

@@ -4,14 +4,14 @@ import {
   BOOKING_STATUSES,
   PAYMENT_STATUSES,
   SERVICE_TYPES,
-} from "../models/service-booking.js";
+} from "../models/service-booking";
 import { pipeline } from "node:stream/promises";
-import { depositFor, fromCents, parseAmountInput, toCents } from "./money.js";
+import { depositFor, fromCents, parseAmountInput, toCents } from "./money";
 import {
   RECEIPT_CONTENT_TYPES,
   findReceiptFile,
   openReceiptDownload,
-} from "./receipt-storage.js";
+} from "./receipt-storage";
 import {
   HttpError,
   OBJECT_ID_PATTERN,
@@ -26,7 +26,7 @@ import {
   serializeBooking,
   serializePayment,
   withTransaction,
-} from "./service-booking.js";
+} from "./service-booking";
 
 const require = createRequire(import.meta.url);
 const path = require("node:path");

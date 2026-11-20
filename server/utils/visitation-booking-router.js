@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import {
   VISITATION_STATUSES,
   VISIT_TYPES,
-} from "../models/visitation-booking.js";
+} from "../models/visitation-booking";
 import {
   HttpError,
   bookingIdentifierFilter,
@@ -15,7 +15,7 @@ import {
   parsePagination,
   saveWithUniqueReference,
   validateCustomerContact,
-} from "./service-booking.js";
+} from "./service-booking";
 
 const require = createRequire(import.meta.url);
 const path = require("node:path");

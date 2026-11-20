@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import {
   VISITATION_STATUSES,
   VISIT_TYPES,
-} from "../models/visitation-booking.js";
+} from "../models/visitation-booking";
 import {
   HttpError,
   OBJECT_ID_PATTERN,
@@ -13,7 +13,7 @@ import {
   paginationMeta,
   parseCalendarDate,
   parsePagination,
-} from "./service-booking.js";
+} from "./service-booking";
 import { serializeVisitation } from "./visitation-booking-router.js";
 
 const require = createRequire(import.meta.url);

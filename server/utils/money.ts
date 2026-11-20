@@ -1,15 +1,23 @@
-import mongoose from "mongoose";
+import mongoose, { type Types } from "mongoose";
 
 const { Decimal128 } = mongoose.Types;
-const MAX_CENTS = 100_000_000_00;
+const MAX_CENTS = 100_000_000 * 100;
 const DECIMAL_TEXT_PATTERN = /^(-?)(\d+)(?:\.(\d{1,2}))?$/;
+
+/** A stored or submitted amount: Decimal128, pesos as a number, or numeric text. */
+export type MoneyValue = Types.Decimal128 | number | string | null | undefined;
+
+/** Result of parsing a client-supplied amount; `value` is in centavos. */
+export type AmountInputResult =
+  | { value: number; error?: never }
+  | { error: true; value?: never };
 
 /**
  * Converts a stored Decimal128, number, or numeric string into integer
  * centavos. All booking arithmetic is done on integers to avoid floating
  * point drift.
  */
-function toCents(value) {
+function toCents(value: MoneyValue): number {
   if (value === null || value === undefined) {
     return 0;
   }
@@ -23,7 +31,7 @@ function toCents(value) {
   return sign === "-" ? -cents : cents;
 }
 
-function fromCents(cents) {
+function fromCents(cents: number): Types.Decimal128 {
   if (!Number.isSafeInteger(cents)) {
     throw new TypeError("Invalid monetary value.");
   }
@@ -34,11 +42,15 @@ function fromCents(cents) {
   return Decimal128.fromString(`${sign}${whole}.${fraction}`);
 }
 
-function centsToNumber(cents) {
+function centsToNumber(cents: number): number {
   return cents / 100;
 }
 
-function decimalToNumber(value) {
+function decimalToNumber(value: null): null;
+function decimalToNumber(value: undefined): undefined;
+function decimalToNumber(value: Types.Decimal128 | number | string): number;
+function decimalToNumber(value: MoneyValue): number | null | undefined;
+function decimalToNumber(value: MoneyValue): number | null | undefined {
   return value === null || value === undefined
     ? value
     : centsToNumber(toCents(value));
@@ -48,8 +60,11 @@ function decimalToNumber(value) {
  * Parses a client-supplied amount. Accepts non-negative numbers or numeric
  * strings with at most two decimal places and returns integer centavos.
  */
-function parseAmountInput(value, { allowZero = false } = {}) {
-  let text;
+function parseAmountInput(
+  value: unknown,
+  { allowZero = false }: { allowZero?: boolean } = {},
+): AmountInputResult {
+  let text: string;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return { error: true };
     text = String(value);
@@ -69,13 +84,18 @@ function parseAmountInput(value, { allowZero = false } = {}) {
 }
 
 /** Required 50% deposit, rounded up to the nearest centavo. */
-function depositFor(totalCents) {
+function depositFor(totalCents: number): number {
   return Math.ceil(totalCents / 2);
 }
 
-function isNonNegativeDecimal(value) {
+/** Schema validator: true for empty or non-negative amounts. */
+function isNonNegativeDecimal(value: unknown): boolean {
   try {
-    return value === null || value === undefined || toCents(value) >= 0;
+    return (
+      value === null ||
+      value === undefined ||
+      toCents(value as MoneyValue) >= 0
+    );
   } catch {
     return false;
   }

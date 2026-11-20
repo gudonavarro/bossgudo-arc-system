@@ -1,10 +1,10 @@
 import { defineNitroPlugin } from "nitropack/runtime";
 import { getUserModel } from "../models/user";
-import { getAvailableDateModel } from "../models/available-date.js";
-import { getPaymentModel } from "../models/payment.js";
-import { getServiceBookingModel } from "../models/service-booking.js";
-import { getServicePackageModel } from "../models/service-package.js";
-import { getVisitationBookingModel } from "../models/visitation-booking.js";
+import { getAvailableDateModel } from "../models/available-date";
+import { getPaymentModel } from "../models/payment";
+import { getServiceBookingModel } from "../models/service-booking";
+import { getServicePackageModel } from "../models/service-package";
+import { getVisitationBookingModel } from "../models/visitation-booking";
 import { closeMongo } from "../utils/mongodb";
 import { connectMongoose } from "../utils/mongoose";
 

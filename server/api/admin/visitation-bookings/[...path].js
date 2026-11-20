@@ -2,7 +2,7 @@ import { defineEventHandler, getRequestIP, setResponseStatus } from "h3";
 import express from "express";
 import { getSessionModel } from "../../../models/session";
 import { getUserModel } from "../../../models/user";
-import { getVisitationBookingModel } from "../../../models/visitation-booking.js";
+import { getVisitationBookingModel } from "../../../models/visitation-booking";
 import { createAuthCollections } from "../../../utils/auth-collections";
 import { connectMongoose } from "../../../utils/mongoose";
 import { createAdminVisitationBookingRouter } from "../../../utils/admin-visitation-booking-router.js";
