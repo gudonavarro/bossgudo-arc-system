@@ -17,6 +17,7 @@ type ExpressMiddleware = (
 interface ExpressApplication {
   (request: unknown, response: unknown, next: (error?: unknown) => void): unknown;
   disable(name: string): ExpressApplication;
+  set(name: string, value: unknown): ExpressApplication;
   get(name: string): unknown;
   use(...handlers: ExpressMiddleware[]): ExpressApplication;
 }
@@ -45,6 +46,7 @@ const router = createAuthRouter();
 const app = express();
 const jsonParser = express.json({ limit: "10kb" });
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 app.use((_request, response, next) => {
   const nodeResponse = response as ServerResponse & {
     cookie?: (name: string, value: string, options?: CookieOptions) => void;

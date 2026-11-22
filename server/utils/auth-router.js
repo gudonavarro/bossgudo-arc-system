@@ -1,9 +1,10 @@
 const crypto = require("node:crypto");
 const bcrypt = require("bcrypt");
 const express = require("express");
-const { rateLimit } = require("express-rate-limit");
+const { ipKeyGenerator, rateLimit } = require("express-rate-limit");
 const { ObjectId } = require("mongodb");
 const path = require("node:path");
+const net = require("node:net");
 const serverUtilsPath = (fileName) =>
   path.resolve(process.cwd(), "server", "utils", fileName);
 const {
@@ -40,6 +41,29 @@ const RESET_CODE_PATTERN = /^\d{6}$/;
 const PASSWORD_RESET_REQUEST_MESSAGE =
   "If an active account matches that email, a verification code will be sent.";
 const INVALID_RESET_CODE_MESSAGE = "Invalid or expired verification code.";
+
+function getRateLimitKey(request) {
+  const candidates = [request.ip, request.socket?.remoteAddress];
+  const forwardedFor = request.headers?.["x-forwarded-for"];
+
+  if (typeof forwardedFor === "string" && forwardedFor) {
+    candidates.unshift(forwardedFor.split(",")[0]?.trim());
+  } else if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+    candidates.unshift(forwardedFor[0]?.split(",")[0]?.trim());
+  }
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || !candidate || candidate === "unknown") {
+      continue;
+    }
+    const normalized = candidate.replace(/^::ffff:/, "");
+    if (net.isIP(normalized)) {
+      return ipKeyGenerator(normalized);
+    }
+  }
+
+  return "unknown";
+}
 const PASSWORD_ERROR =
   "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
 
@@ -407,6 +431,7 @@ function createAuthRouter({
   const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 10,
+    keyGenerator: getRateLimitKey,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
@@ -414,6 +439,7 @@ function createAuthRouter({
   const registrationLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     limit: 10,
+    keyGenerator: getRateLimitKey,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
@@ -421,6 +447,7 @@ function createAuthRouter({
   const recoveryLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     limit: 5,
+    keyGenerator: getRateLimitKey,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
@@ -428,6 +455,7 @@ function createAuthRouter({
   const resetCodeVerificationLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 10,
+    keyGenerator: getRateLimitKey,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
@@ -435,6 +463,7 @@ function createAuthRouter({
   const emailTestLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 3,
+    keyGenerator: getRateLimitKey,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many attempts. Please try again later." },
