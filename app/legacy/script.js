@@ -2428,11 +2428,11 @@ function admin() {
     ["bookings", "Package Bookings", c.bookings, "clipboard-list"],
     ["payments", "Payments", c.payments, "wallet"],
     ["visits", "Visitations", 0, "trees"],
-    ["special", "Special-Date Requests", c.special, "calendar-plus"],
+    ["special", "Special-Date Requests", c.special, "calendar-plus", true], // hidden from sidebar
     ["g", "Schedule"],
     ["calendar", "Calendar Controls", 0, "calendar-days"],
     ["g", "Catalog & Content"],
-    ["catalog", "Package Catalog", 0, "package"],
+    ["catalog", "Package Catalog", 0, "package", true], // hidden from sidebar
     ["faqs", "Assistant FAQs", 0, "message-square-text"],
     ["g", "People & Money"],
     ["customers", "Customers", 0, "users"],
@@ -2473,6 +2473,7 @@ function sampleDataNotice(detail) {
   return `<div class="alert alert-warning alert-soft mb-4 text-sm" role="note">${icon("triangle-alert", "size-5")}<span><strong>Sample data — not connected to the database.</strong> ${safe(detail)}</span></div>`;
 }
 function adminTabMarkup(tab) {
+  if (tab[4]) return ""; // hidden tab: view still works, just not listed in the sidebar
   if (tab[0] === "g") return `<li class="menu-title mt-3 first:mt-0">${tab[1]}</li>`;
   const active = adminTab === tab[0];
   const countMarkup = tab[2] ? `<span class="badge badge-sm badge-warning ml-auto">${tab[2]}</span>` : "";
